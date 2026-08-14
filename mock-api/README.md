@@ -1,0 +1,124 @@
+# Mock API Server — Appsheet Accounting Journal
+
+Implementasi **semua endpoint** di `API - Accounting.md` dengan **logika akuntansi nyata**
+(double-entry), siap dipakai pengembangan frontend tanpa backend asli.
+
+- **Stack:** Node.js + Express 5 (tanpa database — state in-memory, reset saat restart)
+- **Port:** `4000` (override dengan env `MOCK_API_PORT`)
+- **Base URL:** `http://localhost:4000`
+
+## Menjalankan
+
+```bash
+cd mock-api
+npm install        # sekali saja
+npm start          # atau: npm run dev (auto-restart saat edit file)
+```
+
+Health check: `http://localhost:4000/health`
+
+## Reset & seed tambahan
+
+State server **in-memory** — dua cara mengembalikan ke seed:
+
+| Perintah | Efek |
+|----------|------|
+| `npm run reset` | Reset state server yang berjalan ke **seed awal** (Maret 2026) — tanpa restart |
+| `npm run seed:extra` | Muat **seed + jurnal lintas bulan** (Januari & Februari 2026, periode tertutup) |
+| (restart `npm start`) | Otomatis kembali ke seed awal |
+
+Keduanya memanggil `POST /admin/reset` (dev-only, tanpa auth) di `http://localhost:4000`.
+Contoh pemakaian: setelah pengujian QA lewat API, `npm run reset` membersihkan jurnal uji
+agar angka kembali ke baseline yang terverifikasi, tanpa mematikan server.
+
+## Login demo
+
+| Peran | Email | Password |
+|-------|-------|----------|
+| Admin | `rina@bukuwarung.com` | `password123` |
+| Akuntan | `dimas@majujaya.co.id` | `password123` |
+| Viewer | `budi@majujaya.co.id` | `password123` |
+
+Semua endpoint (kecuali `/auth/login` & `/auth/refresh`) butuh
+`Authorization: Bearer mock.<userId>` — token didapat dari `POST /auth/login`.
+Multi-tenant: header `X-Entity-Id` (default dari profil user).
+
+```bash
+# Contoh alur cepat
+curl -X POST http://localhost:4000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"rina@bukuwarung.com","password":"password123"}'
+# → { "data": { "accessToken": "mock.user-001...", ... } }
+
+curl http://localhost:4000/journals?status=posted \
+  -H "Authorization: Bearer mock.user-001.1786720000000"
+```
+
+## Endpoint yang diimplementasikan (±50)
+
+| Modul | Endpoint | Logika nyata |
+|-------|----------|--------------|
+| **Auth & Users** | login, refresh, logout, me, change-password, CRUD user (P2) | Role → permissions (`/auth/me`), soft-delete user |
+| **Entitas** | CRUD + activate | Multi-tenant via `X-Entity-Id` |
+| **COA** | CRUD, tree view, template PSAK, import/export, activate/deactivate | Validasi format kode `GOL-NOMOR`, duplikat 409, header akun, saldo turunan |
+| **Jurnal** | CRUD, post, reverse, submit/approve/reject, attachments, next-number | **Validasi balance (422)**, periode tertutup (422), nomor duplikat (409), optimistic lock If-Match (409), **posting update saldo**, **reverse membuat jurnal pembalik (net 0)** |
+| **Buku Besar** | per akun + rekap semua akun | Saldo berjalan dari opening + transaksi, saldo = base + efek jurnal posted |
+| **Laporan** | Neraca Lajur, Laba Rugi, Neraca (asOf), Arus Kas | Trial balance **isBalanced**, neraca seimbang, laba bersih = pendapatan − beban |
+| **Periode** | CRUD, activate, close | Close periode + aksi jurnal draft (`post-all`/`delete-all`/`keep`), blokir entri di periode tertutup |
+| **Dashboard** | summary, trend, recent-journals, alerts | Kartu saldo + delta, alert draft jurnal / periode belum ditutup |
+| **Export** | PDF/XLSX per laporan, COA | Content-Disposition + payload placeholder |
+| **Search** | global lintas jurnal & akun | Partial match case-insensitive |
+
+## Konvensi respons (persis `API - Accounting.md`)
+
+```json
+// Sukses
+{ "data": { ... }, "meta": { "page": 1, "pageSize": 50, "total": 8, "totalPages": 1 } }
+
+// Error
+{ "error": { "code": "JOURNAL_UNBALANCED", "message": "Total debit (100000) dan kredit (90000) harus sama. Selisih: 10000",
+             "details": [ { "field": "lines", "message": "Selisih: Rp10.000" } ] } }
+```
+
+Katalog error: `VALIDATION_ERROR`, `INVALID_CREDENTIALS`, `UNAUTHORIZED`, `FORBIDDEN`,
+`NOT_FOUND`, `JOURNAL_UNBALANCED`, `JOURNAL_NO_LINES`, `LINE_NEGATIVE_AMOUNT`,
+`LINE_NO_ACCOUNT`, `LINE_HEADER_ACCOUNT`, `JOURNAL_ALREADY_POSTED`, `ALREADY_REVERSED`,
+`INVALID_STATUS_TRANSITION`, `TRANSACTION_NUMBER_DUPLICATE`, `ACCOUNT_CODE_EXISTS`,
+`ACCOUNT_HAS_CHILDREN`, `ACCOUNT_HAS_BALANCE`, `INVALID_CODE_FORMAT`, `PERIOD_CLOSED`,
+`PERIOD_ALREADY_CLOSED`, `PERIOD_EXISTS`, `DRAFT_ACTION_REQUIRED`, `DATA_CONFLICT`,
+`NO_APPROVAL_RIGHTS`, `EMAIL_EXISTS`, `UNSUPPORTED_FORMAT`, `NO_DATA`, dll.
+
+## Data mock (konsisten dengan prototipe & PRD Ver 3 §16)
+
+- **Entitas:** PT Maju Jaya (aktif), CV Karya Mandiri
+- **COA:** 12 akun (Aset, Utang, Modal, Pendapatan, Beban) + template COA UKM PSAK
+- **Jurnal Maret 2026:** 8 jurnal (5 posted, 2 draft, 1 reversed) — total posted 98jt debit/kredit
+- **Jurnal lintas bulan (opsional, `npm run seed:extra`):** 7 jurnal tambahan — Januari (3: BKM, BKK sewa, BKK gaji) & Februari (4: BKM, BKK listrik, BKK gaji, JV piutang), semua posted di periode tertutup; berguna untuk menguji navigasi periode, saldo awal buku besar, dan laporan lintas bulan. Saldo berantai Kas: 60 → 40 (Jan) → 64 (Feb) → 91jt (Mar)
+- **Periode:** Januari–Maret 2026 (Maret aktif & terbuka)
+
+**Keseimbangan buku** (diverifikasi):
+- Aset 557jt = Utang 150jt + Modal 363jt + Laba berjalan 44jt
+- Trial balance Maret: debit = kredit = 668jt
+- Posting jurnal → saldo akun & laporan ter-update; reverse → kembali ke kondisi semula (net 0)
+
+## Integrasi ke frontend
+
+```ts
+// Contoh fetch dengan token dari store auth
+const res = await fetch(`${API_BASE}/journals?status=posted&page=1`, {
+  headers: { Authorization: `Bearer ${token}` },
+})
+const { data, meta } = await res.json() // { journals, totals } + meta
+```
+
+Catatan:
+- State **in-memory** — reset dengan `npm run reset` (tanpa restart) atau restart server.
+- File `mock-api.log` dibuat saat `npm start` — tambahkan ke `.gitignore` jika perlu.
+- Untuk mocking di browser (tanpa server), lihat `openapi.yaml` di root sebagai referensi skema.
+
+## Verifikasi
+
+```bash
+curl http://localhost:4000/health
+# {"data":{"status":"ok","journals":8,"accounts":12}}
+```

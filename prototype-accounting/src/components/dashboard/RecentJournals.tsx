@@ -1,14 +1,28 @@
 import { ArrowRight } from 'lucide-react'
 import { useStore } from '../../store/useStore'
+import { api, toJournalEntry } from '../../api'
+import { useApiFetch } from '../../hooks/useApiFetch'
 import { formatDateShort, formatIDR } from '../../lib/format'
 import StatusBadge from '../StatusBadge'
+import type { JournalEntry } from '../../types'
 
 export default function RecentJournals() {
   const journals = useStore((s) => s.journals)
   const setPage = useStore((s) => s.setPage)
-  const recent = [...journals]
-    .sort((a, b) => b.date.localeCompare(a.date) || b.transactionNumber.localeCompare(a.transactionNumber))
-    .slice(0, 5)
+  const apiStatus = useStore((s) => s.apiStatus)
+
+  const localRecent = (): JournalEntry[] =>
+    [...journals]
+      .sort((a, b) => b.date.localeCompare(a.date) || b.transactionNumber.localeCompare(a.transactionNumber))
+      .slice(0, 5)
+
+  const { data } = useApiFetch(
+    `dashboard-recent:${apiStatus}`,
+    apiStatus === 'online' || apiStatus === 'offline',
+    () => api.getDashboardRecent().then((d) => d.journals.map(toJournalEntry)),
+    localRecent,
+  )
+  const recent = data ?? localRecent()
 
   return (
     <div className="rounded-xl border border-line bg-surface shadow-card">

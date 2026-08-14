@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📚 Dokumen Produk (PRD Ver 3, API Contract, Skema DB)
+    url: https://github.com/appsheetindonesia/Accounting-Software
+    about: Sebelum membuat issue, cek dokumen di root repo (PRD Ver 3 - Accounting.md, API - Accounting.md, Database Schema - Accounting.md).
+  - name: 🗂️ Backlog & Sprint Board
+    url: https://github.com/appsheetindonesia/Accounting-Software/projects
+    about: Cek Backlog - Accounting.md dan GitHub Projects untuk status story yang sudah ada.

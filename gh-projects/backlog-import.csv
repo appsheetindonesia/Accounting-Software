@@ -1,0 +1,259 @@
+Title,Body,Priority,Status,Labels,Repository
+"BW-001 · Setup Proyek & Layout Aplikasi","**User story:** Sebagai pengguna, saya ingin aplikasi terbuka dengan kerangka layout konsisten (top bar, sidebar, panel utama, bottom bar), agar mudah bernavigasi.
+**Referensi:** P0-01 · Sprint 1 · 8 SP · Dependensi: -
+**Acceptance Criteria:**
+- [ ] Proyek Vite + React + TS + Tailwind berjalan (npm run dev)
+- [ ] Top bar 64px: logo + nama aplikasi, pencarian global, notifikasi, profil
+- [ ] Sidebar 280px (collapsible 64px) dengan 9 modul + quick action Buat Jurnal
+- [ ] Bottom bar: versi, periode aktif, status koneksi
+- [ ] Rute semua modul berfungsi (lazy loading), state aktif di URL
+- [ ] Responsif desktop/tablet/mobile; tema biru #2596BE aktif",P0,Backlog,"story, priority:P0, sprint-1",
+"BW-002 · Sidebar Navigasi + Pemilih Periode & Entitas","**User story:** Sebagai pengguna, saya ingin sidebar menampilkan item aktif dan dropdown periode/entitas, agar tahu posisi dan periode saya.
+**Referensi:** P0-01 · Sprint 1 · 3 SP · Dependensi: BW-001
+**Acceptance Criteria:**
+- [ ] Item aktif bg-primary/10 + border-left 3px primary; hover bg-slate-100
+- [ ] Submenu Laporan Lain collapse/expand
+- [ ] Dropdown periode menampilkan periode aktif; entitas (placeholder)
+- [ ] Quick action Buat Jurnal menuju form jurnal baru",P0,Backlog,"story, priority:P0, sprint-1",
+"BW-003 · Chart of Accounts - Tree View","**User story:** Sebagai pemilik usaha, saya ingin melihat daftar akun dalam hierarki pohon, agar struktur keuangan mudah dipahami.
+**Referensi:** P0-01 / COA-01 · Sprint 1 · 5 SP · Dependensi: BW-001
+**Acceptance Criteria:**
+- [ ] Tree 5 tipe akun (Aktiva, Kewajiban, Modal, Pendapatan, Beban) dengan indentasi
+- [ ] Expand/collapse per grup; ikon + badge tipe akun
+- [ ] Setiap baris: kode, nama, saldo (format IDR)
+- [ ] Klik akun menuju Buku Besar akun tersebut (placeholder di Sprint 1)
+- [ ] Empty state: Chart of Account masih kosong + CTA Muat Template
+- [ ] Loading skeleton 5 baris",P0,Backlog,"story, priority:P0, sprint-1",
+"BW-004 · COA - CRUD Akun","**User story:** Sebagai akuntan, saya ingin menambah, mengedit, dan menonaktifkan akun, agar struktur akun sesuai kebutuhan usaha.
+**Referensi:** P0-01 / COA-01 · Sprint 1 · 5 SP · Dependensi: BW-003
+**Acceptance Criteria:**
+- [ ] Form: kode, nama, tipe, grup, kategori, saldo normal, induk akun, deskripsi, status
+- [ ] Validasi kode unik + format GOL-NOMOR
+- [ ] Akun induk tidak bisa dihapus jika memiliki sub-akun aktif
+- [ ] Akun ber-saldo hanya bisa dinonaktifkan (bukan dihapus)
+- [ ] Akun non-aktif tidak muncul di dropdown pemilihan akun
+- [ ] Saldo tidak bisa diedit manual (hanya via jurnal)",P0,Backlog,"story, priority:P0, sprint-1",
+"BW-005 · Template COA UKM PSAK","**User story:** Sebagai pemilik baru, saya ingin memuat template akun standar, agar tidak perlu membuat akun satu per satu.
+**Referensi:** P1-10 / COA-02 · Sprint 1 · 3 SP · Dependensi: BW-003
+**Acceptance Criteria:**
+- [ ] Tombol Muat Template UKM PSAK di COA / empty state
+- [ ] Memuat minimal 40 akun standar (Kas, Piutang, Persediaan, Aktiva Tetap, Utang, Modal, Pendapatan, Beban)
+- [ ] Jika COA terisi, dialog konfirmasi mode replace vs merge
+- [ ] Toast Template berhasil dimuat + tree langsung menampilkan akun baru",P1,Backlog,"story, priority:P1, sprint-1",
+"BW-006 · Form Entri Jurnal (Multi-Line, Auto-Balance)","**User story:** Sebagai pemilik usaha, saya ingin mencatat transaksi dengan beberapa baris debit/kredit, agar jurnal selalu balance otomatis.
+**Referensi:** P0-02 / JRN-01 · Sprint 1 · 8 SP · Dependensi: BW-004
+**Acceptance Criteria:**
+- [ ] Form: tanggal, no. bukti (auto), deskripsi, baris (dropdown akun, debit, kredit)
+- [ ] Debit XOR kredit per baris; nilai negatif ditolak
+- [ ] Tambah/hapus baris dinamis; minimal 1 debit + 1 kredit
+- [ ] Total debit & kredit live; pesan selisih bila tidak sama
+- [ ] Tombol Posting non-aktif sampai balance
+- [ ] Format IDR otomatis; shortcut Tab/Enter
+- [ ] Dropdown hanya akun aktif (kode + nama)",P0,Backlog,"story, priority:P0, sprint-1",
+"BW-007 · Auto-Generate Nomor Bukti","**User story:** Sebagai pemilik usaha, saya ingin nomor bukti terisi otomatis, agar pencatatan tertib.
+**Referensi:** P0-02 / BR-5 · Sprint 1 · 3 SP · Dependensi: BW-006
+**Acceptance Criteria:**
+- [ ] Format PREFIX-TAHUN-BULAN-NOMOR (BKM/BKK/JKM/JKK/JV)
+- [ ] Nomor dari GET /journals/next-number (fallback mock)
+- [ ] Unik per periode; input manual tetap dimungkinkan
+- [ ] Duplikat nomor menampilkan error Nomor bukti sudah digunakan",P0,Backlog,"story, priority:P0, sprint-1",
+"BW-008 · Simpan Draft vs Posting","**User story:** Sebagai akuntan, saya ingin menyimpan jurnal sebagai draft atau langsung posting, agar bisa memeriksa sebelum mempengaruhi saldo.
+**Referensi:** P0-02 / JRN-03 / BR-6 · Sprint 1 · 8 SP · Dependensi: BW-006, BW-007
+**Acceptance Criteria:**
+- [ ] Simpan Draft: status draft, tidak mengubah saldo, tidak muncul di laporan
+- [ ] Posting: validasi balance + periode terbuka, update saldo akun
+- [ ] Draft dapat diedit/dihapus; posted read-only (form terkunci)
+- [ ] Toast Jurnal berhasil diposting; saldo akun berubah di COA
+- [ ] Posting di periode tertutup diblokir
+- [ ] Double-click submit dinonaktifkan + label Menyimpan",P0,Backlog,"story, priority:P0, sprint-1",
+"BW-009 · Daftar Jurnal (Tabel + Badge + Footer)","**User story:** Sebagai pemilik usaha, saya ingin melihat daftar semua jurnal dengan statusnya, agar mudah menelusuri riwayat transaksi.
+**Referensi:** P0-02 / JRN-02 · Sprint 1 · 5 SP · Dependensi: BW-008
+**Acceptance Criteria:**
+- [ ] Tabel: Tgl, No. Bukti, Keterangan (per line-item berkelompok), Debit, Kredit
+- [ ] Badge status: Draft/Posted/Reversed
+- [ ] Footer agregat: total debit, total kredit, selisih
+- [ ] Baris expandable untuk detail + lampiran (placeholder)
+- [ ] Aksi: Lihat Detail, Edit (draft), Posting, Reverse, Hapus (draft)
+- [ ] Empty state dengan CTA Buat Jurnal",P0,Backlog,"story, priority:P0, sprint-1",
+"BW-010 · Buku Besar per Akun (Saldo Berjalan)","**User story:** Sebagai akuntan, saya ingin melihat buku besar per akun, agar bisa menelusuri transaksi yang mempengaruhi saldo akun.
+**Referensi:** P0-03 / GL-01-03 · Sprint 2 · 8 SP · Dependensi: BW-008
+**Acceptance Criteria:**
+- [ ] Header: kode + nama akun, periode, tombol prev/next
+- [ ] Kolom: Tgl, Ref, Deskripsi, Debit, Kredit, Saldo (berjalan sesuai saldo normal)
+- [ ] Baris Saldo Awal di awal + Saldo Akhir di footer
+- [ ] Hanya jurnal posted yang muncul
+- [ ] Klik Ref membuka detail jurnal sumber
+- [ ] Di-generate otomatis dari daftar jurnal",P0,Backlog,"story, priority:P0, sprint-2",
+"BW-011 · Filter & Pencarian Jurnal","**User story:** Sebagai akuntan, saya ingin memfilter jurnal berdasarkan tanggal, akun, status, dan kata kunci, agar cepat menemukan transaksi.
+**Referensi:** P1-11 / JRN-02 · Sprint 2 · 5 SP · Dependensi: BW-009
+**Acceptance Criteria:**
+- [ ] Filter tanggal (range), akun (dropdown), status (multi-select)
+- [ ] Keyword dengan debounce 300ms (no. bukti, deskripsi, nama akun)
+- [ ] Kombinasi filter bekerja; URL search params menyimpan filter
+- [ ] Empty state pencarian dengan keyword yang ditampilkan
+- [ ] Footer agregat mengikuti hasil filter",P1,Backlog,"story, priority:P1, sprint-2",
+"BW-012 · Periode Fiskal: Buka, Aktif, Tutup","**User story:** Sebagai akuntan, saya ingin membuka dan menutup periode fiskal, agar pembukuan tiap bulan terkunci rapi.
+**Referensi:** P0-06 / SYS-01 / BR-3 · Sprint 2 · 8 SP · Dependensi: BW-008
+**Acceptance Criteria:**
+- [ ] Pengaturan: daftar periode (bulan, tahun, rentang, status, aksi)
+- [ ] Hanya satu periode aktif; default entri baru
+- [ ] Tutup periode: konfirmasi + penanganan jurnal draft (post-all/delete-all/keep)
+- [ ] Periode tertutup memblokir entri/edit/posting di semua modul
+- [ ] Laporan periode tertutup tetap bisa dibaca
+- [ ] Badge Terkunci pada periode yang ditutup",P0,Backlog,"story, priority:P0, sprint-2",
+"BW-013 · Edit & Hapus Jurnal Draft + Audit Trail","**User story:** Sebagai akuntan, saya ingin mengedit atau menghapus jurnal draft dan melihat riwayat perubahannya, agar koreksi tercatat aman.
+**Referensi:** P0-02 / JRN-03 / BR-4 · Sprint 2 · 5 SP · Dependensi: BW-009
+**Acceptance Criteria:**
+- [ ] Edit hanya untuk draft (posted read-only, tombol disabled + tooltip)
+- [ ] Hapus draft dengan konfirmasi
+- [ ] Audit trail: create, update, post (user, timestamp, aksi)
+- [ ] Edit draft tidak mempengaruhi saldo",P0,Backlog,"story, priority:P0, sprint-2",
+"BW-014 · Dashboard: Kartu Saldo + Delta","**User story:** Sebagai pemilik usaha, saya ingin melihat ringkasan aset, utang, modal, dan laba di satu layar, agar langsung tahu kondisi keuangan.
+**Referensi:** P0-07 · Sprint 2 · 5 SP · Dependensi: BW-008
+**Acceptance Criteria:**
+- [ ] 4 kartu: Total Aset, Total Utang, Total Modal, Laba Bruto (format IDR)
+- [ ] Delta % vs bulan lalu dengan panah dan warna kontekstual
+- [ ] Skeleton loading
+- [ ] Klik kartu menuju laporan terkait",P0,Backlog,"story, priority:P0, sprint-2",
+"BW-015 · Dashboard: Grafik, Jurnal Terbaru, Peringatan","**User story:** Sebagai pemilik usaha, saya ingin melihat tren laba rugi, jurnal terbaru, dan peringatan, agar bisa memantau kesehatan usaha.
+**Referensi:** P0-07 · Sprint 2 · 5 SP · Dependensi: BW-014
+**Acceptance Criteria:**
+- [ ] Grafik bar Laba Rugi 6 bulan (lazy-loaded)
+- [ ] Tabel 5 jurnal terbaru dengan link Lihat Semua
+- [ ] Panel peringatan: draft belum diposting, periode belum ditutup, jurnal tidak balance
+- [ ] Peringatan klikable menuju tempat perbaikan",P0,Backlog,"story, priority:P0, sprint-2",
+"BW-016 · Laporan Laba Rugi","**User story:** Sebagai pemilik usaha, saya ingin melihat laba rugi per periode, agar tahu untung atau rugi usaha saya.
+**Referensi:** P0-04 / RPT-01 · Sprint 3 · 8 SP · Dependensi: BW-010
+**Acceptance Criteria:**
+- [ ] Format: header perusahaan + judul + periode; section PENDAPATAN & BEBAN (detail + subtotal); LABA BERSIH bold
+- [ ] Akurasi: pendapatan - beban = laba bersih (unit test)
+- [ ] Selektor periode; default periode aktif
+- [ ] Empty state + link buat jurnal
+- [ ] Indentasi sesuai hierarki akun; format IDR konsisten",P0,Backlog,"story, priority:P0, sprint-3",
+"BW-017 · Laporan Neraca (Posisi Keuangan)","**User story:** Sebagai pemilik usaha, saya ingin melihat posisi keuangan per tanggal, agar tahu total aset vs kewajiban dan modal.
+**Referensi:** P0-05 / RPT-02 · Sprint 3 · 8 SP · Dependensi: BW-010
+**Acceptance Criteria:**
+- [ ] Disajikan per tanggal (Per 31 Maret 2026), saldo kumulatif
+- [ ] Section ASET serta KEWAJIBAN & EKUITAS (utang, modal, laba ditahan)
+- [ ] Laba periode berjalan masuk ekuitas
+- [ ] Indikator keseimbangan Aset = Kewajiban + Ekuitas
+- [ ] Unit test formula keseimbangan",P0,Backlog,"story, priority:P0, sprint-3",
+"BW-018 · Neraca Lajur (Trial Balance)","**User story:** Sebagai akuntan, saya ingin melihat saldo semua akun dalam satu tabel debit/kredit, agar cepat memeriksa keseimbangan buku.
+**Referensi:** P1-08 / RPT-03 · Sprint 3 · 5 SP · Dependensi: BW-010
+**Acceptance Criteria:**
+- [ ] Tabel: kode, nama akun, debit, kredit semua akun per periode
+- [ ] Total debit = total kredit dengan indikator + selisih
+- [ ] Klik baris akun menuju Buku Besar
+- [ ] Akun tanpa transaksi tetap muncul jika ber-saldo awal",P1,Backlog,"story, priority:P1, sprint-3",
+"BW-019 · Selektor Periode Global","**User story:** Sebagai pengguna, saya ingin mengubah periode dari satu tempat, agar semua laporan mengikuti periode yang sama.
+**Referensi:** P0-06 · Sprint 3 · 3 SP · Dependensi: BW-016, BW-017
+**Acceptance Criteria:**
+- [ ] Dropdown periode di sidebar mempengaruhi semua modul laporan
+- [ ] Periode tersimpan di URL (dapat di-share)
+- [ ] Ganti periode memicu re-fetch & re-render",P0,Backlog,"story, priority:P0, sprint-3",
+"BW-020 · Export Laporan ke PDF","**User story:** Sebagai pemilik usaha, saya ingin mengunduh laporan sebagai PDF profesional, agar bisa dibagikan ke bank, investor, atau pajak.
+**Referensi:** P1-09 / RPT-05 · Sprint 4 · 5 SP · Dependensi: BW-016-018
+**Acceptance Criteria:**
+- [ ] Export dari Laba Rugi, Neraca, Neraca Lajur, Buku Besar, daftar Jurnal
+- [ ] PDF berisi kop perusahaan, judul, periode, isi, footer
+- [ ] Nama file: Laba-Rugi-Maret-2026.pdf
+- [ ] jsPDF + autotable; angka rata kanan format IDR
+- [ ] Progress indicator saat generate",P1,Backlog,"story, priority:P1, sprint-4",
+"BW-021 · Export Laporan ke Excel","**User story:** Sebagai akuntan, saya ingin mengunduh laporan sebagai Excel, agar bisa diolah lebih lanjut.
+**Referensi:** P1-09 / RPT-06 · Sprint 4 · 3 SP · Dependensi: BW-020
+**Acceptance Criteria:**
+- [ ] Export XLSX untuk semua laporan + daftar jurnal
+- [ ] Nilai sebagai angka (bukan teks) agar bisa dihitung
+- [ ] Nama file: Neraca-Lajur-Maret-2026.xlsx",P1,Backlog,"story, priority:P1, sprint-4",
+"BW-022 · Reverse Jurnal (Pembalik Otomatis)","**User story:** Sebagai akuntan, saya ingin membatalkan jurnal yang sudah diposting, agar koreksi tercatat rapi tanpa menghapus riwayat.
+**Referensi:** P1-13 / JRN-05 / BR-11 · Sprint 4 · 5 SP · Dependensi: BW-009
+**Acceptance Criteria:**
+- [ ] Aksi Reverse hanya pada jurnal posted (bukan hapus)
+- [ ] Dialog konfirmasi + pratinjau jurnal pembalik (debit/kredit dibalik)
+- [ ] Jurnal asal reversed; pembalik auto-posted dengan ref REV; saldo kembali
+- [ ] Jurnal yang sudah reversed tidak bisa di-reverse ulang
+- [ ] Audit trail mencatat aksi reverse",P1,Backlog,"story, priority:P1, sprint-4",
+"BW-023 · Upload Lampiran Bukti Transaksi","**User story:** Sebagai pemilik usaha, saya ingin melampirkan foto/PDF bukti transaksi, agar semua bukti tersimpan di satu tempat.
+**Referensi:** P1-12 / JRN-06 · Sprint 4 · 5 SP · Dependensi: BW-009
+**Acceptance Criteria:**
+- [ ] Upload drag-drop + klik (jpg/png/pdf, maks 5MB, maks 5 file)
+- [ ] Thumbnail/ikon di detail jurnal; bisa diunduh
+- [ ] Hapus lampiran hanya jika jurnal belum posted
+- [ ] Error ukuran/tipe file",P1,Backlog,"story, priority:P1, sprint-4",
+"BW-024 · Approval Workflow","**User story:** Sebagai manajer keuangan, saya ingin menyetujui atau menolak jurnal sebelum diposting, agar kontrol kualitas pencatatan terjaga.
+**Referensi:** P1-14 / JRN-04 · Sprint 4 · 8 SP · Dependensi: BW-008
+**Acceptance Criteria:**
+- [ ] Status baru pending-approval; submit dari draft
+- [ ] Approve ke posted (update saldo); Reject kembali draft + alasan wajib
+- [ ] Hanya user dengan izin approve yang melihat tombol approve
+- [ ] Notifikasi/badge jurnal menunggu approval di dashboard
+- [ ] Audit trail: submit/approve/reject tercatat",P1,Backlog,"story, priority:P1, sprint-4",
+"BW-025 · Role-Based Access (Admin/Akuntan/Viewer)","**User story:** Sebagai admin, saya ingin mengelola pengguna dengan peran berbeda, agar akses ke data keuangan aman.
+**Referensi:** P2-16 / SYS-03 · Sprint 5 · 8 SP · Dependensi: BW-024
+**Acceptance Criteria:**
+- [ ] Role: admin (penuh), accountant (entri + approval), viewer (read-only)
+- [ ] CRUD user + assign role di Pengaturan
+- [ ] Guard di semua modul: viewer tidak bisa menulis jurnal
+- [ ] Role tercermin di profil & permission (GET /auth/me)",P2,Backlog,"story, priority:P2, sprint-5",
+"BW-026 · Multi-Entitas (Akuntan Multi-Klien)","**User story:** Sebagai akuntan freelance, saya ingin berpindah antar perusahaan klien, agar semua laporan klien terkelola dalam satu aplikasi.
+**Referensi:** P1 / SYS-02 · Sprint 5 · 5 SP · Dependensi: BW-025
+**Acceptance Criteria:**
+- [ ] Entity selector di sidebar; switch mengubah seluruh data
+- [ ] Pengaturan Perusahaan: nama, mata uang (IDR), awal tahun fiskal
+- [ ] Isolasi data antar entitas (tidak ada kebocoran)
+- [ ] Header laporan menampilkan nama entitas aktif",P1,Backlog,"story, priority:P1, sprint-5",
+"BW-027 · Pencarian Global (Top Bar)","**User story:** Sebagai pengguna, saya ingin mencari jurnal dan akun dari satu kotak pencarian, agar cepat menemukan apa pun.
+**Referensi:** P1-11 · Sprint 5 · 3 SP · Dependensi: BW-009
+**Acceptance Criteria:**
+- [ ] Pencarian dari top bar (debounce 300ms) mencakup jurnal & akun
+- [ ] Hasil terkelompok per tipe; klik menuju entitas terkait
+- [ ] Empty state Tidak ditemukan hasil",P1,Backlog,"story, priority:P1, sprint-5",
+"BW-028 · Laporan Arus Kas (Metode Tidak Langsung)","**User story:** Sebagai manajer keuangan, saya ingin melihat arus kas per aktivitas, agar tahu dari mana kas masuk dan keluar.
+**Referensi:** P2-15 / RPT-04 · Sprint 5 · 8 SP · Dependensi: BW-016, BW-017
+**Acceptance Criteria:**
+- [ ] Metode tidak langsung: laba bersih + penyesuaian non-kas + perubahan modal kerja
+- [ ] 3 seksi: Operasi, Investasi, Pendanaan
+- [ ] Mapping grup akun ke aktivitas (konfigurasi di Pengaturan)
+- [ ] Unit test konsistensi kas akhir = kas awal + arus kas bersih",P2,Backlog,"story, priority:P2, sprint-5",
+"BW-029 · States Menyeluruh: Loading, Empty, Error, Edge Cases","**User story:** Sebagai pengguna, saya ingin aplikasi memberi umpan balik jelas di setiap kondisi, agar tidak bingung saat error atau data kosong.
+**Referensi:** PRD Ver 3 §12 · Sprint 5 · 5 SP · Dependensi: semua modul
+**Acceptance Criteria:**
+- [ ] Skeleton/spinner di semua modul saat loading
+- [ ] Empty states sesuai PRD §12.2 dengan CTA relevan
+- [ ] Error banner jaringan + tombol Muat Ulang; toast error server
+- [ ] Edge cases: periode tertutup, saldo tidak balance, akun non-aktif, double-click
+- [ ] Aksesibilitas dasar: keyboard, focus states, aria-label",P0,Backlog,"story, priority:P0, sprint-5",
+"BW-030 · Performance: Virtual Scrolling 10.000 Baris","**User story:** Sebagai pengguna dengan data besar, saya ingin daftar jurnal tetap lancar walau ribuan baris, agar tidak lemot.
+**Referensi:** NFR / TRD §5 · Sprint 6 · 8 SP · Dependensi: BW-009, BW-011
+**Acceptance Criteria:**
+- [ ] Tabel jurnal & buku besar memakai virtual scrolling
+- [ ] Render 10.000 baris di bawah 2 detik (profiler)
+- [ ] Scroll halus; sort/filter responsif
+- [ ] Bundle awal di bawah 200KB gzip (code splitting)",P0,Backlog,"story, priority:P0, sprint-6",
+"BW-031 · Pembanding Laporan Antar Periode","**User story:** Sebagai manajer keuangan, saya ingin membandingkan laba rugi bulan ini vs bulan lalu, agar melihat tren pertumbuhan.
+**Referensi:** P2 · Sprint 6 · 5 SP · Dependensi: BW-016
+**Acceptance Criteria:**
+- [ ] Dropdown Bandingkan dengan di Laba Rugi dan Neraca
+- [ ] Nilai periode berjalan vs pembanding + selisih
+- [ ] Delta % di baris total",P2,Backlog,"story, priority:P2, sprint-6",
+"BW-032 · Onboarding Interaktif","**User story:** Sebagai pengguna baru, saya ingin dipandu langkah demi langkah, agar bisa membuat jurnal pertama dalam 5 menit.
+**Referensi:** BRD (time-to-first-journal) · Sprint 6 · 5 SP · Dependensi: BW-005
+**Acceptance Criteria:**
+- [ ] Wizard: buat entitas, muat template COA, buat jurnal pertama
+- [ ] Tooltip/spotlight di kunjungan pertama
+- [ ] Progress onboarding terlihat; bisa dilewati
+- [ ] Onboarding selesai setelah jurnal pertama diposting",P1,Backlog,"story, priority:P1, sprint-6",
+"BW-033 · Import/Export COA Excel","**User story:** Sebagai akuntan, saya ingin mengimpor daftar akun dari Excel, agar tidak mengetik ulang akun yang sudah ada.
+**Referensi:** P1 / COA-03 · Sprint 6 · 5 SP · Dependensi: BW-004
+**Acceptance Criteria:**
+- [ ] Export COA XLSX sebagai template
+- [ ] Import dengan validasi per baris; laporan imported/failed + error per baris
+- [ ] Baris gagal tidak menggagalkan seluruh import
+- [ ] Preview hasil sebelum konfirmasi final",P1,Backlog,"story, priority:P1, sprint-6",
+"BW-034 · Integrasi Bank (Spike + MVP Sederhana)","**User story:** Sebagai pemilik usaha, saya ingin melihat transaksi bank otomatis, agar tidak perlu mencatat manual.
+**Referensi:** P2-17 · Sprint 6 · 13 SP · Dependensi: BW-008
+**Acceptance Criteria:**
+- [ ] Spike: riset penyedia data bank, dokumentasikan keputusan arsitektur
+- [ ] Sambungkan akun bank: tarik transaksi menjadi jurnal draft
+- [ ] Rekonsiliasi: cocokkan transaksi bank dengan jurnal existing
+- [ ] Feature flag bila integrasi belum tersedia",P2,Backlog,"story, priority:P2, sprint-6",

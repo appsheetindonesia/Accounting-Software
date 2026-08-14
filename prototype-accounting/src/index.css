@@ -1,10 +1,10 @@
 @import "tailwindcss";
 
 @theme {
-  /* Brand — PRD Ver 3 §7.2 */
-  --color-primary: #0d5c3d;
-  --color-primary-light: #1a8c5e;
-  --color-primary-dark: #083a26;
+  /* Brand — tema #2596BE */
+  --color-primary: #2596be;
+  --color-primary-light: #4fb3d8;
+  --color-primary-dark: #1a6985;
   --color-accent: #f59e0b;
 
   /* Surface & text */

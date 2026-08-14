@@ -1,12 +1,17 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import { useMemo } from 'react'
 import type { Account, JournalEntry, NewJournalInput, PageKey } from '../types'
 import { mockAccounts, mockJournals } from '../data/mock'
+import { api, ApiError, isNetworkError, toJournalEntry } from '../api'
+import type { AuthUser } from '../api'
 
 export interface Toast {
   message: string
   kind: 'success' | 'error'
 }
+
+export type ApiStatus = 'idle' | 'connecting' | 'online' | 'offline'
 
 interface AccountingState {
   page: PageKey
@@ -21,10 +26,15 @@ interface AccountingState {
   openModal: () => void
   closeModal: () => void
 
-  saveJournal: (input: NewJournalInput, action: 'draft' | 'post') => void
-  postJournal: (id: string) => void
-  reverseJournal: (id: string) => void
-  deleteJournal: (id: string) => void
+  // Lapisan API (API - Accounting.md)
+  apiStatus: ApiStatus
+  user: Pick<AuthUser, 'id' | 'name' | 'email' | 'role'> | null
+  init: () => Promise<void>
+
+  saveJournal: (input: NewJournalInput, action: 'draft' | 'post') => Promise<void>
+  postJournal: (id: string) => Promise<void>
+  reverseJournal: (id: string) => Promise<void>
+  deleteJournal: (id: string) => Promise<void>
 
   toast: Toast | null
   showToast: (message: string, kind?: Toast['kind']) => void
@@ -32,116 +42,282 @@ interface AccountingState {
 
 const nowIso = () => new Date().toISOString()
 
-export const useStore = create<AccountingState>((set) => ({
-  page: 'dashboard',
-  setPage: (page) => set({ page }),
+// Key localStorage + versi seed. Bump VERSION jika mock data berubah
+// agar state lama yang tidak kompatibel otomatis di-reset ke seed.
+const STORAGE_KEY = 'appsheet-accounting-v1'
 
-  accounts: mockAccounts,
-  journals: mockJournals,
-  activePeriod: '2026-03',
-  setActivePeriod: (activePeriod) => set({ activePeriod }),
+// Hanya field data yang dipersist (bukan UI ephemeral seperti modal/toast)
+const persistOptions = {
+  name: STORAGE_KEY,
+  version: 1,
+  partialize: (s: AccountingState) => ({
+    accounts: s.accounts,
+    journals: s.journals,
+    activePeriod: s.activePeriod,
+  }),
+}
 
-  modalOpen: false,
-  openModal: () => set({ modalOpen: true }),
-  closeModal: () => set({ modalOpen: false }),
+// Kredensial demo mock API (mock-api/README.md)
+const DEMO = { email: 'rina@bukuwarung.com', password: 'password123' }
 
-  saveJournal: (input, action) =>
-    set((state) => {
-      const seq = state.journals.length + 1
-      const entry: JournalEntry = {
-        id: `JNL-${input.date.slice(0, 7).replace('-', '-')}-${String(seq).padStart(3, '0')}`,
-        transactionNumber: input.transactionNumber,
-        date: input.date,
-        description: input.description.trim() || 'Tanpa keterangan',
-        lines: input.lines.map((ln, i) => {
-          const account = state.accounts.find((a) => a.id === ln.accountId)!
-          return {
-            id: `n-${seq}-${i + 1}`,
-            accountId: account.id,
-            accountCode: account.code,
-            accountName: account.name,
-            debit: ln.debit,
-            credit: ln.credit,
-            description: ln.description,
+// Ganti createdBy user id (mis. "user-001") dengan nama untuk tampilan UI
+const enrichCreatedBy = <T extends JournalEntry>(j: T, user: AccountingState['user']): T =>
+  user && j.createdBy === user.id ? { ...j, createdBy: user.name } : j
+
+export const useStore = create<AccountingState>()(
+  persist(
+    (set, get) => {
+      // ---------- Mutasi lokal (fallback offline) ----------
+      const localSave = (input: NewJournalInput, action: 'draft' | 'post') => {
+        set((state) => {
+          const seq = state.journals.length + 1
+          const entry: JournalEntry = {
+            id: `JNL-${input.date.slice(0, 7).replace('-', '-')}-${String(seq).padStart(3, '0')}`,
+            transactionNumber: input.transactionNumber,
+            date: input.date,
+            description: input.description.trim() || 'Tanpa keterangan',
+            lines: input.lines.map((ln, i) => {
+              const account = state.accounts.find((a) => a.id === ln.accountId)!
+              return {
+                id: `n-${seq}-${i + 1}`,
+                accountId: account.id,
+                accountCode: account.code,
+                accountName: account.name,
+                debit: ln.debit,
+                credit: ln.credit,
+                description: ln.description,
+              }
+            }),
+            status: action === 'post' ? 'posted' : 'draft',
+            createdBy: get().user?.name ?? 'Rina',
+            createdAt: nowIso(),
+            postedAt: action === 'post' ? nowIso() : undefined,
           }
-        }),
-        status: action === 'post' ? 'posted' : 'draft',
-        createdBy: 'Rina',
-        createdAt: nowIso(),
-        postedAt: action === 'post' ? nowIso() : undefined,
-      }
-      return {
-        journals: [entry, ...state.journals],
-        modalOpen: false,
-        toast: {
-          message: action === 'post' ? 'Jurnal berhasil diposting' : 'Jurnal disimpan sebagai draft',
-          kind: 'success',
-        },
-      }
-    }),
-
-  postJournal: (id) =>
-    set((state) => ({
-      journals: state.journals.map((j) =>
-        j.id === id && j.status === 'draft'
-          ? { ...j, status: 'posted' as const, postedAt: nowIso() }
-          : j,
-      ),
-      toast: { message: 'Jurnal berhasil diposting', kind: 'success' },
-    })),
-
-  reverseJournal: (id) =>
-    set((state) => {
-      const original = state.journals.find((j) => j.id === id)
-      if (!original || original.status !== 'posted') return state
-
-      const seq = state.journals.length + 1
-      const reversal: JournalEntry = {
-        id: `JNL-2026-03-${String(seq).padStart(3, '0')}`,
-        transactionNumber: `REV-${original.transactionNumber}`,
-        date: nowIso().slice(0, 10),
-        description: `Pembalikan: ${original.description}`,
-        lines: original.lines.map((ln, i) => ({
-          id: `r-${seq}-${i + 1}`,
-          accountId: ln.accountId,
-          accountCode: ln.accountCode,
-          accountName: ln.accountName,
-          debit: ln.credit,
-          credit: ln.debit,
-        })),
-        status: 'posted',
-        createdBy: 'Rina',
-        createdAt: nowIso(),
-        postedAt: nowIso(),
-        reversalOf: original.transactionNumber,
+          return {
+            journals: [entry, ...state.journals],
+            modalOpen: false,
+            toast: {
+              message: action === 'post' ? 'Jurnal berhasil diposting' : 'Jurnal disimpan sebagai draft',
+              kind: 'success',
+            },
+          }
+        })
       }
 
-      return {
-        journals: [
-          reversal,
-          ...state.journals.map((j) =>
-            j.id === id ? { ...j, status: 'reversed' as const, reversalOf: reversal.transactionNumber } : j,
+      const localPost = (id: string) => {
+        set((state) => ({
+          journals: state.journals.map((j) =>
+            j.id === id && j.status === 'draft' ? { ...j, status: 'posted' as const, postedAt: nowIso() } : j,
           ),
-        ],
-        toast: { message: 'Jurnal dibatalkan dan jurnal pembalik dibuat', kind: 'success' },
+          toast: { message: 'Jurnal berhasil diposting', kind: 'success' },
+        }))
       }
-    }),
 
-  deleteJournal: (id) =>
-    set((state) => ({
-      journals: state.journals.filter((j) => j.id !== id),
-      toast: { message: 'Jurnal draft dihapus', kind: 'success' },
-    })),
+      const localReverse = (id: string) => {
+        set((state) => {
+          const original = state.journals.find((j) => j.id === id)
+          if (!original || original.status !== 'posted') return state
 
-  toast: null,
-  showToast: (message, kind = 'success') => set({ toast: { message, kind } }),
-}))
+          const seq = state.journals.length + 1
+          const reversal: JournalEntry = {
+            id: `JNL-2026-03-${String(seq).padStart(3, '0')}`,
+            transactionNumber: `REV-${original.transactionNumber}`,
+            date: nowIso().slice(0, 10),
+            description: `Pembalikan: ${original.description}`,
+            lines: original.lines.map((ln, i) => ({
+              id: `r-${seq}-${i + 1}`,
+              accountId: ln.accountId,
+              accountCode: ln.accountCode,
+              accountName: ln.accountName,
+              debit: ln.credit,
+              credit: ln.debit,
+            })),
+            status: 'posted',
+            createdBy: get().user?.name ?? 'Rina',
+            createdAt: nowIso(),
+            postedAt: nowIso(),
+            reversalOf: original.transactionNumber,
+          }
+
+          return {
+            journals: [
+              reversal,
+              ...state.journals.map((j) =>
+                j.id === id ? { ...j, status: 'reversed' as const, reversalOf: reversal.transactionNumber } : j,
+              ),
+            ],
+            toast: { message: 'Jurnal dibatalkan dan jurnal pembalik dibuat', kind: 'success' },
+          }
+        })
+      }
+
+      const localDelete = (id: string) => {
+        set((state) => ({
+          journals: state.journals.filter((j) => j.id !== id),
+          toast: { message: 'Jurnal draft dihapus', kind: 'success' },
+        }))
+      }
+
+      // ---------- State + aksi ----------
+      return {
+        page: 'dashboard',
+        setPage: (page) => set({ page }),
+
+        accounts: mockAccounts,
+        journals: mockJournals,
+        activePeriod: '2026-03',
+        setActivePeriod: (activePeriod) => set({ activePeriod }),
+
+        modalOpen: false,
+        openModal: () => set({ modalOpen: true }),
+        closeModal: () => set({ modalOpen: false }),
+
+        apiStatus: 'idle',
+        user: null,
+        init: async () => {
+          const status = get().apiStatus
+          if (status === 'connecting' || status === 'online') return
+          set({ apiStatus: 'connecting' })
+          try {
+            const auth = await api.login(DEMO)
+            const [accRes, jrnRes] = await Promise.all([api.getAccounts(), api.getJournals()])
+            const journals = jrnRes.journals.map((j) => enrichCreatedBy(toJournalEntry(j), auth.user))
+            set({
+              apiStatus: 'online',
+              user: { id: auth.user.id, name: auth.user.name, email: auth.user.email, role: auth.user.role },
+              accounts: accRes.accounts,
+              journals,
+              activePeriod: auth.activePeriod?.id ?? get().activePeriod,
+              toast: { message: `Terhubung ke mock API · ${auth.user.name}`, kind: 'success' },
+            })
+          } catch {
+            set({
+              apiStatus: 'offline',
+              toast: { message: 'Mock API tidak terhubung — menampilkan data lokal', kind: 'error' },
+            })
+          }
+        },
+
+        saveJournal: async (input, action) => {
+          if (get().apiStatus === 'online') {
+            try {
+              const created = await api.createJournal({ ...input, submitForApproval: false })
+              let entry = enrichCreatedBy(toJournalEntry(created), get().user)
+              if (action === 'post') {
+                const r = await api.postJournal(created.id)
+                entry = { ...entry, status: 'posted' as const, postedAt: r.postedAt }
+              }
+              set((s) => ({
+                journals: [entry, ...s.journals],
+                modalOpen: false,
+                toast: {
+                  message: action === 'post' ? 'Jurnal berhasil diposting' : 'Jurnal disimpan sebagai draft',
+                  kind: 'success',
+                },
+              }))
+            } catch (e) {
+              if (isNetworkError(e)) {
+                set({ apiStatus: 'offline' })
+                localSave(input, action)
+                return
+              }
+              const msg = e instanceof ApiError ? e.message : 'Gagal menyimpan jurnal'
+              set({ modalOpen: false, toast: { message: msg, kind: 'error' } })
+            }
+            return
+          }
+          localSave(input, action)
+        },
+
+        postJournal: async (id) => {
+          if (get().apiStatus === 'online') {
+            try {
+              const r = await api.postJournal(id)
+              set((s) => ({
+                journals: s.journals.map((j) =>
+                  j.id === id ? { ...j, status: 'posted' as const, postedAt: r.postedAt } : j,
+                ),
+                toast: { message: 'Jurnal berhasil diposting', kind: 'success' },
+              }))
+            } catch (e) {
+              if (isNetworkError(e)) {
+                set({ apiStatus: 'offline' })
+                localPost(id)
+                return
+              }
+              set({ toast: { message: e instanceof ApiError ? e.message : 'Gagal posting jurnal', kind: 'error' } })
+            }
+            return
+          }
+          localPost(id)
+        },
+
+        reverseJournal: async (id) => {
+          if (get().apiStatus === 'online') {
+            try {
+              const r = await api.reverseJournal(id)
+              const reversal = enrichCreatedBy(toJournalEntry(r.reversalJournal), get().user)
+              set((s) => ({
+                journals: [
+                  reversal,
+                  ...s.journals.map((j) =>
+                    j.id === id ? { ...j, status: 'reversed' as const, reversalOf: reversal.transactionNumber } : j,
+                  ),
+                ],
+                toast: { message: 'Jurnal dibatalkan dan jurnal pembalik dibuat', kind: 'success' },
+              }))
+            } catch (e) {
+              if (isNetworkError(e)) {
+                set({ apiStatus: 'offline' })
+                localReverse(id)
+                return
+              }
+              set({ toast: { message: e instanceof ApiError ? e.message : 'Gagal reverse jurnal', kind: 'error' } })
+            }
+            return
+          }
+          localReverse(id)
+        },
+
+        deleteJournal: async (id) => {
+          if (get().apiStatus === 'online') {
+            try {
+              await api.deleteJournal(id)
+              set((s) => ({
+                journals: s.journals.filter((j) => j.id !== id),
+                toast: { message: 'Jurnal draft dihapus', kind: 'success' },
+              }))
+            } catch (e) {
+              if (isNetworkError(e)) {
+                set({ apiStatus: 'offline' })
+                localDelete(id)
+                return
+              }
+              set({ toast: { message: e instanceof ApiError ? e.message : 'Gagal hapus jurnal', kind: 'error' } })
+            }
+            return
+          }
+          localDelete(id)
+        },
+
+        toast: null,
+        showToast: (message, kind = 'success') => set({ toast: { message, kind } }),
+      }
+    },
+    persistOptions,
+  ),
+)
+
+// Jurnal yang memengaruhi saldo: posted DAN bukan jurnal pembalik.
+// Jurnal asli yang di-reverse berstatus 'reversed' (tidak dihitung),
+// jurnal pembalik punya reversalOf (tidak dihitung) → pasangan bernet 0.
+export const isEffectJournal = (j: JournalEntry) => j.status === 'posted' && !j.reversalOf
 
 // Hitung saldo live: saldo awal + efek jurnal posted (BR-6, BR-7)
 export const computeBalances = (accounts: Account[], journals: JournalEntry[]) => {
   const map = new Map(accounts.map((a) => [a.id, a.baseBalance]))
   for (const journal of journals) {
-    if (journal.status !== 'posted') continue
+    if (!isEffectJournal(journal)) continue
     for (const ln of journal.lines) {
       const account = accounts.find((a) => a.id === ln.accountId)
       if (!account) continue

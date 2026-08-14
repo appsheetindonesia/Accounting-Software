@@ -2,9 +2,7 @@ import { ArrowLeft, Hammer } from 'lucide-react'
 import { useStore } from '../store/useStore'
 
 const LABELS: Record<string, string> = {
-  'buku-besar': 'Buku Besar',
   'neraca-lajur': 'Neraca Lajur',
-  'laba-rugi': 'Laba Rugi',
   neraca: 'Neraca',
   'arus-kas': 'Arus Kas',
   'laporan-lain': 'Laporan Lain',

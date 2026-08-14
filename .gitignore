@@ -1,5 +1,10 @@
 # Direktori internal tooling
 .freebuff/
+.agents/
+
+# Dependensi & artefak build
+node_modules/
+dist/
 
 # Artefak & file lokal
 *.log

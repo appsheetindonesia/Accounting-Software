@@ -1,14 +1,35 @@
-import { useMemo } from 'react'
 import { ArrowDownRight, ArrowUpRight, Banknote, Landmark, Minus, PiggyBank, TrendingUp } from 'lucide-react'
 import { useStore, useBalances } from '../../store/useStore'
+import { api } from '../../api'
+import { useApiFetch } from '../../hooks/useApiFetch'
 import { formatIDR } from '../../lib/format'
 import type { BalanceCardData } from '../../types'
+
+const ICONS = {
+  aset: Landmark,
+  utang: Banknote,
+  modal: PiggyBank,
+  laba: TrendingUp,
+} as const
+
+function SkeletonCard() {
+  return (
+    <div className="animate-pulse rounded-xl border border-line bg-surface p-5 shadow-card">
+      <div className="h-3 w-20 rounded bg-surface-hover" />
+      <div className="mt-3 h-7 w-32 rounded bg-surface-hover" />
+      <div className="mt-2 h-3 w-24 rounded bg-surface-hover" />
+    </div>
+  )
+}
 
 export default function BalanceCards() {
   const accounts = useStore((s) => s.accounts)
   const balances = useBalances()
+  const apiStatus = useStore((s) => s.apiStatus)
+  const ready = apiStatus === 'online' || apiStatus === 'offline'
 
-  const totals = useMemo(() => {
+  // Fallback offline: hitung dari data lokal (sama seperti sebelumnya)
+  const localCards = (): BalanceCardData[] => {
     let asset = 0
     let liability = 0
     let equity = 0
@@ -22,27 +43,38 @@ export default function BalanceCards() {
       else if (a.type === 'revenue') revenue += b
       else expense += b
     }
-    return { asset, liability, equity, grossProfit: revenue - expense }
-  }, [accounts, balances])
+    return [
+      { key: 'aset', label: 'Total Aset', value: asset, deltaPercent: 12.5, deltaDirection: 'up', compareLabel: 'dari bulan lalu' },
+      { key: 'utang', label: 'Total Utang', value: liability, deltaPercent: 3.2, deltaDirection: 'down', compareLabel: 'dari bulan lalu' },
+      { key: 'modal', label: 'Total Modal', value: equity, deltaPercent: 8.1, deltaDirection: 'up', compareLabel: 'dari bulan lalu' },
+      { key: 'laba', label: 'Laba Bruto', value: revenue - expense, deltaPercent: 15.3, deltaDirection: 'up', compareLabel: 'dari bulan lalu' },
+    ]
+  }
 
-  const cards: BalanceCardData[] = [
-    { key: 'aset', label: 'Total Aset', value: totals.asset, deltaPercent: 12.5, deltaDirection: 'up', compareLabel: 'dari bulan lalu' },
-    { key: 'utang', label: 'Total Utang', value: totals.liability, deltaPercent: 3.2, deltaDirection: 'down', compareLabel: 'dari bulan lalu' },
-    { key: 'modal', label: 'Total Modal', value: totals.equity, deltaPercent: 8.1, deltaDirection: 'up', compareLabel: 'dari bulan lalu' },
-    { key: 'laba', label: 'Laba Bruto', value: totals.grossProfit, deltaPercent: 15.3, deltaDirection: 'up', compareLabel: 'dari bulan lalu' },
-  ]
+  const { data, loading } = useApiFetch(
+    `dashboard-summary:${apiStatus}`,
+    ready,
+    () => api.getDashboardSummary().then((d) => d.cards),
+    localCards,
+  )
 
-  const ICONS = {
-    aset: Landmark,
-    utang: Banknote,
-    modal: PiggyBank,
-    laba: TrendingUp,
-  } as const
+  if (loading && !data) {
+    return (
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <SkeletonCard />
+        <SkeletonCard />
+        <SkeletonCard />
+        <SkeletonCard />
+      </div>
+    )
+  }
+
+  const cards = data ?? []
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
       {cards.map((card) => {
-        const Icon = ICONS[card.key as keyof typeof ICONS]
+        const Icon = ICONS[card.key as keyof typeof ICONS] ?? TrendingUp
         const positive = card.deltaDirection === 'up'
         return (
           <div

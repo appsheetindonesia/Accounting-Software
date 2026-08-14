@@ -719,4 +719,244 @@ CREATE TABLE app.cash_flow_mapping (
 
 ---
 
-*Skema ini mengimplementasikan aturan bisnis BR-1 s/d BR-14 (PRD Ver 3 §10), strategi error API (409/422), dan NFR keamanan (RLS, enkripsi, audit). Siap direview tim backend DBA sebelum migrasi pertama.*
+---
+
+## 14. Implementasi Endpoint API → SQL
+
+Matriks berikut memetakan **setiap endpoint** di `API - Accounting.md` ke objek database (tabel/view/fungsi) yang mendukungnya.
+
+| Endpoint | Method | Objek DB | SQL/Catatan kunci |
+|----------|--------|----------|-------------------|
+| `/auth/login` | POST | `users` | `SELECT * FROM users WHERE email = $1 AND is_active` + verifikasi hash; insert `sessions` |
+| `/auth/refresh` | POST | `sessions` | Update `last_used_at`, cek `expires_at > now() AND revoked_at IS NULL` |
+| `/auth/logout` | POST | `sessions` | `UPDATE sessions SET revoked_at = now()` |
+| `/auth/me` | GET | `users`, `entity_members`, `permissions_for_role()` | Lihat §17 |
+| `/auth/change-password` | POST | `users` | Update `password_hash`, revoke sessions lama |
+| `/users` | GET/POST | `users` + `entity_members` | RLS admin via policy `member_own`; validasi role |
+| `/entities` | GET/POST | `entities` | `SELECT * FROM entities` (via membership, bukan RLS tenant) |
+| `/accounts` | GET | `accounts` + CTE rekursif | Tree: `WITH RECURSIVE` atas `parent_id`; filter `is_active`, `type`, `keyword` |
+| `/accounts` | POST | `accounts` | `INSERT`; duplikat → `unique_violation` → 409 `ACCOUNT_CODE_EXISTS` |
+| `/accounts/{id}` | PUT/DELETE | `accounts` | Guard sub-akun aktif & saldo di lapisan aplikasi; soft delete `is_active=false` |
+| `/accounts/template` | POST | `accounts` + tabel `account_templates` (seed) | Insert massal dalam 1 transaksi |
+| `/accounts/import` | POST | `accounts` | Validasi per baris; gagal → baris ditolak, sisanya masuk |
+| `/journals` | GET | `journals` + `journal_lines` + agregat window | Filter `period_id/status/keyword`, pagination, `sum(...) OVER ()` untuk totals |
+| `/journals` | POST | `generate_transaction_number()` + `journals` + `journal_lines` | Nomor di-generate di DB (BR-5); balance dijamin trigger DEFERRABLE |
+| `/journals/{id}` | GET | `journals` + `journal_lines` + `audit_logs` + `attachments` | Join detail lengkap |
+| `/journals/{id}` | PUT/DELETE | `journals` | Hanya `status='draft'`; guard `version` (If-Match) → 409 `DATA_CONFLICT` |
+| `/journals/{id}/post` | POST | `app.post_journal()` | Validasi balance + periode terbuka + status |
+| `/journals/{id}/reverse` | POST | `app.reverse_journal()` | Buat jurnal pembalik + update status |
+| `/journals/{id}/submit` | POST | `journals` | `status='pending_approval'` + audit `create` |
+| `/journals/{id}/approve` | POST | `journals` | `status='posted'` + `approved_by/at` (wajib role accountant/admin) |
+| `/journals/{id}/reject` | POST | `journals` | Kembali `draft` + `rejection_reason` |
+| `/journals/{id}/attachments` | POST | `attachments` | Insert + validasi ukuran/tipe via CHECK |
+| `/journals/next-number` | GET | `peek_transaction_number()` | §15.2, tanpa increment (preview) |
+| `/ledger/accounts/{id}` | GET | `v_general_ledger` | Filter `account_id + period`; running balance sudah ada di view |
+| `/ledger` | GET | `v_general_ledger` (agregat) | Group by account + periode |
+| `/reports/trial-balance` | GET | `v_trial_balance` | Filter `period_id` |
+| `/reports/income-statement` | GET | `v_income_statement` | Filter `period_id`; `compareTo` → dua kueri + banding |
+| `/reports/balance-sheet` | GET | `app.balance_sheet(p_as_of)` | §15.1 |
+| `/reports/cash-flow` | GET | `cash_flow_mapping` + kueri arus kas | Mapping kategori → aktivitas |
+| `/reports/{id}` | GET | `reports` | `data` JSONB snapshot |
+| `/periods` | GET/POST | `fiscal_periods` | Unique `(entity_id, month, year)` |
+| `/periods/{id}/close` | PATCH | `app.close_period()` | `DRAFT_ACTION_REQUIRED` bila ada draft |
+| `/periods/current` | GET | `fiscal_periods WHERE is_active` | Partial unique index §5 |
+| `/dashboard/summary` | GET | `app.dashboard_summary()` | §15.3 |
+| `/dashboard/trend` | GET | `v_dashboard_trend` | §15.4 |
+| `/dashboard/recent-journals` | GET | `journals` | `ORDER BY journal_date DESC LIMIT 5` |
+| `/dashboard/alerts` | GET | `journals` + `fiscal_periods` | Query draft & periode belum ditutup (§15.5) |
+| `/search` | GET | GIN pg_trgm | §16 |
+| `/exports/*` | GET | `reports` + view terkait | Generate snapshot ke `reports` lalu stream file |
+
+---
+
+## 15. Query & Fungsi Tambahan untuk Endpoint Tertentu
+
+### 15.1 Neraca per tanggal (parametrik, untuk `/reports/balance-sheet?asOf=`)
+
+```sql
+CREATE OR REPLACE FUNCTION app.balance_sheet(p_entity_id UUID, p_as_of DATE)
+RETURNS TABLE (account_id UUID, code TEXT, name TEXT, type app.account_type,
+               category TEXT, balance NUMERIC)
+LANGUAGE sql STABLE AS $$
+  SELECT a.id, a.code, a.name, a.type, a.category,
+         sum(CASE WHEN a.normal_balance = 'debit' THEN jl.debit - jl.credit
+                  ELSE jl.credit - jl.debit END)
+  FROM app.accounts a
+  LEFT JOIN app.journal_lines jl ON jl.account_id = a.id
+  LEFT JOIN app.journals j ON j.id = jl.journal_id
+                          AND j.status = 'posted' AND j.journal_date <= p_as_of
+  WHERE a.entity_id = p_entity_id AND a.type IN ('asset', 'liability', 'equity')
+  GROUP BY a.id, a.code, a.name, a.type, a.category;
+$$;
+-- SELECT * FROM app.balance_sheet(:entity, '2026-03-31');
+```
+
+### 15.2 Preview nomor bukti (untuk `/journals/next-number`)
+
+```sql
+-- Sama seperti generate_transaction_number, TANPA increment (STABLE).
+CREATE OR REPLACE FUNCTION app.peek_transaction_number(
+    p_entity_id UUID, p_period_id UUID, p_prefix TEXT
+) RETURNS TEXT LANGUAGE sql STABLE AS $$
+  SELECT p_prefix || '-' ||
+         to_char((SELECT start_date FROM app.fiscal_periods WHERE id = p_period_id), 'YYYY-MM') || '-' ||
+         lpad((COALESCE(last_number, 0) + 1)::text, 4, '0')
+  FROM app.journal_sequences
+  WHERE entity_id = p_entity_id AND period_id = p_period_id AND prefix = p_prefix;
+$$;
+-- POST /journals memakai generate_transaction_number (increment atomic) sebagai kebenaran.
+```
+
+### 15.3 Ringkasan dashboard (`/dashboard/summary`)
+
+```sql
+-- Aset/Utang/Modal: kumulatif per tanggal akhir periode (neraca).
+-- Laba Bruto: aktivitas periode berjalan (laba rugi).
+SELECT
+  (SELECT COALESCE(sum(balance), 0) FROM app.balance_sheet(:entity, :period_end)
+    WHERE type = 'asset')     AS total_assets,
+  (SELECT COALESCE(sum(balance), 0) FROM app.balance_sheet(:entity, :period_end)
+    WHERE type = 'liability') AS total_liabilities,
+  (SELECT COALESCE(sum(balance), 0) FROM app.balance_sheet(:entity, :period_end)
+    WHERE type = 'equity')    AS total_equity,
+  (SELECT COALESCE(sum(credit - debit), 0) FROM app.v_trial_balance
+    WHERE period_id = :period AND type = 'revenue')
+  - (SELECT COALESCE(sum(debit - credit), 0) FROM app.v_trial_balance
+    WHERE period_id = :period AND type = 'expense') AS gross_profit;
+-- Delta % vs periode sebelumnya: jalankan query sama untuk period_id sebelumnya, hitung di aplikasi.
+```
+
+### 15.4 Tren laba rugi bulanan (`/dashboard/trend`)
+
+```sql
+CREATE OR REPLACE VIEW app.v_dashboard_trend AS
+SELECT
+    j.entity_id,
+    date_trunc('month', j.journal_date) AS month,
+    sum(CASE WHEN a.type = 'revenue' THEN jl.credit - jl.debit ELSE 0 END) AS revenue,
+    sum(CASE WHEN a.type = 'expense' THEN jl.debit - jl.credit ELSE 0 END) AS expenses
+FROM app.journals j
+JOIN app.journal_lines jl ON jl.journal_id = j.id
+JOIN app.accounts a ON a.id = jl.account_id
+WHERE j.status = 'posted'
+GROUP BY j.entity_id, date_trunc('month', j.journal_date);
+-- net_income = revenue - expenses (dihitung di aplikasi/query).
+```
+
+### 15.5 Peringatan (`/dashboard/alerts`)
+
+```sql
+-- Jurnal draft belum diposting
+SELECT count(*) FROM app.journals
+ WHERE entity_id = :entity AND period_id = :period AND status = 'draft';
+
+-- Periode sebelumnya belum ditutup (end_date < hari ini DAN masih terbuka)
+SELECT name FROM app.fiscal_periods
+ WHERE entity_id = :entity AND end_date < CURRENT_DATE AND is_open
+ ORDER BY end_date DESC LIMIT 3;
+
+-- Jurnal draft tidak balance (validasi defensif)
+SELECT j.id, j.transaction_number
+FROM app.journals j
+JOIN (SELECT journal_id, sum(debit) d, sum(credit) c
+      FROM app.journal_lines GROUP BY journal_id) t ON t.journal_id = j.id
+WHERE j.status = 'draft' AND t.d <> t.c;
+```
+
+---
+
+## 16. Pencarian Global (`/search`) — pg_trgm
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+CREATE INDEX idx_accounts_name_trgm
+    ON app.accounts USING gin (name gin_trgm_ops);
+CREATE INDEX idx_journals_desc_trgm
+    ON app.journals USING gin (description gin_trgm_ops);
+CREATE INDEX idx_journals_number_trgm
+    ON app.journals USING gin (transaction_number gin_trgm_ops);
+
+-- Query contoh (RLS otomatis membatasi ke entitas aktif)
+SELECT 'journal' AS type, id, transaction_number AS title, description AS subtitle
+  FROM app.journals
+ WHERE transaction_number ILIKE '%' || :q || '%'
+    OR description ILIKE '%' || :q || '%'
+ UNION ALL
+SELECT 'account', id, code, name
+  FROM app.accounts
+ WHERE code ILIKE '%' || :q || '%' OR name ILIKE '%' || :q || '%'
+ ORDER BY type, title
+ LIMIT 10;
+-- Alternatif ranking: similarity(name, :q) > 0.2 ORDER BY similarity DESC.
+```
+
+---
+
+## 17. Permission `/auth/me` (role → izin)
+
+```sql
+CREATE OR REPLACE FUNCTION app.permissions_for_role(p_role app.user_role)
+RETURNS TEXT[] LANGUAGE sql IMMUTABLE AS $$
+  SELECT CASE p_role
+    WHEN 'admin'      THEN ARRAY['account.write','journal.write','journal.approve',
+                                'report.read','period.manage','user.manage']
+    WHEN 'accountant' THEN ARRAY['account.write','journal.write','journal.approve','report.read']
+    ELSE                   ARRAY['report.read']
+  END;
+$$;
+
+-- Query /auth/me:
+SELECT u.id, u.name, u.email, m.role,
+       app.permissions_for_role(m.role) AS permissions,
+       (SELECT id || '|' || name FROM app.fiscal_periods
+         WHERE entity_id = m.entity_id AND is_active) AS active_period
+FROM app.users u
+JOIN app.entity_members m ON m.user_id = u.id AND m.is_default
+WHERE u.id = app.current_user_id();
+```
+
+**Enforcement:** role viewer (read-only) ditambah policy SELECT-only di aplikasi; fungsi tulis (`post_journal`, `reverse_journal`, `close_period`) menerima `p_user_id` dan menolak jika role viewer di lapisan service layer.
+
+---
+
+## 18. Mapping Error API ↔ Exception Database
+
+API mengembalikan kode error dari TRD; DB melemparkan exception yang dipetakan service layer ke HTTP:
+
+| Kode API (HTTP) | Exception DB / Kondisi | Lokasi |
+|-----------------|------------------------|--------|
+| `VALIDATION_ERROR` (422) | CHECK constraint / NOT NULL violation (`23514`, `23502`) | Berbagai tabel |
+| `ACCOUNT_CODE_EXISTS` (409) | `unique_violation` (23505) pada `(entity_id, code)` | `accounts` |
+| `TRANSACTION_NUMBER_DUPLICATE` (409) | `unique_violation` (23505) pada `(entity_id, transaction_number)` | `journals` |
+| `JOURNAL_UNBALANCED` (422) | `RAISE EXCEPTION 'JOURNAL_UNBALANCED...'` | `validate_journal_balance_for` |
+| `JOURNAL_NO_LINES` (422) | `RAISE EXCEPTION 'JOURNAL_NO_LINES...'` | `validate_journal_balance_for` |
+| `LINE_NEGATIVE_AMOUNT` (422) | CHECK `debit >= 0 AND credit >= 0` (23514) | `journal_lines` |
+| `JOURNAL_ALREADY_POSTED` (409) | `INVALID_STATUS_TRANSITION` | `post_journal` |
+| `ALREADY_REVERSED` (409) | `RAISE EXCEPTION 'ALREADY_REVERSED'` | `reverse_journal` |
+| `PERIOD_CLOSED` (422) | `RAISE EXCEPTION 'PERIOD_CLOSED'` | `post_journal`, `reverse_journal` |
+| `PERIOD_ALREADY_CLOSED` (409) | `RAISE EXCEPTION` saat `is_open = false` | `close_period` |
+| `PERIOD_EXISTS` (409) | `unique_violation` (23505) pada `(entity_id, month, year)` | `fiscal_periods` |
+| `DRAFT_ACTION_REQUIRED` (422) | `RAISE EXCEPTION 'DRAFT_ACTION_REQUIRED'` | `close_period` |
+| `DATA_CONFLICT` (409) | UPDATE 0 baris karena `version` mismatch (If-Match) | `journals`, `accounts` |
+| `ACCOUNT_HAS_CHILDREN` (409) | Guard aplikasi (subquery `parent_id`) | Service layer |
+| `ACCOUNT_HAS_BALANCE` (409) | Guard aplikasi (cek saldo ≠ 0) | Service layer |
+| `NOT_FOUND` (404) | `SELECT ... FOR UPDATE` 0 baris | Semua fungsi |
+| `FILE_TOO_LARGE` / `UNSUPPORTED_FILE_TYPE` (422) | CHECK `size_bytes <= 5242880` / `mime_type IN (...)` | `attachments` |
+
+**Pola implementasi di service layer:**
+```sql
+BEGIN
+    PERFORM app.post_journal(:id, :user);
+EXCEPTION
+    WHEN raise_exception THEN
+        -- baca SQLERRM, map ke kode API (JOURNAL_UNBALANCED, PERIOD_CLOSED, dll)
+        RETURN jsonb_build_object('error', SQLERRM);
+    WHEN unique_violation THEN
+        -- map ke 409 sesuai constraint yang dilanggar
+END;
+```
+
+---
+
+*Skema ini mengimplementasikan aturan bisnis BR-1 s/d BR-14 (PRD Ver 3 §10), API contract (`API - Accounting.md`) endpoint-per-endpoint, strategi error (409/422), dan NFR keamanan (RLS, enkripsi, audit). Siap direview tim backend DBA sebelum migrasi pertama.*

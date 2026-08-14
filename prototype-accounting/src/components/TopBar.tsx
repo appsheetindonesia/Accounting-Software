@@ -1,6 +1,9 @@
 import { Bell, BookMarked, Search } from 'lucide-react'
+import { useStore } from '../store/useStore'
 
 export default function TopBar() {
+  const user = useStore((s) => s.user)
+  const initial = user?.name?.[0] ?? 'R'
   return (
     <header className="flex h-16 shrink-0 items-center gap-4 border-b border-line bg-surface px-4 lg:px-6">
       <div className="flex items-center gap-2.5">
@@ -8,7 +11,7 @@ export default function TopBar() {
           <BookMarked size={18} />
         </div>
         <div className="hidden leading-tight sm:block">
-          <p className="text-sm font-bold text-ink">BukuWarung Akuntansi</p>
+          <p className="text-sm font-bold text-ink">Appsheet Accounting Journal</p>
           <p className="text-[11px] text-ink-soft">PT Maju Jaya</p>
         </div>
       </div>
@@ -32,9 +35,10 @@ export default function TopBar() {
         </button>
         <button
           type="button"
+          title={user ? `${user.name} (${user.role})` : 'Belum masuk'}
           className="flex size-9 items-center justify-center rounded-full bg-primary text-xs font-bold text-white"
         >
-          R
+          {initial}
         </button>
       </div>
     </header>

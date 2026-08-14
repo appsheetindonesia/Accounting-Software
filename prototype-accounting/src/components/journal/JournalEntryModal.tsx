@@ -3,6 +3,7 @@ import { CheckCircle2, Plus, Trash2, X } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import { journalPrefixes } from '../../data/mock'
 import { formatIDR } from '../../lib/format'
+import { computeLineTotals, toNumber } from '../../lib/accounting'
 
 interface LineDraft {
   key: number
@@ -10,11 +11,6 @@ interface LineDraft {
   debit: string
   credit: string
   description: string
-}
-
-const toNumber = (raw: string) => {
-  const digits = raw.replace(/\D/g, '')
-  return digits ? Number(digits) : 0
 }
 
 const nextLineKey = (() => {
@@ -45,17 +41,8 @@ export default function JournalEntryModal() {
     return `${prefix}-${period}-${String(count).padStart(4, '0')}`
   }, [prefix, journals.length, activePeriod])
 
-  const totals = useMemo(() => {
-    let debit = 0
-    let credit = 0
-    for (const l of lines) {
-      debit += toNumber(l.debit)
-      credit += toNumber(l.credit)
-    }
-    return { debit, credit, difference: debit - credit }
-  }, [lines])
-
-  const isBalanced = totals.debit > 0 && totals.debit === totals.credit
+  const totals = useMemo(() => computeLineTotals(lines), [lines])
+  const isBalanced = totals.isBalanced
   const hasAccount = lines.every((l) => l.accountId)
   const canSave = isBalanced && hasAccount
 

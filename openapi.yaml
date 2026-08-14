@@ -1,0 +1,1955 @@
+openapi: 3.0.3
+info:
+  title: Appsheet Accounting Journal API
+  description: |
+    REST API untuk BukuWarung Akuntansi (Appsheet Accounting Journal) — aplikasi akuntansi
+    double-entry untuk UKM Indonesia. Spec ini diterjemahkan dari dokumen
+    "API - Accounting.md" dan selaras dengan PRD Ver 3.
+
+    Konvensi:
+    - Semua request (kecuali /auth/login dan /auth/refresh) wajib membawa `Authorization: Bearer <token>`.
+    - Multi-tenant: header `X-Entity-Id` opsional; default dari profil user.
+    - Nominal dalam IDR (number), tanggal ISO 8601, periode `YYYY-MM`.
+  version: 1.0.0
+  contact:
+    name: Tim BukuWarung Akuntansi
+servers:
+  - url: https://api.bukuwarung.com/v1
+    description: Production
+  - url: http://localhost:3000/v1
+    description: Local development
+
+tags:
+  - name: Auth
+    description: Autentikasi & profil
+  - name: Users
+    description: Manajemen pengguna & role
+  - name: Entities
+    description: Entitas / multi-tenant
+  - name: Chart of Accounts
+    description: Akun & template
+  - name: Journals
+    description: Jurnal umum, posting, reverse, approval, lampiran
+  - name: Ledger
+    description: Buku besar
+  - name: Reports
+    description: Laporan keuangan
+  - name: Periods
+    description: Periode fiskal
+  - name: Dashboard
+    description: Ringkasan dashboard
+  - name: Export
+    description: Export PDF/Excel
+  - name: Search
+    description: Pencarian global
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ============================= AUTH =============================
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login dengan email & password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: rina@bukuwarung.com
+                password:
+                  type: string
+                  format: password
+      responses:
+        "200":
+          description: Login sukses
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Perpanjang access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        "200":
+          description: Token baru
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      accessToken: { type: string }
+                      refreshToken: { type: string }
+                      expiresIn: { type: integer, example: 86400 }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout & revoke refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        "204":
+          description: Berhasil logout
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Profil, role, izin, dan periode aktif
+      responses:
+        "200":
+          description: Profil pengguna
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      user:
+                        $ref: "#/components/schemas/AppUser"
+                      permissions:
+                        type: array
+                        items: { type: string, example: "journal.write" }
+                      activePeriod:
+                        $ref: "#/components/schemas/FiscalPeriod"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/change-password:
+    post:
+      tags: [Auth]
+      summary: Ganti password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string, format: password }
+                newPassword: { type: string, format: password, minLength: 8 }
+      responses:
+        "204": { description: Berhasil ganti password }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  # ============================= USERS =============================
+  /users:
+    get:
+      tags: [Users]
+      summary: Daftar pengguna entitas
+      parameters:
+        - $ref: "#/components/parameters/XEntityId"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Daftar pengguna
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/AppUser" }
+                  meta:
+                    $ref: "#/components/schemas/Meta"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Users]
+      summary: Undang pengguna baru (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, role]
+              properties:
+                name: { type: string, maxLength: 100 }
+                email: { type: string, format: email }
+                role: { $ref: "#/components/schemas/UserRole" }
+      responses:
+        "201":
+          description: Pengguna dibuat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/AppUser" }
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /users/{id}:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+    get:
+      tags: [Users]
+      summary: Detail pengguna
+      responses:
+        "200":
+          description: Detail pengguna
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/AppUser" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Users]
+      summary: Update pengguna / role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 100 }
+                role: { $ref: "#/components/schemas/UserRole" }
+      responses:
+        "200":
+          description: Pengguna diperbarui
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/AppUser" }
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /users/{id}/deactivate:
+    patch:
+      tags: [Users]
+      summary: Non-aktifkan pengguna (soft delete)
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "204": { description: Pengguna dinonaktifkan }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  # ============================= ENTITIES =============================
+  /entities:
+    get:
+      tags: [Entities]
+      summary: Daftar entitas milik user
+      responses:
+        "200":
+          description: Daftar entitas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Entity" }
+    post:
+      tags: [Entities]
+      summary: Buat entitas baru
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 200 }
+                currency: { type: string, pattern: "^[A-Z]{3}$", default: IDR }
+                fiscalYearStart: { type: string, example: "01-01" }
+      responses:
+        "201":
+          description: Entitas dibuat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Entity" }
+
+  /entities/{id}:
+    parameters:
+      - $ref: "#/components/parameters/EntityId"
+    get:
+      tags: [Entities]
+      summary: Detail entitas
+      responses:
+        "200":
+          description: Detail entitas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Entity" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Entities]
+      summary: Update entitas
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 200 }
+                currency: { type: string, pattern: "^[A-Z]{3}$" }
+                fiscalYearStart: { type: string, example: "01-01" }
+      responses:
+        "200":
+          description: Entitas diperbarui
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Entity" }
+
+  /entities/{id}/activate:
+    post:
+      tags: [Entities]
+      summary: Set entitas aktif untuk user
+      parameters:
+        - $ref: "#/components/parameters/EntityId"
+      responses:
+        "200":
+          description: Entitas aktif diubah
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      activeEntityId: { type: string, format: uuid }
+
+  # ============================= CHART OF ACCOUNTS =============================
+  /accounts:
+    get:
+      tags: [Chart of Accounts]
+      summary: Daftar akun (flat atau tree)
+      parameters:
+        - $ref: "#/components/parameters/XEntityId"
+        - name: tree
+          in: query
+          schema: { type: boolean, default: true }
+        - name: activeOnly
+          in: query
+          schema: { type: boolean, default: true }
+        - name: type
+          in: query
+          schema: { $ref: "#/components/schemas/AccountType" }
+        - name: keyword
+          in: query
+          schema: { type: string }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Daftar akun
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      accounts:
+                        type: array
+                        items: { $ref: "#/components/schemas/AccountNode" }
+                      totals:
+                        type: object
+                        additionalProperties: { type: number }
+                  meta:
+                    $ref: "#/components/schemas/Meta"
+    post:
+      tags: [Chart of Accounts]
+      summary: Buat akun baru
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountCreate"
+      responses:
+        "201":
+          description: Akun dibuat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Account" }
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /accounts/{id}:
+    parameters:
+      - $ref: "#/components/parameters/AccountId"
+    get:
+      tags: [Chart of Accounts]
+      summary: Detail akun
+      responses:
+        "200":
+          description: Detail akun
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Account" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Chart of Accounts]
+      summary: Update akun
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 100 }
+                category: { type: string }
+                group: { type: string }
+                normalBalance: { $ref: "#/components/schemas/NormalBalance" }
+                parentId: { type: string, format: uuid, nullable: true }
+                description: { type: string, nullable: true }
+      responses:
+        "200":
+          description: Akun diperbarui
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Account" }
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Chart of Accounts]
+      summary: Hapus akun (soft delete)
+      responses:
+        "204": { description: Akun dihapus/dinonaktifkan }
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /accounts/{id}/activate:
+    patch:
+      tags: [Chart of Accounts]
+      summary: Aktifkan akun
+      parameters:
+        - $ref: "#/components/parameters/AccountId"
+      responses:
+        "200":
+          description: Status akun
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      isActive: { type: boolean, example: true }
+
+  /accounts/{id}/deactivate:
+    patch:
+      tags: [Chart of Accounts]
+      summary: Non-aktifkan akun
+      parameters:
+        - $ref: "#/components/parameters/AccountId"
+      responses:
+        "200":
+          description: Status akun
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      isActive: { type: boolean, example: false }
+
+  /accounts/template:
+    post:
+      tags: [Chart of Accounts]
+      summary: Muat template COA UKM PSAK
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [templateId, mode]
+              properties:
+                templateId:
+                  type: string
+                  default: ukm-psak-2026
+                mode:
+                  type: string
+                  enum: [replace, merge]
+      responses:
+        "201":
+          description: Template dimuat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      created: { type: integer }
+                      skipped: { type: integer }
+                      accounts:
+                        type: array
+                        items: { $ref: "#/components/schemas/Account" }
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /accounts/import:
+    post:
+      tags: [Chart of Accounts]
+      summary: Import akun dari Excel
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Hasil import
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      imported: { type: integer }
+                      failed: { type: integer }
+                      errors:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            row: { type: integer }
+                            code: { type: string }
+                            message: { type: string }
+
+  /accounts/export:
+    get:
+      tags: [Chart of Accounts]
+      summary: Export COA ke Excel
+      parameters:
+        - name: format
+          in: query
+          schema: { type: string, enum: [xlsx], default: xlsx }
+      responses:
+        "200":
+          description: File XLSX
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+
+  # ============================= JOURNALS =============================
+  /journals:
+    get:
+      tags: [Journals]
+      summary: Daftar jurnal dengan filter & pagination
+      parameters:
+        - $ref: "#/components/parameters/XEntityId"
+        - $ref: "#/components/parameters/Period"
+        - name: startDate
+          in: query
+          schema: { type: string, format: date, example: "2026-03-01" }
+        - name: endDate
+          in: query
+          schema: { type: string, format: date, example: "2026-03-31" }
+        - name: accountId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, posted, reversed, pending-approval]
+        - name: keyword
+          in: query
+          schema: { type: string }
+        - name: sort
+          in: query
+          schema: { type: string, default: "-date", example: "-date" }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Daftar jurnal
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      journals:
+                        type: array
+                        items: { $ref: "#/components/schemas/JournalEntry" }
+                      totals:
+                        type: object
+                        properties:
+                          debit: { type: number }
+                          credit: { type: number }
+                          difference: { type: number }
+                  meta:
+                    $ref: "#/components/schemas/Meta"
+    post:
+      tags: [Journals]
+      summary: Buat jurnal (draft / pending approval)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JournalCreate"
+      responses:
+        "201":
+          description: Jurnal dibuat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/JournalEntry" }
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /journals/next-number:
+    get:
+      tags: [Journals]
+      summary: Preview nomor bukti berikutnya
+      parameters:
+        - name: prefix
+          in: query
+          required: true
+          schema: { type: string, enum: [BKM, BKK, JKM, JKK, JV], example: BKM }
+        - $ref: "#/components/parameters/Period"
+      responses:
+        "200":
+          description: Nomor bukti berikutnya
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      transactionNumber:
+                        type: string
+                        example: "BKM-2026-03-0016"
+
+  /journals/{id}:
+    parameters:
+      - $ref: "#/components/parameters/JournalId"
+    get:
+      tags: [Journals]
+      summary: Detail jurnal + audit trail + lampiran
+      responses:
+        "200":
+          description: Detail jurnal
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    allOf:
+                      - $ref: "#/components/schemas/JournalEntry"
+                      - type: object
+                        properties:
+                          auditTrail:
+                            type: array
+                            items: { $ref: "#/components/schemas/AuditEntry" }
+                          attachments:
+                            type: array
+                            items: { $ref: "#/components/schemas/Attachment" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Journals]
+      summary: Edit jurnal (hanya draft)
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JournalCreate"
+      responses:
+        "200":
+          description: Jurnal diperbarui
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/JournalEntry" }
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Journals]
+      summary: Hapus jurnal draft
+      responses:
+        "204": { description: Jurnal dihapus }
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /journals/{id}/post:
+    post:
+      tags: [Journals]
+      summary: Posting jurnal (draft → posted)
+      parameters:
+        - $ref: "#/components/parameters/JournalId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                confirmPeriodWarning: { type: boolean, default: true }
+      responses:
+        "200":
+          description: Jurnal ter-posting
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      status: { type: string, example: posted }
+                      postedAt: { type: string, format: date-time }
+                      affectedAccounts:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            accountId: { type: string }
+                            newBalance: { type: number }
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /journals/{id}/reverse:
+    post:
+      tags: [Journals]
+      summary: Reverse jurnal (buat jurnal pembalik)
+      parameters:
+        - $ref: "#/components/parameters/JournalId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+                postReversal: { type: boolean, default: true }
+      responses:
+        "200":
+          description: Jurnal dibatalkan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      reversedJournalId: { type: string }
+                      status: { type: string, example: reversed }
+                      reversalJournal: { $ref: "#/components/schemas/JournalEntry" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /journals/{id}/submit:
+    post:
+      tags: [Journals]
+      summary: Submit jurnal untuk approval
+      parameters:
+        - $ref: "#/components/parameters/JournalId"
+      responses:
+        "200":
+          description: Jurnal menunggu approval
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      status: { type: string, example: pending-approval }
+
+  /journals/{id}/approve:
+    post:
+      tags: [Journals]
+      summary: Setujui jurnal (→ posted)
+      parameters:
+        - $ref: "#/components/parameters/JournalId"
+      responses:
+        "200":
+          description: Jurnal disetujui
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      status: { type: string, example: posted }
+                      approvedBy: { type: string }
+                      approvedAt: { type: string, format: date-time }
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /journals/{id}/reject:
+    post:
+      tags: [Journals]
+      summary: Tolak jurnal (→ draft)
+      parameters:
+        - $ref: "#/components/parameters/JournalId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 3 }
+      responses:
+        "200":
+          description: Jurnal ditolak
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      status: { type: string, example: draft }
+                      rejectionReason: { type: string }
+
+  /journals/{id}/attachments:
+    post:
+      tags: [Journals]
+      summary: Upload lampiran bukti (jpg/png/pdf, maks 5 MB)
+      parameters:
+        - $ref: "#/components/parameters/JournalId"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Lampiran ter-upload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Attachment" }
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /journals/{id}/attachments/{attId}:
+    parameters:
+      - $ref: "#/components/parameters/JournalId"
+      - $ref: "#/components/parameters/AttachmentId"
+    get:
+      tags: [Journals]
+      summary: Download lampiran
+      responses:
+        "200":
+          description: File lampiran
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+    delete:
+      tags: [Journals]
+      summary: Hapus lampiran (hanya sebelum posting)
+      responses:
+        "204": { description: Lampiran dihapus }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # ============================= LEDGER =============================
+  /ledger/accounts/{accountId}:
+    get:
+      tags: [Ledger]
+      summary: Buku besar satu akun dengan saldo berjalan
+      parameters:
+        - $ref: "#/components/parameters/AccountId"
+        - $ref: "#/components/parameters/Period"
+        - name: includeOpening
+          in: query
+          schema: { type: boolean, default: true }
+      responses:
+        "200":
+          description: Buku besar akun
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/GeneralLedger" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /ledger:
+    get:
+      tags: [Ledger]
+      summary: Rekap saldo semua akun per periode
+      parameters:
+        - $ref: "#/components/parameters/XEntityId"
+        - $ref: "#/components/parameters/Period"
+      responses:
+        "200":
+          description: Rekap saldo akun
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      period: { type: string, example: "2026-03" }
+                      accounts:
+                        type: array
+                        items: { $ref: "#/components/schemas/LedgerSummary" }
+
+  # ============================= REPORTS =============================
+  /reports/trial-balance:
+    get:
+      tags: [Reports]
+      summary: Neraca lajur (trial balance)
+      parameters:
+        - $ref: "#/components/parameters/XEntityId"
+        - $ref: "#/components/parameters/Period"
+      responses:
+        "200":
+          description: Neraca lajur
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      type: { type: string, example: trial-balance }
+                      period:
+                        type: object
+                        properties:
+                          start: { type: string, format: date }
+                          end: { type: string, format: date }
+                      generatedAt: { type: string, format: date-time }
+                      currency: { type: string, example: IDR }
+                      lines:
+                        type: array
+                        items: { $ref: "#/components/schemas/TrialBalanceLine" }
+                      totals:
+                        type: object
+                        properties:
+                          debit: { type: number }
+                          credit: { type: number }
+                          isBalanced: { type: boolean }
+
+  /reports/income-statement:
+    get:
+      tags: [Reports]
+      summary: Laporan laba rugi
+      parameters:
+        - $ref: "#/components/parameters/XEntityId"
+        - $ref: "#/components/parameters/Period"
+        - name: compareTo
+          in: query
+          description: Periode pembanding (opsional)
+          schema: { type: string, example: "2026-02" }
+      responses:
+        "200":
+          description: Laporan laba rugi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/FinancialReport" }
+
+  /reports/balance-sheet:
+    get:
+      tags: [Reports]
+      summary: Neraca (posisi keuangan per tanggal)
+      parameters:
+        - $ref: "#/components/parameters/XEntityId"
+        - name: asOf
+          in: query
+          required: true
+          schema: { type: string, format: date, example: "2026-03-31" }
+      responses:
+        "200":
+          description: Neraca
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/FinancialReport" }
+
+  /reports/cash-flow:
+    get:
+      tags: [Reports]
+      summary: Laporan arus kas (metode tidak langsung)
+      parameters:
+        - $ref: "#/components/parameters/XEntityId"
+        - $ref: "#/components/parameters/Period"
+        - name: method
+          in: query
+          schema: { type: string, enum: [indirect], default: indirect }
+      responses:
+        "200":
+          description: Laporan arus kas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/FinancialReport" }
+
+  /reports/{id}:
+    get:
+      tags: [Reports]
+      summary: Ambil laporan tersimpan
+      parameters:
+        - $ref: "#/components/parameters/ReportId"
+      responses:
+        "200":
+          description: Laporan tersimpan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/FinancialReport" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ============================= PERIODS =============================
+  /periods:
+    get:
+      tags: [Periods]
+      summary: Daftar periode fiskal
+      parameters:
+        - $ref: "#/components/parameters/XEntityId"
+        - name: year
+          in: query
+          schema: { type: integer, example: 2026 }
+        - name: includeClosed
+          in: query
+          schema: { type: boolean, default: true }
+      responses:
+        "200":
+          description: Daftar periode
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      periods:
+                        type: array
+                        items: { $ref: "#/components/schemas/FiscalPeriod" }
+    post:
+      tags: [Periods]
+      summary: Buka periode baru
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [month, year]
+              properties:
+                month: { type: integer, minimum: 1, maximum: 12 }
+                year: { type: integer, minimum: 2000, maximum: 2100 }
+                activate: { type: boolean, default: false }
+      responses:
+        "201":
+          description: Periode dibuat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/FiscalPeriod" }
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /periods/{id}/activate:
+    patch:
+      tags: [Periods]
+      summary: Set periode aktif
+      parameters:
+        - $ref: "#/components/parameters/PeriodId"
+      responses:
+        "200":
+          description: Periode aktif
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      activePeriodId: { type: string, format: uuid }
+
+  /periods/{id}/close:
+    patch:
+      tags: [Periods]
+      summary: Tutup periode
+      parameters:
+        - $ref: "#/components/parameters/PeriodId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                confirmDraftAction:
+                  type: string
+                  enum: [post-all, delete-all, keep]
+      responses:
+        "200":
+          description: Periode ditutup
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      isOpen: { type: boolean, example: false }
+                      handledDrafts:
+                        type: object
+                        properties:
+                          posted: { type: integer }
+                          deleted: { type: integer }
+                          kept: { type: integer }
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /periods/current:
+    get:
+      tags: [Periods]
+      summary: Periode aktif sekarang
+      responses:
+        "200":
+          description: Periode aktif
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/FiscalPeriod" }
+
+  # ============================= DASHBOARD =============================
+  /dashboard/summary:
+    get:
+      tags: [Dashboard]
+      summary: Kartu saldo + delta
+      parameters:
+        - $ref: "#/components/parameters/XEntityId"
+        - $ref: "#/components/parameters/Period"
+      responses:
+        "200":
+          description: Ringkasan dashboard
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      cards:
+                        type: array
+                        items: { $ref: "#/components/schemas/DashboardCard" }
+
+  /dashboard/trend:
+    get:
+      tags: [Dashboard]
+      summary: Tren laba rugi N bulan
+      parameters:
+        - $ref: "#/components/parameters/XEntityId"
+        - name: months
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 24, default: 6 }
+        - name: endPeriod
+          in: query
+          schema: { type: string, example: "2026-03" }
+      responses:
+        "200":
+          description: Data tren
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      trend:
+                        type: array
+                        items: { $ref: "#/components/schemas/TrendPoint" }
+
+  /dashboard/recent-journals:
+    get:
+      tags: [Dashboard]
+      summary: Jurnal terbaru
+      parameters:
+        - $ref: "#/components/parameters/XEntityId"
+        - name: limit
+          in: query
+          schema: { type: integer, maximum: 50, default: 5 }
+      responses:
+        "200":
+          description: Jurnal terbaru
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      journals:
+                        type: array
+                        items: { $ref: "#/components/schemas/JournalEntry" }
+
+  /dashboard/alerts:
+    get:
+      tags: [Dashboard]
+      summary: Peringatan proaktif
+      parameters:
+        - $ref: "#/components/parameters/XEntityId"
+      responses:
+        "200":
+          description: Daftar peringatan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      alerts:
+                        type: array
+                        items: { $ref: "#/components/schemas/Alert" }
+
+  # ============================= EXPORT =============================
+  /exports/reports/{reportType}:
+    get:
+      tags: [Export]
+      summary: Export laporan ke PDF/Excel
+      parameters:
+        - $ref: "#/components/parameters/XEntityId"
+        - name: reportType
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [trial-balance, income-statement, balance-sheet, cash-flow, ledger, journals]
+        - $ref: "#/components/parameters/Period"
+        - name: asOf
+          in: query
+          schema: { type: string, format: date }
+        - name: format
+          in: query
+          required: true
+          schema: { type: string, enum: [pdf, xlsx] }
+      responses:
+        "200":
+          description: File laporan
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /exports/accounts:
+    get:
+      tags: [Export]
+      summary: Export COA Excel
+      parameters:
+        - name: format
+          in: query
+          schema: { type: string, enum: [xlsx], default: xlsx }
+      responses:
+        "200":
+          description: File XLSX
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+
+  # ============================= SEARCH =============================
+  /search:
+    get:
+      tags: [Search]
+      summary: Pencarian global jurnal & akun
+      parameters:
+        - $ref: "#/components/parameters/XEntityId"
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 2 }
+        - name: types
+          in: query
+          schema:
+            type: string
+            description: Jenis hasil, comma-separated
+            example: journal,account
+        - name: limit
+          in: query
+          schema: { type: integer, maximum: 50, default: 10 }
+      responses:
+        "200":
+          description: Hasil pencarian
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      results:
+                        type: array
+                        items: { $ref: "#/components/schemas/SearchResult" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "Access token JWT (24 jam). Refresh via POST /auth/refresh."
+
+  parameters:
+    XEntityId:
+      name: X-Entity-Id
+      in: header
+      required: false
+      description: "ID entitas aktif (multi-tenant). Default dari profil user."
+      schema:
+        type: string
+        format: uuid
+    Page:
+      name: page
+      in: query
+      description: Nomor halaman
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: pageSize
+      in: query
+      description: Jumlah data per halaman
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    Period:
+      name: period
+      in: query
+      description: "Periode akuntansi, format YYYY-MM (contoh: 2026-03)"
+      schema:
+        type: string
+        pattern: "^\\d{4}-\\d{2}$"
+        example: "2026-03"
+    UserId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    EntityId:
+      name: id
+      in: path
+      required: true
+      description: ID entitas
+      schema:
+        type: string
+        format: uuid
+    AccountId:
+      name: id
+      in: path
+      required: true
+      description: ID akun
+      schema:
+        type: string
+        format: uuid
+    JournalId:
+      name: id
+      in: path
+      required: true
+      description: ID jurnal
+      schema:
+        type: string
+        format: uuid
+    AttachmentId:
+      name: attId
+      in: path
+      required: true
+      description: ID lampiran
+      schema:
+        type: string
+        format: uuid
+    ReportId:
+      name: id
+      in: path
+      required: true
+      description: ID laporan tersimpan
+      schema:
+        type: string
+        format: uuid
+    PeriodId:
+      name: id
+      in: path
+      required: true
+      description: ID periode fiskal
+      schema:
+        type: string
+        format: uuid
+    IfMatch:
+      name: If-Match
+      in: header
+      required: false
+      description: "Versi resource (optimistic locking). Bila mismatch, server mengembalikan 409 DATA_CONFLICT."
+      schema:
+        type: string
+        example: '"3"'
+
+  responses:
+    Unauthorized:
+      description: Token invalid atau kedaluwarsa
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: UNAUTHORIZED
+              message: "Sesi berakhir. Silakan login kembali."
+    Forbidden:
+      description: Role tidak punya akses
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: FORBIDDEN
+              message: "Tidak memiliki akses"
+    NotFound:
+      description: Resource tidak ditemukan
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: NOT_FOUND
+              message: "Data tidak ditemukan"
+    Conflict:
+      description: Konflik data (duplikat, status, versi)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: DATA_CONFLICT
+              message: "Data sudah diubah oleh pengguna lain. Muat ulang halaman."
+    ValidationError:
+      description: Validasi bisnis gagal
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: JOURNAL_UNBALANCED
+              message: "Total debit dan kredit harus sama"
+              details:
+                - field: lines
+                  message: "Selisih: Rp1.000.000"
+
+  schemas:
+    # ---------- Master ----------
+    Meta:
+      type: object
+      properties:
+        page: { type: integer, example: 1 }
+        pageSize: { type: integer, example: 50 }
+        total: { type: integer, example: 320 }
+        totalPages: { type: integer, example: 7 }
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, example: JOURNAL_UNBALANCED }
+            message: { type: string }
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field: { type: string }
+                  message: { type: string }
+
+    AuthResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            accessToken: { type: string }
+            refreshToken: { type: string }
+            expiresIn: { type: integer, example: 86400 }
+            user: { $ref: "#/components/schemas/AppUser" }
+
+    AppUser:
+      type: object
+      properties:
+        id: { type: string, format: uuid, example: user-001 }
+        name: { type: string, example: Rina }
+        email: { type: string, format: email }
+        role: { $ref: "#/components/schemas/UserRole" }
+        entityId: { type: string, format: uuid }
+        isActive: { type: boolean, default: true }
+
+    UserRole:
+      type: string
+      enum: [admin, accountant, viewer]
+
+    Entity:
+      type: object
+      properties:
+        id: { type: string, format: uuid, example: ent-001 }
+        name: { type: string, example: "PT Maju Jaya" }
+        currency: { type: string, example: IDR }
+        fiscalYearStart: { type: string, example: "01-01" }
+        createdAt: { type: string, format: date-time }
+
+    # ---------- Chart of Accounts ----------
+    AccountType:
+      type: string
+      enum: [asset, liability, equity, revenue, expense]
+
+    NormalBalance:
+      type: string
+      enum: [debit, credit]
+
+    Account:
+      type: object
+      properties:
+        id: { type: string, example: "1-1100" }
+        code: { type: string, example: "1-1100" }
+        name: { type: string, example: "Kas Besar" }
+        type: { $ref: "#/components/schemas/AccountType" }
+        group: { type: string, example: current_asset }
+        category: { type: string, example: "Kas & Bank" }
+        normalBalance: { $ref: "#/components/schemas/NormalBalance" }
+        balance: { type: number, example: 58000000 }
+        isActive: { type: boolean, default: true }
+        parentId: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    AccountNode:
+      allOf:
+        - $ref: "#/components/schemas/Account"
+        - type: object
+          properties:
+            children:
+              type: array
+              items: { $ref: "#/components/schemas/AccountNode" }
+
+    AccountCreate:
+      type: object
+      required: [code, name, type, group, category, normalBalance]
+      properties:
+        code: { type: string, pattern: "^\\d+-\\d+$", example: "1-1500" }
+        name: { type: string, maxLength: 100 }
+        type: { $ref: "#/components/schemas/AccountType" }
+        group: { type: string }
+        category: { type: string }
+        normalBalance: { $ref: "#/components/schemas/NormalBalance" }
+        parentId: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        isActive: { type: boolean, default: true }
+
+    # ---------- Journal ----------
+    JournalStatus:
+      type: string
+      enum: [draft, posted, reversed, pending-approval]
+
+    JournalLine:
+      type: object
+      properties:
+        id: { type: string }
+        accountId: { type: string }
+        accountCode: { type: string, example: "1-1100" }
+        accountName: { type: string, example: "Kas Besar" }
+        debit: { type: number, minimum: 0, example: 15000000 }
+        credit: { type: number, minimum: 0, example: 0 }
+        description: { type: string, nullable: true }
+
+    JournalEntry:
+      type: object
+      properties:
+        id: { type: string, example: "JNL-2026-03-001" }
+        transactionNumber: { type: string, example: "BKM-2026-03-0001" }
+        date: { type: string, format: date, example: "2026-03-15" }
+        description: { type: string }
+        lines:
+          type: array
+          items: { $ref: "#/components/schemas/JournalLine" }
+        totalDebit: { type: number }
+        totalCredit: { type: number }
+        status: { $ref: "#/components/schemas/JournalStatus" }
+        createdBy: { type: string }
+        createdAt: { type: string, format: date-time }
+        approvedBy: { type: string, nullable: true }
+        approvedAt: { type: string, format: date-time, nullable: true }
+        postedAt: { type: string, format: date-time, nullable: true }
+        hasAttachment: { type: boolean, default: false }
+        reversalOf: { type: string, nullable: true }
+
+    JournalCreate:
+      type: object
+      required: [date, description, lines]
+      properties:
+        date: { type: string, format: date, example: "2026-03-15" }
+        transactionNumber: { type: string, example: "BKM-2026-03-0015" }
+        description: { type: string, maxLength: 500 }
+        submitForApproval: { type: boolean, default: false }
+        lines:
+          type: array
+          minItems: 2
+          items:
+            type: object
+            required: [accountId]
+            properties:
+              accountId: { type: string }
+              debit: { type: number, minimum: 0, default: 0 }
+              credit: { type: number, minimum: 0, default: 0 }
+              description: { type: string, nullable: true }
+
+    AuditEntry:
+      type: object
+      properties:
+        userId: { type: string }
+        action:
+          type: string
+          enum: [create, update, post, reverse, approve, reject, delete]
+        timestamp: { type: string, format: date-time }
+        changes:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              from: { type: string }
+              to: { type: string }
+
+    Attachment:
+      type: object
+      properties:
+        id: { type: string, example: att-1 }
+        fileName: { type: string, example: "bukti-bkm-0015.pdf" }
+        mimeType:
+          type: string
+          enum: [image/jpeg, image/png, application/pdf]
+        size: { type: integer, example: 245760 }
+        uploadedAt: { type: string, format: date-time }
+
+    # ---------- Ledger ----------
+    LedgerEntry:
+      type: object
+      properties:
+        journalEntryId: { type: string }
+        date: { type: string, format: date }
+        reference: { type: string, example: "BKK-2026-03-0008" }
+        description: { type: string }
+        debit: { type: number }
+        credit: { type: number }
+        balance: { type: number, description: "Saldo berjalan" }
+
+    GeneralLedger:
+      type: object
+      properties:
+        accountId: { type: string }
+        accountCode: { type: string }
+        accountName: { type: string }
+        period: { type: string, example: "2026-03" }
+        openingBalance: { type: number }
+        closingBalance: { type: number }
+        entries:
+          type: array
+          items: { $ref: "#/components/schemas/LedgerEntry" }
+
+    LedgerSummary:
+      type: object
+      properties:
+        accountId: { type: string }
+        accountCode: { type: string }
+        accountName: { type: string }
+        openingBalance: { type: number }
+        totalDebit: { type: number }
+        totalCredit: { type: number }
+        closingBalance: { type: number }
+
+    # ---------- Reports ----------
+    TrialBalanceLine:
+      type: object
+      properties:
+        accountId: { type: string }
+        accountCode: { type: string }
+        accountName: { type: string }
+        debit: { type: number }
+        credit: { type: number }
+
+    ReportSection:
+      type: object
+      properties:
+        title: { type: string, example: PENDAPATAN }
+        subtotal: { type: number }
+        lines:
+          type: array
+          items: { $ref: "#/components/schemas/ReportLine" }
+
+    ReportLine:
+      type: object
+      properties:
+        accountCode: { type: string }
+        accountName: { type: string }
+        amount: { type: number }
+        indentLevel: { type: integer, minimum: 0, example: 2 }
+        isBold: { type: boolean, default: false }
+        isTotal: { type: boolean, default: false }
+
+    FinancialReport:
+      type: object
+      properties:
+        id: { type: string }
+        type:
+          type: string
+          enum: [balance-sheet, income-statement, cash-flow, trial-balance]
+        entity:
+          type: object
+          properties:
+            id: { type: string }
+            name: { type: string }
+        period:
+          type: object
+          properties:
+            start: { type: string, format: date }
+            end: { type: string, format: date }
+        asOf: { type: string, format: date, nullable: true }
+        generatedAt: { type: string, format: date-time }
+        currency: { type: string, example: IDR }
+        sections:
+          type: array
+          items: { $ref: "#/components/schemas/ReportSection" }
+        totalDebit: { type: number }
+        totalCredit: { type: number }
+        netIncome: { type: number }
+        totalAssets: { type: number }
+        totalLiabilitiesEquity: { type: number }
+        isBalanced: { type: boolean }
+
+    # ---------- Period ----------
+    FiscalPeriod:
+      type: object
+      properties:
+        id: { type: string, format: uuid, example: fp-2026-03 }
+        name: { type: string, example: "Maret 2026" }
+        month: { type: integer, example: 3 }
+        year: { type: integer, example: 2026 }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        isOpen: { type: boolean, default: true }
+        isActive: { type: boolean, default: false }
+        previousPeriodId: { type: string, nullable: true }
+
+    # ---------- Dashboard ----------
+    DashboardCard:
+      type: object
+      properties:
+        key: { type: string, example: totalAssets }
+        label: { type: string, example: "Total Aset" }
+        value: { type: number, example: 1093000000 }
+        deltaPercent: { type: number, example: 12.5 }
+        deltaDirection: { type: string, enum: [up, down, flat] }
+        compareLabel: { type: string, example: "dari bulan lalu" }
+
+    TrendPoint:
+      type: object
+      properties:
+        period: { type: string, example: "2026-03" }
+        label: { type: string, example: Mar }
+        revenue: { type: number }
+        expenses: { type: number }
+        netIncome: { type: number }
+
+    Alert:
+      type: object
+      properties:
+        severity: { type: string, enum: [info, warning, danger] }
+        type: { type: string, example: draft_journals }
+        message: { type: string }
+        count: { type: integer, nullable: true }
+
+    # ---------- Search ----------
+    SearchResult:
+      type: object
+      properties:
+        type: { type: string, enum: [journal, account] }
+        id: { type: string }
+        title: { type: string }
+        subtitle: { type: string }
+        metadata:
+          type: object
+          additionalProperties: { type: string }
