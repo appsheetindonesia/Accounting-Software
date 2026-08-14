@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+@theme {
+  /* Brand — PRD Ver 3 §7.2 */
+  --color-primary: #0d5c3d;
+  --color-primary-light: #1a8c5e;
+  --color-primary-dark: #083a26;
+  --color-accent: #f59e0b;
+
+  /* Surface & text */
+  --color-canvas: #f8fafc;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f1f5f9;
+  --color-ink: #1e293b;
+  --color-ink-soft: #64748b;
+  --color-ink-faint: #94a3b8;
+  --color-line: #e2e8f0;
+  --color-line-strong: #cbd5e1;
+
+  /* Semantic — debit biru, kredit hijau */
+  --color-debit: #3b82f6;
+  --color-credit: #10b981;
+  --color-ok: #10b981;
+  --color-bad: #ef4444;
+  --color-warn: #f59e0b;
+
+  /* Typography */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+
+  /* Radius & shadow (PRD §7.4) */
+  --radius-card: 12px;
+  --shadow-card: 0 1px 3px rgb(15 23 42 / 0.08);
+  --shadow-pop: 0 4px 12px rgb(15 23 42 / 0.12);
+  --shadow-modal: 0 8px 24px rgb(15 23 42 / 0.16);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Nominal & kode akun selalu mono */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Scrollbar halus */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+@keyframes fadein {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

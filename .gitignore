@@ -1,0 +1,7 @@
+# Direktori internal tooling
+.freebuff/
+
+# Artefak & file lokal
+*.log
+.DS_Store
+Thumbs.db
