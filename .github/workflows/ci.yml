@@ -1,25 +1,30 @@
 # ============================================================
-# E2E Regression (manual) — Appsheet Accounting Journal
-# Menjalankan suite Playwright RG-01..RG-12 (chromium + firefox)
-# terhadap mock API (localhost:4000) + prototipe Vite (:5173).
+# CI — Appsheet Accounting Journal
+# Pipeline berurutan (satu job, steps sekuensial):
+#   1. Unit test prototipe (Vitest, prototype-accounting)
+#   2. Integration test mock API (Vitest + Supertest, mock-api)
+#   3. E2E Playwright RG-01..RG-12 (chromium + firefox)
 #
-# CATATAN: E2E juga dijalankan OTOMATIS di setiap push/PR oleh
-# workflow terpadu `.github/workflows/ci.yml` (unit → integration
-# → e2e). Workflow ini hanya untuk menjalankan E2E secara manual
-# tanpa harus menunggu pipeline penuh.
+# Jika salah satu tahap gagal, tahap berikutnya TIDAK dijalankan
+# (karena `set -e` default per step) → pipeline berhenti di sana.
 #
-# Playwright otomatis menyalakan kedua server lewat konfigurasi
-# `webServer` di e2e/playwright.config.ts (CI=true → reuseExistingServer
-# dimatikan, server selalu di-start fresh oleh runner).
+# Playwright menyalakan mock API + Vite sendiri lewat konfigurasi
+# `webServer` di e2e/playwright.config.ts (CI=true →
+# reuseExistingServer dimatikan, server di-start fresh oleh runner).
+#
+# Pemicu: setiap push ke branch mana pun + pull request + manual.
 # ============================================================
-name: E2E Regression (manual)
+name: CI (Unit + Integration + E2E)
 
 on:
+  push:
+    branches: ['**']
+  pull_request:
   workflow_dispatch:
 
 jobs:
-  e2e:
-    name: RG-01..RG-12 (chromium + firefox)
+  test:
+    name: unit → integration → e2e
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -46,6 +51,17 @@ jobs:
           cd ../prototype-accounting && npm ci
           cd ../e2e && npm ci
 
+      # ---- Tahap 1: unit test prototipe (Vitest) ----
+      - name: Unit test prototipe (Vitest)
+        working-directory: prototype-accounting
+        run: npm test
+
+      # ---- Tahap 2: integration test mock API (Vitest + Supertest) ----
+      - name: Integration test mock API (Vitest + Supertest)
+        working-directory: mock-api
+        run: npm test
+
+      # ---- Tahap 3: E2E Playwright (RG-01..RG-12) ----
       - name: Install Playwright browsers + system deps
         working-directory: e2e
         run: npx playwright install --with-deps chromium firefox

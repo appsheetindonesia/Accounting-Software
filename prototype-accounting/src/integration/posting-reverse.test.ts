@@ -140,4 +140,33 @@ describe('alur posting → reverse terhadap skema API (MSW)', () => {
     await expect(api.getJournals()).rejects.toThrowError(ApiError)
     await expect(api.getJournals()).rejects.toMatchObject({ status: 401 })
   })
+
+  it('logout → POST /auth/logout menghapus refresh token di server (refresh berikutnya 401)', async () => {
+    // Login → dapat refresh token valid
+    const auth = await api.login({ email: 'rina@bukuwarung.com', password: 'password123' })
+    setAuth('mock.user-001.1', undefined, auth.refreshToken)
+
+    // Logout: server harus membuang sesi (refresh token tidak bisa dipakai lagi)
+    await api.logout(auth.refreshToken)
+
+    // Refresh token lama → 401 INVALID_REFRESH_TOKEN (sesi sudah dihapus)
+    setAuth('mock.expired.999', undefined, auth.refreshToken)
+    await expect(api.getJournals()).rejects.toMatchObject({ status: 401, code: 'UNAUTHORIZED' })
+  })
+
+  it('store logout: bersihkan sesi lokal + token di client (request berikutnya tanpa auth)', async () => {
+    await useStore.getState().login('rina@bukuwarung.com', 'password123')
+    expect(useStore.getState().accessToken).toBeTruthy()
+    expect(useStore.getState().refreshToken).toBeTruthy()
+
+    useStore.getState().logout()
+
+    const s = useStore.getState()
+    expect(s.accessToken).toBeNull()
+    expect(s.refreshToken).toBeNull()
+    expect(s.user).toBeNull()
+    expect(s.apiStatus).toBe('idle')
+    // Client (modul api) juga dibersihkan → request tanpa Authorization
+    await expect(api.getJournals()).rejects.toMatchObject({ status: 401, code: 'UNAUTHORIZED' })
+  })
 })

@@ -4,7 +4,7 @@ Suite **Playwright** untuk skenario regresi **RG-01 s/d RG-12** dari
 `QA Test Plan - Accounting.md` §4, dijalankan terhadap **mock API**
 (`mock-api/`, port 4000) dan **prototipe** (`prototype-accounting/`, Vite :5173).
 
-[![E2E Regression (Playwright)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/e2e.yml/badge.svg)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/e2e.yml)
+[![CI (Unit + Integration + E2E)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/ci.yml/badge.svg)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/ci.yml)
 
 ## Prasyarat
 
@@ -57,16 +57,26 @@ login bertahan saat `page.reload()` (RG-02/RG-04/RG-10).
 
 ## CI (GitHub Actions)
 
-Workflow `.github/workflows/e2e.yml` menjalankan suite penuh (chromium + firefox)
-secara otomatis di **setiap push / pull request** (ubuntu-latest, Node 22).
-Playwright menyalakan mock API + Vite sendiri via `webServer` (CI →
+Workflow terpadu `.github/workflows/ci.yml` menjalankan pipeline **berurutan**
+di **setiap push / pull request** (ubuntu-latest, Node 22):
+
+1. **Unit test prototipe** (Vitest, `prototype-accounting`) — 84 test
+2. **Integration test mock API** (Vitest + Supertest, `mock-api`) — 73 test
+   (baseline angka §2.3, error envelope vs katalog §13, seed:extra,
+   persistence)
+3. **E2E Playwright RG-01..RG-12** (chromium + firefox) — 24 test
+
+Jika salah satu tahap gagal, pipeline berhenti (tahap berikutnya tidak
+jalan). Playwright menyalakan mock API + Vite sendiri via `webServer` (CI →
 `reuseExistingServer` dimatikan). `MOCK_API_PERSIST=0` dipasang di env CI agar
 state in-memory murni dan deterministik. Artefak `playwright-report/`
 (selalu) dan `test-results/` (saat gagal) di-upload sebagai artifact.
 
+Workflow `e2e.yml` kini **manual-only** (`workflow_dispatch`) — untuk
+menjalankan E2E saja tanpa pipeline penuh:
+
 ```bash
-# Menjalankan ulang secara manual tanpa push:
-#   GitHub → Actions → "E2E Regression (Playwright)" → Run workflow
+# GitHub → Actions → "E2E Regression (manual)" → Run workflow
 ```
 
 ## Catatan gap UI

@@ -106,3 +106,42 @@ describe('request — refresh token otomatis saat 401', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('setAuth — membersihkan sesi lokal (logout / ganti entitas)', () => {
+  beforeEach(() => {
+    setAuth(null, null, null)
+    vi.unstubAllGlobals()
+  })
+
+  it('setAuth(null, null, null) menghapus entityId → request berikutnya tanpa X-Entity-Id', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(json(200, { data: { ok: true } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    // Login dengan tenant ent-001
+    setAuth('mock.user-001.1', 'ent-001', 'r1')
+    await request('/journals')
+    expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toMatchObject({ 'X-Entity-Id': 'ent-001' })
+
+    // Logout → entityId harus dibersihkan (bukan dipertahankan)
+    setAuth(null, null, null)
+    await expect(request('/journals')).rejects.toThrow() // tanpa token → 401
+    const call = fetchMock.mock.calls[1][1] as RequestInit
+    const headers = call.headers as Record<string, string>
+    expect(headers.Authorization).toBeUndefined()
+    expect(headers['X-Entity-Id']).toBeUndefined()
+  })
+
+  it('refresh token ikut dibersihkan saat logout → 401 TIDAK memicu refresh', async () => {
+    const expired = vi.fn()
+    setSessionExpiredHandler(expired)
+    const fetchMock = vi.fn().mockResolvedValueOnce(json(401, { error: { code: 'UNAUTHORIZED', message: 'expired' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    setAuth('mock.old.1', 'ent-001', 'r1')
+    setAuth(null, null, null) // logout: token & refresh dibersihkan
+
+    await expect(request('/journals')).rejects.toThrow()
+    expect(fetchMock).toHaveBeenCalledTimes(1) // tanpa refresh
+    expect(fetchMock.mock.calls[0][0]).not.toContain('/auth/refresh')
+  })
+})

@@ -38,15 +38,27 @@ Uji endpoint terhadap **baseline angka** QA Test Plan §2.3 (seed Maret 2026).
 Supertest memanggil app Express langsung — **tanpa perlu server berjalan**.
 
 ```bash
-npm test          # vitest run — 11 test
+npm test          # vitest run — 73 test
 npm run test:watch
 ```
 
-Cakupan (`test/api-baseline.test.js`): 5 jurnal posted total 98jt = 98jt;
-Kas Besar 60 → 87jt (saldo berjalan 85/75/72/87); Pendapatan 155jt, Utang 150jt,
-Modal 363jt; Neraca 557 = 150 + 363 + 44 (isBalanced); Trial balance 668 = 668;
-Laba Rugi 155 − 111 = 44jt; dashboard 4 kartu; alert 2 draft; posting 10jt → saldo
-live (87→97, 155→165, 557→567); reverse → kembali ke baseline (net 0).
+Cakupan (`test/`):
+- `api-baseline.test.js` (11) — baseline §2.3: 5 jurnal posted total 98jt = 98jt;
+  Kas Besar 60 → 87jt (85/75/72/87); Pendapatan 155jt, Utang 150jt, Modal 363jt;
+  Neraca 557 = 150 + 363 + 44 (isBalanced); Trial balance 668 = 668;
+  Laba Rugi 155 − 111 = 44jt; dashboard 4 kartu; alert 2 draft; posting 10jt →
+  saldo live (87→97, 155→165, 557→567); reverse → kembali ke baseline.
+- `error-envelope.test.js` (40) — **error envelope semua endpoint** terhadap
+  katalog kode error `API - Accounting.md` §13: format
+  `{ error: { code, message, details? } }` tanpa field `data`; status
+  401/403/409/422/404 per kategori (23 kode katalog terimplementasi terpicu;
+  6 gap terdokumentasi: SESSION_EXPIRED, FILE_TOO_LARGE, UNSUPPORTED_FILE_TYPE,
+  RATE_LIMITED, NO_APPROVAL_RIGHTS, INTERNAL_ERROR).
+- `extra-seed.test.js` (12) — seed:extra (`withExtra: true`): muatan 15 jurnal
+  (3 Jan + 4 Feb + 8 Mar), **saldo berantai Kas 60→40→64→91jt** lintas periode
+  (akhir bulan N = awal bulan N+1), dan blokade periode tertutup Jan/Feb
+  (POST jurnal, reverse, PUT pindah tanggal → 422 PERIOD_CLOSED).
+- `persistence.test.js` (10) — persistence JSON opsional.
 
 ## Persistence opsional (jurnal tidak hilang saat restart)
 

@@ -32,7 +32,10 @@ let tokensRefreshedHandler: ((t: { accessToken: string; refreshToken: string }) 
 
 export const setAuth = (token: string | null, entity?: string | null, refresh?: string | null) => {
   accessToken = token
-  entityId = entity ?? entityId
+  // entity: undefined = pertahankan, null = reset (logout/ganti sesi).
+  // Dengan `entity ?? entityId`, entityId tidak pernah bisa dibersihkan —
+  // sesi user berikutnya akan membocorkan entity tenant lama.
+  if (entity !== undefined) entityId = entity
   if (refresh !== undefined) refreshToken = refresh
 }
 
