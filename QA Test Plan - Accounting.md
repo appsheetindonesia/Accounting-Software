@@ -424,3 +424,30 @@ Periode: Maret 2026 = aktif & terbuka; Januari & Februari 2026 = tertutup.
 ---
 
 *Test plan ini diturunkan dari acceptance criteria di `Backlog - Accounting.md`, spesifikasi modul & aturan bisnis di `PRD Ver 3 - Accounting.md`, dan perilaku endpoint di `API - Accounting.md` / `mock-api/` (verifikasi nyata: posting 10jt → saldo berubah, reverse → kembali net 0, trial balance 668=668, neraca 557=557).*
+
+---
+
+## 8. Kirim Hasil ke TestRail (curl siap salin-tempel)
+
+Alur: generator menulis `qa-test-results-testrail.csv` (template) → QA mengisi kolom
+Status per run → regenerasi (`scripts/generate-qa-test-cases.py`) **otomatis**
+menjalankan konverter dan menulis `qa-test-results-testrail.json` (payload
+`add_results_for_cases`) → kirim dengan curl di bawah.
+
+Ganti `<user>`, `<apikey>`, `<host>`, dan `<run_id>` dengan nilai Anda
+(credential TestRail format `user:apikey`; host mis. `myco.testrail.io`;
+run_id dari URL test run TestRail):
+
+```bash
+curl -u <user>:<apikey> -H 'Content-Type: application/json' \
+     -d @qa-test-results-testrail.json \
+     'https://<host>/index.php?/api/v2/add_results_for_cases/<run_id>'
+```
+
+Alternatif: biarkan konverter mengisi URL contoh secara otomatis — jalankan
+`python scripts/convert-results-to-testrail.py --host https://<host> --run-id <run_id>`
+dan salin-tempel curl yang dicetaknya.
+
+Status yang dikirim: `Passed`=1, `Blocked`=2, `Retest`=4, `Failed`=5,
+`Skipped`=6. Baris kosong / `Not Run` dilewati (status `Untested`=3 tidak bisa
+dikirim sebagai hasil).
