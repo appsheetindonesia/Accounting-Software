@@ -4,7 +4,7 @@ import { useStore } from '../../store/useStore'
 import JournalTable from './JournalTable'
 import { formatIDR } from '../../lib/format'
 
-type StatusFilter = 'all' | 'draft' | 'posted' | 'reversed'
+type StatusFilter = 'all' | 'draft' | 'pending-approval' | 'posted' | 'reversed'
 
 export default function JournalPage() {
   const journals = useStore((s) => s.journals)
@@ -79,6 +79,7 @@ export default function JournalPage() {
           >
             <option value="all">Semua</option>
             <option value="posted">Posted</option>
+            <option value="pending-approval">Menunggu Approval</option>
             <option value="draft">Draft</option>
             <option value="reversed">Reversed</option>
           </select>

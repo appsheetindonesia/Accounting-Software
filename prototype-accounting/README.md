@@ -14,6 +14,18 @@ cd mock-api && npm install && npm start
 cd prototype-accounting && npm install && npm run dev   # http://localhost:5173
 ```
 
+**Atau satu perintah dari root repo** (mock API + Vite sekaligus):
+
+```bash
+node scripts/dev.mjs                     # http://localhost:5173 · http://localhost:4000
+node scripts/dev.mjs --extra             # + jurnal lintas bulan (Jan–Feb 2026)
+node scripts/dev.mjs --reset             # paksa seed segar walau persistence aktif
+MOCK_API_PERSIST=0 node scripts/dev.mjs  # tanpa persistence (seed di-reset tiap boot)
+```
+
+Persistence mock API default **AKTIF** → saat keduanya hidup, state tersimpan (jurnal yang
+diposting) dimuat, bukan di-reset. Untuk loop dev seed-segar, pakai `--reset` atau `MOCK_API_PERSIST=0`.
+
 Jika mock API mati, prototipe otomatis masuk **mode offline**: banner di bawah top bar + footer "Offline · Data lokal", data dari localStorage/seed, mutasi tetap jalan lokal. Klik "Coba lagi" untuk menyambung ulang.
 
 Base URL API bisa diubah lewat env `VITE_API_URL` (default `http://localhost:4000`).
@@ -33,6 +45,7 @@ npm test          # Vitest — unit (akuntansi, Buku Besar/Laba Rugi, migrasi pe
 - **Entri Jurnal Baru** (tombol "+ Buat Jurnal"): no. bukti auto-generate (BKM/BKK/JKM/JKK/JV), baris dinamis, validasi auto-balance (debit = kredit), Simpan Draft / Posting
 - Posting jurnal → saldo akun, kartu dashboard, Buku Besar, & Laba Rugi ter-update live (logika BR-6/BR-7)
 - Draft → Posting → Reverse (dari expand detail baris jurnal)
+- **Approval workflow**: draft → **Submit** → status *Menunggu Approval* → **Approve** (langsung posted, saldo berubah) / **Reject** (kembali draft) — dari expand detail baris jurnal; filter status baru "Menunggu Approval"; audit trail (create/submit/approve/reject) terekam di server
 - **Buku Besar**: saldo berjalan per akun (Saldo Awal → transaksi → Saldo Akhir), selector akun, nav periode, hanya jurnal posted
 - **Laba Rugi**: dihitung live dari jurnal posted (Pendapatan − Beban = Laba/Rugi Bersih), selector periode, empty state
 - **Neraca Lajur**: trial balance live (saldo YTD per akhir periode), kolom Debit/Kredit per akun, indikator **✓ Seimbang (Debit = Kredit)**, nav periode

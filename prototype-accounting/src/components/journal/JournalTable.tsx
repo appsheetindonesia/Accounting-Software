@@ -1,5 +1,5 @@
 import { Fragment, useState } from 'react'
-import { ChevronDown, ChevronRight, Inbox, Undo2, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, Inbox, Send, Undo2, X } from 'lucide-react'
 import type { JournalEntry } from '../../types'
 import { useStore } from '../../store/useStore'
 import StatusBadge from '../StatusBadge'
@@ -19,6 +19,9 @@ function Amount({ value, tone }: { value: number; tone: 'debit' | 'credit' }) {
 
 export default function JournalTable({ journals }: { journals: JournalEntry[] }) {
   const postJournal = useStore((s) => s.postJournal)
+  const submitJournal = useStore((s) => s.submitJournal)
+  const approveJournal = useStore((s) => s.approveJournal)
+  const rejectJournal = useStore((s) => s.rejectJournal)
   const reverseJournal = useStore((s) => s.reverseJournal)
   const deleteJournal = useStore((s) => s.deleteJournal)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -133,6 +136,13 @@ export default function JournalTable({ journals }: { journals: JournalEntry[] })
                               <>
                                 <button
                                   type="button"
+                                  onClick={() => submitJournal(journal.id)}
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#7c3aed]/40 bg-[#7c3aed]/10 px-3.5 py-2 text-xs font-semibold text-[#6d28d9] transition hover:bg-[#7c3aed]/20"
+                                >
+                                  <Send size={13} /> Submit
+                                </button>
+                                <button
+                                  type="button"
                                   onClick={() => postJournal(journal.id)}
                                   className="rounded-lg bg-primary px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-primary-light"
                                 >
@@ -158,6 +168,24 @@ export default function JournalTable({ journals }: { journals: JournalEntry[] })
                                     <X size={13} /> Hapus
                                   </button>
                                 )}
+                              </>
+                            )}
+                            {journal.status === 'pending-approval' && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => approveJournal(journal.id)}
+                                  className="inline-flex items-center gap-1.5 rounded-lg bg-ok px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-ok/90"
+                                >
+                                  <Check size={13} /> Approve
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => rejectJournal(journal.id)}
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-bad/40 bg-bad/5 px-3.5 py-2 text-xs font-medium text-bad transition hover:bg-bad/10"
+                                >
+                                  <X size={13} /> Reject
+                                </button>
                               </>
                             )}
                             {journal.status === 'posted' && (

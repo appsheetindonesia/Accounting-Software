@@ -19,6 +19,7 @@ import {
   gotoNav,
   gotoOnline,
   loginToken,
+  loginViaUi,
   openJournalModal,
   resetServer,
   watchPageErrors,
@@ -34,7 +35,14 @@ const BASE = {
 
 test.beforeEach(async ({ page, request }) => {
   await resetServer(request)
-  await page.addInitScript(() => localStorage.clear())
+  await page.addInitScript(() => {
+    // Bersihkan storage SEKALI per test (bukan tiap reload) — sesi login
+    // harus bertahan saat page.reload() di RG-02/04 agar tetap terautentikasi.
+    if (!sessionStorage.getItem('e2e-cleared')) {
+      localStorage.clear()
+      sessionStorage.setItem('e2e-cleared', '1')
+    }
+  })
   await gotoOnline(page)
   await expect(page.getByText(BASE.aset, { exact: true }).first()).toBeVisible()
 })
@@ -173,24 +181,22 @@ test.describe('RG-01 s/d RG-04 — siklus jurnal, reverse, laporan, periode', ()
     await expect(page.getByText('Rp 165.000.000', { exact: true }).first()).toBeVisible()
     await expect(page.getByText('Rp 54.000.000', { exact: true }).first()).toBeVisible()
 
-    // 3. Neraca & Neraca Lajur — UI masih ComingSoon → verifikasi via API
-    test.info().annotations.push({
-      type: 'Gap',
-      description: 'Halaman Neraca & Neraca Lajur belum diimplementasikan di prototipe (ComingSoon) — diverifikasi via API.',
-    })
-    const token = await loginToken(request)
-    const bs = await (await request.get(`${API_BASE}/reports/balance-sheet?asOf=2026-03-31`, { headers: authHeaders(token) })).json()
-    expect(bs.data.totalAssets).toBe(567_000_000)
-    expect(bs.data.isBalanced).toBe(true)
-    const tb = await (await request.get(`${API_BASE}/reports/trial-balance?period=2026-03`, { headers: authHeaders(token) })).json()
-    expect(tb.data.totals.isBalanced).toBe(true)
-    expect(tb.data.totals.debit).toBe(678_000_000)
+    // 3. Neraca (UI): Aset 567jt + indikator seimbang Aset = Kewajiban + Ekuitas
+    await gotoNav(page, 'Neraca')
+    await expect(page.getByText('✓ Seimbang (Aset = Kewajiban + Ekuitas)', { exact: true })).toBeVisible()
+    await expect(page.getByText('Rp 567.000.000', { exact: true }).first()).toBeVisible()
 
-    // 4. Export PDF & XLSX — UI export belum ada → via API
+    // 4. Neraca Lajur (UI): Debit = Kredit 678jt + indikator seimbang
+    await gotoNav(page, 'Neraca Lajur')
+    await expect(page.getByText('✓ Seimbang (Debit = Kredit)', { exact: true })).toBeVisible()
+    await expect(page.getByText('Rp 678.000.000', { exact: true }).first()).toBeVisible()
+
+    // 5. Export PDF & XLSX — UI export belum ada → via API
     test.info().annotations.push({
       type: 'Gap',
       description: 'Tombol export belum ada di prototipe — endpoint /exports diverifikasi via API.',
     })
+    const token = await loginToken(request)
     for (const format of ['pdf', 'xlsx']) {
       const exp = await request.get(`${API_BASE}/exports/reports/income-statement?format=${format}&period=2026-03`, { headers: authHeaders(token) })
       expect(exp.status()).toBe(200)
@@ -219,14 +225,19 @@ test.describe('RG-01 s/d RG-04 — siklus jurnal, reverse, laporan, periode', ()
     await dialog.getByRole('button', { name: 'Posting' }).click()
     await expect(page.getByRole('status')).toContainText('sudah ditutup')
 
-    // 3. Draft yang ter-post via post-all kini posted (7 total)
-    const list = await (await request.get(`${API_BASE}/journals?status=posted`, { headers: authHeaders(token) })).json()
-    expect(list.meta.total).toBe(7)
+    // 3. Reload → Jurnal UI: kedua draft seed (BKK-0006, JV-0007) kini Posted
+    await page.reload()
+    await expect(page.locator('footer')).toContainText('Online · Mock API', { timeout: 20_000 })
+    await gotoNav(page, 'Jurnal')
+    await expect(page.getByText('BKK-2026-03-0006', { exact: true })).toBeVisible()
+    await expect(page.getByText('JV-2026-03-0007', { exact: true })).toBeVisible()
+    await expect(page.locator('tbody').getByText('Posted', { exact: true })).toHaveCount(7)
 
-    // 4. Laporan tetap bisa dibaca
-    const rpt = await request.get(`${API_BASE}/reports/income-statement?period=2026-03`, { headers: authHeaders(token) })
-    expect(rpt.status()).toBe(200)
-    expect((await rpt.json()).data.netIncome).toBeDefined()
+    // 4. Laporan tetap terbaca di UI setelah periode ditutup: Neraca render,
+    //    seimbang, Aset 549,5jt (Kas berkurang 7,5jt dari 2 draft yang ter-post)
+    await gotoNav(page, 'Neraca')
+    await expect(page.getByText('✓ Seimbang (Aset = Kewajiban + Ekuitas)', { exact: true })).toBeVisible()
+    await expect(page.getByText('Rp 549.500.000', { exact: true }).first()).toBeVisible()
   })
 })
 
@@ -271,51 +282,57 @@ test.describe('RG-05 s/d RG-08 — entitas, approval, search, periode', () => {
     await expect(page.getByText('PT. Kreasi Inovasi Estetika', { exact: true }).first()).toBeVisible()
   })
 
-  test('RG-06 Approval flow: saldo hanya berubah saat approve; reject kembali draft', async ({ page, request }) => {
-    test.info().annotations.push({
-      type: 'Gap',
-      description: 'UI approval (submit/approve/reject) belum ada di prototipe — alur diverifikasi via API.',
-    })
+  test('RG-06 Approval flow via UI: saldo hanya berubah saat approve; reject kembali draft', async ({ page, request }) => {
+    const createDraftUi = async (desc: string) => {
+      const dialog = await openJournalModal(page)
+      await fillBalancedJournal(dialog, '10000000', desc)
+      await dialog.getByRole('button', { name: 'Simpan Draft' }).click()
+      await expect(page.getByRole('status')).toContainText('disimpan sebagai draft')
+    }
+
+    // 1. Jurnal 1 (BKM-0009): buat draft via UI → submit → badge Menunggu Approval; saldo belum berubah
+    await createDraftUi('RG-06 jurnal approve')
+    await expect(page.getByText(BASE.aset, { exact: true }).first()).toBeVisible() // masih 557jt
+    await gotoNav(page, 'Jurnal')
+    await page.locator('tbody tr', { hasText: 'BKM-2026-03-0009' }).first().getByRole('button', { name: 'Buka detail' }).click()
+    await page.getByRole('button', { name: 'Submit', exact: true }).click()
+    await expect(page.getByRole('status')).toContainText('diajukan untuk persetujuan')
+    await expect(page.locator('tbody').getByText('Menunggu Approval', { exact: true }).first()).toBeVisible()
+    await gotoNav(page, 'Dashboard')
+    await expect(page.getByText(BASE.aset, { exact: true }).first()).toBeVisible() // masih 557jt (belum approve)
+
+    // 2. Approve via UI → badge Posted; saldo berubah (Aset 557 → 567jt)
+    await gotoNav(page, 'Jurnal')
+    await page.locator('tbody tr', { hasText: 'BKM-2026-03-0009' }).first().getByRole('button', { name: 'Buka detail' }).click()
+    await page.getByRole('button', { name: 'Approve', exact: true }).click()
+    await expect(page.getByRole('status')).toContainText('disetujui dan diposting')
+    await expect(page.locator('tbody').getByText('Posted', { exact: true }).first()).toBeVisible()
+    await gotoNav(page, 'Dashboard')
+    await expect(page.getByText('Rp 567.000.000', { exact: true }).first()).toBeVisible()
+
+    // 3. Jurnal 2 (BKM-0010): buat draft → submit → reject via UI → kembali Draft; saldo tetap 567jt
+    await createDraftUi('RG-06 jurnal reject')
+    await gotoNav(page, 'Jurnal')
+    await page.locator('tbody tr', { hasText: 'BKM-2026-03-0010' }).first().getByRole('button', { name: 'Buka detail' }).click()
+    await page.getByRole('button', { name: 'Submit', exact: true }).click()
+    await expect(page.getByRole('status')).toContainText('diajukan untuk persetujuan')
+    await page.getByRole('button', { name: 'Reject', exact: true }).click()
+    await expect(page.getByRole('status')).toContainText('ditolak — kembali ke draft')
+    await expect(page.locator('tbody').getByText('Draft', { exact: true }).first()).toBeVisible()
+    await gotoNav(page, 'Dashboard')
+    await expect(page.getByText('Rp 567.000.000', { exact: true }).first()).toBeVisible() // tidak berubah
+
+    // 4. Detail server (UI tidak menampilkan audit trail): rejectionReason + riwayat lengkap
     const token = await loginToken(request)
     const h = authHeaders(token)
-
-    const createDraft = async (desc: string) => {
-      const res = await request.post(`${API_BASE}/journals`, {
-        headers: h,
-        data: {
-          date: '2026-03-15',
-          description: desc,
-          lines: [
-            { accountId: '1-1100', debit: 10_000_000, credit: 0 },
-            { accountId: '4-1000', debit: 0, credit: 10_000_000 },
-          ],
-        },
-      })
-      expect(res.status()).toBe(201)
-      return (await res.json()).data as { id: string }
+    const findId = async (no: string) => {
+      const res = await (await request.get(`${API_BASE}/journals?keyword=${no}`, { headers: h })).json()
+      return (res.data.journals as { id: string; transactionNumber: string }[]).find((j) => j.transactionNumber === no)!.id
     }
-    const summary = async () => (await (await request.get(`${API_BASE}/dashboard/summary`, { headers: h })).json()).data.cards[0].value
-
-    // Submit → approve → saldo berubah (557 → 567)
-    const j1 = await createDraft('RG-06 jurnal approve')
-    expect(await summary()).toBe(557_000_000)
-    await request.post(`${API_BASE}/journals/${j1.id}/submit`, { headers: h })
-    const approved = await request.post(`${API_BASE}/journals/${j1.id}/approve`, { headers: h })
-    expect(approved.status()).toBe(200)
-    expect(await summary()).toBe(567_000_000)
-
-    // Submit → reject → kembali draft, saldo tidak berubah
-    const j2 = await createDraft('RG-06 jurnal reject')
-    await request.post(`${API_BASE}/journals/${j2.id}/submit`, { headers: h })
-    const rejected = await request.post(`${API_BASE}/journals/${j2.id}/reject`, { headers: h, data: { reason: 'Nominal tidak sesuai bukti' } })
-    expect(rejected.status()).toBe(200)
-    expect(await summary()).toBe(567_000_000)
-    const detail = await (await request.get(`${API_BASE}/journals/${j2.id}`, { headers: h })).json()
-    expect(detail.data.status).toBe('draft')
-    expect(detail.data.rejectionReason).toContain('tidak sesuai')
-
-    // Audit trail lengkap untuk jurnal yang di-approve
-    const audited = await (await request.get(`${API_BASE}/journals/${j1.id}`, { headers: h })).json()
+    const rejected = await (await request.get(`${API_BASE}/journals/${await findId('BKM-2026-03-0010')}`, { headers: h })).json()
+    expect(rejected.data.status).toBe('draft')
+    expect(rejected.data.rejectionReason).toContain('Tidak disetujui')
+    const audited = await (await request.get(`${API_BASE}/journals/${await findId('BKM-2026-03-0009')}`, { headers: h })).json()
     const actions = audited.data.auditTrail.map((a: { action: string }) => a.action)
     for (const expected of ['create', 'submit', 'approve']) expect(actions).toContain(expected)
   })
@@ -453,6 +470,7 @@ test.describe('RG-09 s/d RG-12 — performa, restart, lintas browser, error', ()
     const ctx = await browser.newContext({ viewport: { width: 320, height: 640 } })
     const page = await ctx.newPage()
     await page.goto('http://localhost:5173/') // baseURL tidak berlaku untuk context manual
+    await loginViaUi(page) // sesi kosong di context baru → login demo
     await expect(page.locator('footer')).toContainText('Online · Mock API', { timeout: 20_000 })
     await expect(page.getByText(BASE.aset, { exact: true }).first()).toBeVisible()
 

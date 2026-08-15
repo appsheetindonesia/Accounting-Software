@@ -2,6 +2,7 @@ import type { JournalStatus } from '../types'
 
 const STYLES: Record<JournalStatus, { label: string; className: string }> = {
   draft: { label: 'Draft', className: 'bg-warn/15 text-[#b45309]' },
+  'pending-approval': { label: 'Menunggu Approval', className: 'bg-[#7c3aed]/15 text-[#6d28d9]' },
   posted: { label: 'Posted', className: 'bg-ok/15 text-primary-light' },
   reversed: { label: 'Reversed', className: 'bg-bad/10 text-bad' },
 }

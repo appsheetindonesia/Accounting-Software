@@ -1,6 +1,6 @@
 export type AccountType = 'asset' | 'liability' | 'equity' | 'revenue' | 'expense'
 
-export type JournalStatus = 'draft' | 'posted' | 'reversed'
+export type JournalStatus = 'draft' | 'pending-approval' | 'posted' | 'reversed'
 
 export type PageKey =
   | 'dashboard'

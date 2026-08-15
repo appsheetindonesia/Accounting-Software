@@ -4,6 +4,8 @@ Suite **Playwright** untuk skenario regresi **RG-01 s/d RG-12** dari
 `QA Test Plan - Accounting.md` §4, dijalankan terhadap **mock API**
 (`mock-api/`, port 4000) dan **prototipe** (`prototype-accounting/`, Vite :5173).
 
+[![E2E Regression (Playwright)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/e2e.yml/badge.svg)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/e2e.yml)
+
 ## Prasyarat
 
 - Node.js ≥ 18
@@ -29,8 +31,12 @@ npm run report      # buka laporan HTML (playwright-report/)
 
 Playwright otomatis menyalakan mock API + Vite (atau memakai instance yang
 sudah berjalan). Setiap test me-reset state server ke seed (`POST /admin/reset`)
-dan membersihkan localStorage → selalu mulai dari baseline terverifikasi
+dan **login demo melalui UI** (`rina@bukuwarung.com` / `password123`, wajib sejak
+fitur login) → selalu mulai dari baseline terverifikasi
 (Aset 557jt = Utang 150 + Modal 363 + Laba 44).
+
+Catatan: storage dibersihkan **sekali per test** (bukan tiap reload) agar sesi
+login bertahan saat `page.reload()` (RG-02/RG-04/RG-10).
 
 ## Cakupan
 
@@ -38,10 +44,10 @@ dan membersihkan localStorage → selalu mulai dari baseline terverifikasi
 |----|----------|------------------|
 | RG-01 | Siklus hidup jurnal | draft → posting → hapus; saldo konsisten; edit + optimistic lock via API |
 | RG-02 | Reverse menyeluruh | saldo & laporan kembali; trial balance seimbang; pasangan reversal benar |
-| RG-03 | Posting → laporan → export | Laba Rugi live; neraca seimbang; export PDF/XLSX |
-| RG-04 | Tutup periode | posting diblokir; draft ter-post via post-all; laporan terbaca |
+| RG-03 | Posting → laporan → export | Laba Rugi live; **Neraca & Neraca Lajur via UI** (seimbang, 567/678jt); export PDF/XLSX via API |
+| RG-04 | Tutup periode | posting diblokir (UI); **draft ter-post & laporan terbaca diverifikasi di UI** (Neraca 549,5jt seimbang) |
 | RG-05 | Multi-entitas | isolasi via `X-Entity-Id` |
-| RG-06 | Approval flow | saldo berubah hanya saat approve; reject kembali draft; audit trail |
+| RG-06 | Approval flow | **via UI**: draft → Submit → Menunggu Approval → Approve (saldo berubah) / Reject (kembali draft); audit trail via API |
 | RG-07 | Filter & search | filter UI + pencarian global API konsisten |
 | RG-08 | Selektor periode | footer/modal sinkron; Laba Rugi & Buku Besar re-fetch per periode |
 | RG-09 | Data besar | 10.000 jurnal: pagination, < 2 detik, filter tetap benar |
@@ -49,9 +55,23 @@ dan membersihkan localStorage → selalu mulai dari baseline terverifikasi
 | RG-11 | Lintas browser + mobile | suite penuh di chromium & firefox; layout 320px tanpa overflow |
 | RG-12 | Error handling | server mati → banner offline + fallback lokal, tanpa crash |
 
+## CI (GitHub Actions)
+
+Workflow `.github/workflows/e2e.yml` menjalankan suite penuh (chromium + firefox)
+secara otomatis di **setiap push / pull request** (ubuntu-latest, Node 22).
+Playwright menyalakan mock API + Vite sendiri via `webServer` (CI →
+`reuseExistingServer` dimatikan). `MOCK_API_PERSIST=0` dipasang di env CI agar
+state in-memory murni dan deterministik. Artefak `playwright-report/`
+(selalu) dan `test-results/` (saat gagal) di-upload sebagai artifact.
+
+```bash
+# Menjalankan ulang secara manual tanpa push:
+#   GitHub → Actions → "E2E Regression (Playwright)" → Run workflow
+```
+
 ## Catatan gap UI
 
 Beberapa fitur belum ada UI-nya di prototipe dan diuji lewat lapisan API
-(ditandai `annotation` di laporan): tutup periode, approval workflow, switch
-entitas, search global, export, edit jurnal. Ketika UI-nya diimplementasikan,
-pindahkan asersi tersebut ke interaksi UI.
+(ditandai `annotation` di laporan): tutup periode, switch entitas, search
+global, export, edit jurnal. Ketika UI-nya diimplementasikan, pindahkan
+asersi tersebut ke interaksi UI.

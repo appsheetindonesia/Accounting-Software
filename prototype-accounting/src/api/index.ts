@@ -132,6 +132,18 @@ export const api = {
   reverseJournal(id: string) {
     return request<{ reversedJournalId: string; status: 'reversed'; reversalJournal: ApiJournal }>(`/journals/${id}/reverse`, { method: 'POST' })
   },
+  submitJournal(id: string) {
+    return request<{ id: string; status: 'pending-approval' }>(`/journals/${id}/submit`, { method: 'POST' })
+  },
+  approveJournal(id: string) {
+    return request<{ status: 'posted'; approvedBy: string; approvedAt: string }>(`/journals/${id}/approve`, { method: 'POST' })
+  },
+  rejectJournal(id: string, reason?: string) {
+    return request<{ id: string; status: 'draft'; rejectionReason: string }>(`/journals/${id}/reject`, {
+      method: 'POST',
+      body: reason ? { reason } : undefined,
+    })
+  },
   deleteJournal(id: string) {
     return request<void>(`/journals/${id}`, { method: 'DELETE' })
   },
@@ -180,7 +192,7 @@ export const toJournalEntry = (j: ApiJournal): JournalEntry => ({
     credit: Number(l.credit),
     description: l.description,
   })),
-  status: j.status === 'pending-approval' ? 'draft' : j.status,
+  status: j.status,
   createdBy: j.createdBy,
   createdAt: j.createdAt,
   postedAt: j.postedAt,

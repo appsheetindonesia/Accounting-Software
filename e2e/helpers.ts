@@ -20,9 +20,27 @@ export async function loginToken(request: APIRequestContext): Promise<string> {
   return body.data.accessToken as string
 }
 
-/** Muat halaman dan tunggu koneksi online + data API (footer status). */
+/**
+ * Login akun demo melalui UI (halaman login tampil karena sesi kosong).
+ * Dipakai gotoOnline & RG-11 (context manual 320px).
+ */
+export async function loginViaUi(page: Page) {
+  await page.getByLabel('Email').fill(DEMO.email)
+  await page.getByLabel('Password').fill(DEMO.password)
+  await page.getByRole('button', { name: 'Masuk', exact: true }).click()
+}
+
+/**
+ * Muat halaman dan tunggu koneksi online + data API (footer status).
+ * Login wajib sejak fitur login (POST /auth/login) — jika halaman login
+ * tampil (sesi kosong), masuk dengan akun demo melalui UI.
+ */
 export async function gotoOnline(page: Page) {
   await page.goto('/')
+  const email = page.getByLabel('Email')
+  if (await email.isVisible({ timeout: 2_000 }).catch(() => false)) {
+    await loginViaUi(page)
+  }
   await expect(page.locator('footer')).toContainText('Online · Mock API', { timeout: 20_000 })
 }
 

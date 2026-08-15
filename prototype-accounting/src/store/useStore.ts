@@ -47,6 +47,9 @@ interface AccountingState {
 
   saveJournal: (input: NewJournalInput, action: 'draft' | 'post') => Promise<void>
   postJournal: (id: string) => Promise<void>
+  submitJournal: (id: string) => Promise<void>
+  approveJournal: (id: string) => Promise<void>
+  rejectJournal: (id: string, reason?: string) => Promise<void>
   reverseJournal: (id: string) => Promise<void>
   deleteJournal: (id: string) => Promise<void>
   resetDemoData: () => void
@@ -130,6 +133,36 @@ export const useStore = create<AccountingState>()(
             j.id === id && j.status === 'draft' ? { ...j, status: 'posted' as const, postedAt: nowIso() } : j,
           ),
           toast: { message: 'Jurnal berhasil diposting', kind: 'success' },
+        }))
+      }
+
+      // Approval workflow — fallback offline (transisi status sederhana)
+      const localSubmit = (id: string) => {
+        set((state) => ({
+          journals: state.journals.map((j) =>
+            j.id === id && j.status === 'draft' ? { ...j, status: 'pending-approval' as const } : j,
+          ),
+          toast: { message: 'Jurnal diajukan untuk persetujuan', kind: 'success' },
+        }))
+      }
+
+      const localApprove = (id: string) => {
+        set((state) => ({
+          journals: state.journals.map((j) =>
+            j.id === id && j.status === 'pending-approval'
+              ? { ...j, status: 'posted' as const, postedAt: nowIso() }
+              : j,
+          ),
+          toast: { message: 'Jurnal disetujui dan diposting', kind: 'success' },
+        }))
+      }
+
+      const localReject = (id: string) => {
+        set((state) => ({
+          journals: state.journals.map((j) =>
+            j.id === id && j.status === 'pending-approval' ? { ...j, status: 'draft' as const } : j,
+          ),
+          toast: { message: 'Jurnal ditolak — kembali ke draft', kind: 'success' },
         }))
       }
 
@@ -402,6 +435,77 @@ export const useStore = create<AccountingState>()(
             return
           }
           localDelete(id)
+        },
+
+        submitJournal: async (id) => {
+          if (get().apiStatus === 'online') {
+            try {
+              await api.submitJournal(id)
+              set((s) => ({
+                journals: s.journals.map((j) =>
+                  j.id === id && j.status === 'draft' ? { ...j, status: 'pending-approval' as const } : j,
+                ),
+                toast: { message: 'Jurnal diajukan untuk persetujuan', kind: 'success' },
+              }))
+            } catch (e) {
+              if (isNetworkError(e)) {
+                set({ apiStatus: 'offline' })
+                localSubmit(id)
+                return
+              }
+              set({ toast: { message: e instanceof ApiError ? e.message : 'Gagal submit jurnal', kind: 'error' } })
+            }
+            return
+          }
+          localSubmit(id)
+        },
+
+        approveJournal: async (id) => {
+          if (get().apiStatus === 'online') {
+            try {
+              const r = await api.approveJournal(id)
+              set((s) => ({
+                journals: s.journals.map((j) =>
+                  j.id === id && j.status === 'pending-approval'
+                    ? { ...j, status: 'posted' as const, postedAt: r.approvedAt }
+                    : j,
+                ),
+                toast: { message: 'Jurnal disetujui dan diposting', kind: 'success' },
+              }))
+            } catch (e) {
+              if (isNetworkError(e)) {
+                set({ apiStatus: 'offline' })
+                localApprove(id)
+                return
+              }
+              set({ toast: { message: e instanceof ApiError ? e.message : 'Gagal approve jurnal', kind: 'error' } })
+            }
+            return
+          }
+          localApprove(id)
+        },
+
+        rejectJournal: async (id, reason) => {
+          if (get().apiStatus === 'online') {
+            try {
+              await api.rejectJournal(id, reason)
+              set((s) => ({
+                journals: s.journals.map((j) =>
+                  j.id === id && j.status === 'pending-approval' ? { ...j, status: 'draft' as const } : j,
+                ),
+                toast: { message: 'Jurnal ditolak — kembali ke draft', kind: 'success' },
+              }))
+            } catch (e) {
+              if (isNetworkError(e)) {
+                set({ apiStatus: 'offline' })
+                localReject(id)
+                return
+              }
+              set({ toast: { message: e instanceof ApiError ? e.message : 'Gagal reject jurnal', kind: 'error' } })
+            }
+            return
+          }
+          localReject(id)
         },
 
         // Reset demo: hapus localStorage (data pengguna) + kembali ke seed murni.

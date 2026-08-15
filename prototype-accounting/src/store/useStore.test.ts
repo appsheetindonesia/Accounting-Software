@@ -19,7 +19,7 @@ vi.mock('../api', () => {
     isNetworkError: (e: unknown) => e instanceof TypeError,
     toJournalEntry: (j: any) => ({
       ...j,
-      status: j.status === 'pending-approval' ? 'draft' : j.status,
+      status: j.status,
       lines: (j.lines ?? []).map((l: any, i: number) => ({ id: l.id ?? `${j.id}-${i}`, ...l })),
     }),
     api: {
@@ -29,6 +29,9 @@ vi.mock('../api', () => {
       getJournals: vi.fn(),
       createJournal: vi.fn(),
       postJournal: vi.fn(),
+      submitJournal: vi.fn(),
+      approveJournal: vi.fn(),
+      rejectJournal: vi.fn(),
       reverseJournal: vi.fn(),
       deleteJournal: vi.fn(),
     },
@@ -81,6 +84,9 @@ beforeEach(() => {
   mockedApi.getJournals.mockReset()
   mockedApi.createJournal.mockReset()
   mockedApi.postJournal.mockReset()
+  mockedApi.submitJournal.mockReset()
+  mockedApi.approveJournal.mockReset()
+  mockedApi.rejectJournal.mockReset()
   mockedApi.reverseJournal.mockReset()
   mockedApi.deleteJournal.mockReset()
   // Default: gagal jaringan agar path lokal (fallback) yang teruji
@@ -90,6 +96,9 @@ beforeEach(() => {
   mockedApi.getJournals.mockRejectedValue(new TypeError('fetch failed'))
   mockedApi.createJournal.mockRejectedValue(new TypeError('fetch failed'))
   mockedApi.postJournal.mockRejectedValue(new TypeError('fetch failed'))
+  mockedApi.submitJournal.mockRejectedValue(new TypeError('fetch failed'))
+  mockedApi.approveJournal.mockRejectedValue(new TypeError('fetch failed'))
+  mockedApi.rejectJournal.mockRejectedValue(new TypeError('fetch failed'))
   mockedApi.reverseJournal.mockRejectedValue(new TypeError('fetch failed'))
   mockedApi.deleteJournal.mockRejectedValue(new TypeError('fetch failed'))
 })
@@ -344,6 +353,57 @@ describe('postJournal — draft → posted', () => {
     const j = useStore.getState().journals.find((x) => x.id === 'JNL-2026-03-006')!
     expect(j.status).toBe('posted')
     expect(j.postedAt).toBe('2026-03-25T09:00:00Z')
+  })
+})
+
+describe('approval workflow — submit/approve/reject', () => {
+  it('submit: draft → pending-approval (path lokal)', async () => {
+    await useStore.getState().submitJournal('JNL-2026-03-006')
+    const j = useStore.getState().journals.find((x) => x.id === 'JNL-2026-03-006')!
+    expect(j.status).toBe('pending-approval')
+  })
+
+  it('approve: pending-approval → posted, saldo live ikut berubah', async () => {
+    useStore.setState({ apiStatus: 'online' })
+    mockedApi.submitJournal.mockResolvedValue({ id: 'JNL-2026-03-006', status: 'pending-approval' })
+    mockedApi.approveJournal.mockResolvedValue({ status: 'posted', approvedBy: 'user-001', approvedAt: '2026-03-25T10:00:00Z' })
+
+    await useStore.getState().submitJournal('JNL-2026-03-006')
+    expect(useStore.getState().journals.find((x) => x.id === 'JNL-2026-03-006')!.status).toBe('pending-approval')
+    // Belum approve → saldo belum berubah (JNL-006 draft 5jt tidak dihitung)
+    expect(bal().get('5-3000')).toBe(6_000_000)
+
+    await useStore.getState().approveJournal('JNL-2026-03-006')
+    const j = useStore.getState().journals.find((x) => x.id === 'JNL-2026-03-006')!
+    expect(j.status).toBe('posted')
+    expect(j.postedAt).toBe('2026-03-25T10:00:00Z')
+    // Approve mem-post → efek 5jt masuk saldo
+    expect(bal().get('5-3000')).toBe(11_000_000)
+  })
+
+  it('reject: pending-approval → draft, saldo tidak berubah', async () => {
+    useStore.setState({ apiStatus: 'online' })
+    mockedApi.submitJournal.mockResolvedValue({ id: 'JNL-2026-03-006', status: 'pending-approval' })
+    mockedApi.rejectJournal.mockResolvedValue({ id: 'JNL-2026-03-006', status: 'draft', rejectionReason: 'Nominal tidak sesuai' })
+
+    await useStore.getState().submitJournal('JNL-2026-03-006')
+    await useStore.getState().rejectJournal('JNL-2026-03-006', 'Nominal tidak sesuai')
+
+    expect(mockedApi.rejectJournal).toHaveBeenCalledWith('JNL-2026-03-006', 'Nominal tidak sesuai')
+    const j = useStore.getState().journals.find((x) => x.id === 'JNL-2026-03-006')!
+    expect(j.status).toBe('draft')
+    expect(bal().get('5-3000')).toBe(6_000_000) // tetap tidak dihitung
+  })
+
+  it('gagal jaringan (offline) → fallback lokal tetap transisi status', async () => {
+    useStore.setState({ apiStatus: 'online' })
+    // Default mock: TypeError (fetch failed) → masuk path offline
+    await useStore.getState().submitJournal('JNL-2026-03-006')
+    expect(useStore.getState().apiStatus).toBe('offline')
+    expect(useStore.getState().journals.find((x) => x.id === 'JNL-2026-03-006')!.status).toBe('pending-approval')
+
+    await useStore.getState().approveJournal('JNL-2026-03-006')
+    expect(useStore.getState().journals.find((x) => x.id === 'JNL-2026-03-006')!.status).toBe('posted')
   })
 })
 
