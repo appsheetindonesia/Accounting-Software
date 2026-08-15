@@ -1,10 +1,12 @@
 # ============================================================
 # Verifikasi penuh (manual) — Appsheet Accounting Journal
-# Dua job PARALEL saat di-dispatch manual:
-#   1. unit  — unit + integration test PROTOTIPE (Vitest + MSW) dan
-#              integration test MOCK API (Vitest + Supertest)
-#   2. e2e   — suite Playwright RG-01..RG-19 (chromium + firefox)
-#              terhadap mock API (localhost:4000) + prototipe Vite (:5173).
+# Tiga job PARALEL saat di-dispatch manual:
+#   1. unit    — unit + integration test PROTOTIPE (Vitest + MSW) dan
+#                integration test MOCK API (Vitest + Supertest)
+#   2. e2e     — suite Playwright RG-01..RG-19 (chromium + firefox)
+#                terhadap mock API (localhost:4000) + prototipe Vite (:5173).
+#   3. qa-sync — gate sinkronisasi artefak QA: CSV/XLSX harus sinkron
+#                dengan QA Test Plan (scripts/check-qa-sync.py).
 #
 # CATATAN: semua ini juga dijalankan OTOMATIS di setiap push/PR oleh
 # workflow terpadu `.github/workflows/ci.yml` (unit → integration
@@ -105,3 +107,25 @@ jobs:
           name: test-results
           path: e2e/test-results/
           retention-days: 7
+
+  qa-sync:
+    name: QA artifacts sinkron dengan QA Test Plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install openpyxl
+        run: pip install openpyxl
+
+      # Backup → regenerate (tanggal run dipin dari yang ter-commit) →
+      # bandingkan konten CSV/XLSX. Gagal jika QA Test Plan berubah tanpa
+      # artefak di-regenerasi (lihat scripts/check-qa-sync.py).
+      - name: Cek sinkronisasi CSV/XLSX dengan QA Test Plan
+        run: python scripts/check-qa-sync.py

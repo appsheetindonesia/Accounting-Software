@@ -180,6 +180,33 @@ describe('Laba Rugi YTD bertingkat per periode — 57 / 59 / 26jt (seed:extra)',
     expect(neracaFeb.body.data.isBalanced).toBe(true)
     expect(neracaMar.body.data.isBalanced).toBe(true)
   })
+
+  it('konsisten dengan baseline Maret: delta YTD = efek jurnal Jan–Feb (+78jt rev, +96jt beban)', async () => {
+    // Baseline (tanpa extra) meng-embed saldo pre-Maret sebagai baseBalance,
+    // jadi laporan Maret-nya = 155/111/44 (lihat api-baseline.test.js).
+    // Seed extra memuat Jan–Feb sebagai jurnal eksplisit → YTD Maret 233/207/26.
+    // Konsistensi: selisih keduanya PERSIS efek jurnal Jan–Feb:
+    //   pendapatan +78jt = 30 (Jan BKM) + 28 (Feb BKM) + 20 (Feb JV)
+    //   beban     +96jt = 50 (Jan: 10 sewa + 40 gaji) + 46 (Feb: 4 + 42 gaji)
+    const reset = (body) => request(app).post('/admin/reset').send(body)
+    const subtotal = (d, title) => d.body.data.sections.find((s) => s.title === title).subtotal
+
+    await reset({}).then((r) => expect(r.status).toBe(200))
+    const base = await income('2026-03')
+    expect(subtotal(base, 'PENDAPATAN')).toBe(155_000_000)
+    expect(subtotal(base, 'BEBAN')).toBe(111_000_000)
+    expect(base.body.data.netIncome).toBe(44_000_000)
+
+    await reset({ withExtra: true }).then((r) => expect(r.status).toBe(200))
+    const extra = await income('2026-03')
+    expect(subtotal(extra, 'PENDAPATAN')).toBe(233_000_000)
+    expect(subtotal(extra, 'BEBAN')).toBe(207_000_000)
+    expect(extra.body.data.netIncome).toBe(26_000_000)
+
+    expect(subtotal(extra, 'PENDAPATAN') - subtotal(base, 'PENDAPATAN')).toBe(78_000_000)
+    expect(subtotal(extra, 'BEBAN') - subtotal(base, 'BEBAN')).toBe(96_000_000)
+    expect(extra.body.data.netIncome - base.body.data.netIncome).toBe(-18_000_000)
+  })
 })
 
 // ------------------------------------------------------------

@@ -26,20 +26,31 @@ Status yang SUDAH diisi di output sebelumnya (`qa-test-cases.xlsx`, fallback
 baru / yang masih kosong yang di-set 'Not Run'. Jadi QA bisa mengisi hasil
 eksekusi lalu menjalankan ulang generator tanpa kehilangan data.
 
-Menjalankan:  python scripts/generate-qa-test-cases.py
+`--sample`: hasilkan CONTOH run dengan status acak-deterministik ke file
+`qa-test-cases-sample-tracker.csv`, `qa-test-cases-sample.xlsx`,
+`qa-test-results-sample-testrail.csv`, dan `qa-test-results-sample.json`
+(payload add_results_for_cases) sebagai referensi format import — file asli
+TIDAK disentuh.
+
+Menjalankan:  python scripts/generate-qa-test-cases.py [--sample]
 """
 from __future__ import annotations
 
+import argparse
 import csv
+import os
 import re
+import sys
 from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PLAN = ROOT / "QA Test Plan - Accounting.md"
 
-# Nilai default kolom otomatis run (bisa diedit per baris di Excel)
-RUN_DATE_DEFAULT = date.today().isoformat()  # 2026-08-15
+# Nilai default kolom otomatis run (bisa diedit per baris di Excel).
+# Override via env QA_RUN_DATE (YYYY-MM-DD) dipakai oleh scripts/check-qa-sync.py
+# agar regenerasi di CI tidak dianggap berubah hanya karena ganti tanggal.
+RUN_DATE_DEFAULT = os.environ.get("QA_RUN_DATE", date.today().isoformat())
 ENVIRONMENT_DEFAULT = "QA Local (mock API)"
 
 # Status yang memicu peringatan S1
@@ -289,6 +300,45 @@ def enrich(records: list[dict], existing_statuses: dict[str, str] | None = None)
 
 
 # ---------------------------------------------------------------------------
+# Contoh run (--sample): status acak-deterministik sebagai referensi format
+# ---------------------------------------------------------------------------
+# status_id TestRail — SAMA dengan scripts/convert-results-to-testrail.py
+SAMPLE_STATUS_IDS = {"Passed": 1, "Blocked": 2, "Retest": 4, "Failed": 5, "Skipped": 6}
+
+SAMPLE_FILES = {
+    "tracker": ROOT / "qa-test-cases-sample-tracker.csv",
+    "xlsx": ROOT / "qa-test-cases-sample.xlsx",
+    "results": ROOT / "qa-test-results-sample-testrail.csv",
+    "payload": ROOT / "qa-test-results-sample.json",
+}
+
+
+def random_statuses(records: list[dict], seed: int = 20260816) -> list[dict]:
+    """Isi Status dengan nilai acak DETERMINISTIK (seed tetap) agar contoh run
+    bisa direproduksi. Distribusi condong ke Passed, sisanya variasi status."""
+    import random
+    rng = random.Random(seed)
+    pool = (["Passed"] * 60 + ["Failed"] * 10 + ["Blocked"] * 8
+            + ["Retest"] * 7 + ["Skipped"] * 5 + ["Not Run"] * 10)
+    for r in records:
+        r["status"] = rng.choice(pool)
+    return records
+
+
+def build_sample_payload(records: list[dict]) -> dict:
+    """Payload add_results_for_cases untuk contoh run. case_id memakai nomor
+    urut (1..N) sebagai referensi FORMAT — konverter sesungguhnya butuh ID
+    case TestRail yang valid (numerik atau via --mapping)."""
+    results = []
+    for i, r in enumerate(records, 1):
+        sid = SAMPLE_STATUS_IDS.get(r["status"])
+        if sid is None:  # Not Run (dan status lain yang tak bisa dikirim)
+            continue
+        results.append({"case_id": i, "status_id": sid})
+    return {"results": results}
+
+
+# ---------------------------------------------------------------------------
 # Conditional formatting kolom Status (warna otomatis, ikut nilai sel)
 # ---------------------------------------------------------------------------
 def add_status_cf(ws, col: str, first_row: int, last_row: int) -> None:
@@ -338,8 +388,8 @@ def write_testrail_csv(records: list[dict]) -> Path:
     return path
 
 
-def write_tracker_csv(records: list[dict]) -> Path:
-    path = ROOT / "qa-test-cases-tracker.csv"
+def write_tracker_csv(records: list[dict], path: Path | None = None) -> Path:
+    path = path or ROOT / "qa-test-cases-tracker.csv"
     with path.open("w", encoding="utf-8-sig", newline="") as f:
         w = csv.writer(f)
         w.writerow(["ID", "Modul", "Test Case", "Tipe", "Prioritas", "Severity",
@@ -353,7 +403,7 @@ def write_tracker_csv(records: list[dict]) -> Path:
     return path
 
 
-def write_xlsx(records: list[dict]) -> Path:
+def write_xlsx(records: list[dict], path: Path | None = None) -> Path:
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
     from openpyxl.utils import get_column_letter
@@ -467,12 +517,12 @@ def write_xlsx(records: list[dict]) -> Path:
             c.font = Font(bold=True, color="FFFFFF")
             c.fill = header_fill
 
-    path = ROOT / "qa-test-cases.xlsx"
+    path = path or ROOT / "qa-test-cases.xlsx"
     wb.save(path)
     return path
 
 
-def write_results_csv(records: list[dict]) -> Path:
+def write_results_csv(records: list[dict], path: Path | None = None) -> Path:
     """Template hasil eksekusi per run — siap di-import balik ke TestRail
     sebagai result (Test Run → Import Results → CSV). Kolom mengikuti format
     importer TestRail: identifier case (Test Case ID) + field hasil.
@@ -480,7 +530,7 @@ def write_results_csv(records: list[dict]) -> Path:
     Status diisi QA per run: Passed / Failed / Blocked / Retest / Skipped
     (persis nama status TestRail). Kolom kosong lainnya opsional.
     """
-    path = ROOT / "qa-test-results-testrail.csv"
+    path = path or ROOT / "qa-test-results-testrail.csv"
     with path.open("w", encoding="utf-8-sig", newline="") as f:
         w = csv.writer(f)
         w.writerow(["Test Case ID", "Title", "Status", "Comment", "Elapsed",
@@ -613,12 +663,45 @@ def write_results_template_xlsx(records: list[dict]) -> Path:
 
 
 def main() -> None:
-    existing = load_existing_statuses()
-    records = enrich(parse_tables(), existing)
+    # Output unicode aman di semua platform (mis. '—' di Windows cp1252)
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
+
+    ap = argparse.ArgumentParser(
+        description="Generate QA test case files (TestRail CSV + tracking CSV + XLSX)"
+                    " dari `QA Test Plan - Accounting.md`.")
+    ap.add_argument("--sample", action="store_true",
+                    help="hasilkan CONTOH run: status acak-deterministik ke file "
+                         "*-sample.* sebagai referensi format import "
+                         "(file asli TIDAK disentuh)")
+    args = ap.parse_args()
+
+    records = parse_tables()
     tc = [r for r in records if r["id"].startswith("TC-")]
     rg = [r for r in records if r["id"].startswith("RG-")]
     assert len(tc) == 137, f"Jumlah TC tidak sesuai: {len(tc)} (harus 137)"
     assert len(rg) == 12, f"Jumlah RG tidak sesuai: {len(rg)} (harus 12)"
+
+    if args.sample:
+        import json
+        random_statuses(enrich(records))  # tanpa load existing — status murni acak
+        paths = [
+            write_tracker_csv(records, SAMPLE_FILES["tracker"]),
+            write_xlsx(records, SAMPLE_FILES["xlsx"]),
+            write_results_csv(records, SAMPLE_FILES["results"]),
+        ]
+        SAMPLE_FILES["payload"].write_text(
+            json.dumps(build_sample_payload(records), indent=2, ensure_ascii=False),
+            encoding="utf-8")
+        paths.append(SAMPLE_FILES["payload"])
+        for p in paths:
+            print(f"[OK] {p}  (contoh run — status acak, file asli tidak disentuh)")
+        print(f"\nContoh run: {len(tc)} TC + {len(rg)} RG = {len(records)} test case dengan status terisi")
+        return
+
+    existing = load_existing_statuses()
+    records = enrich(records, existing)
     carried = sum(1 for r in records if r["id"] in existing)
     if carried:
         print(f"[INFO] Mempertahankan status {carried} test case dari output sebelumnya")
