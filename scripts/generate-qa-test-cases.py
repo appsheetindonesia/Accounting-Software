@@ -21,6 +21,11 @@ Status TestRail (default): 1=Passed, 2=Blocked, 3=Untested (default,
 TIDAK bisa dikirim sebagai hasil), 4=Retest, 5=Failed. Nama status di CSV
 impor harus persis: Passed, Failed, Blocked, Retest, Skipped, Untested.
 
+Status yang SUDAH diisi di output sebelumnya (`qa-test-cases.xlsx`, fallback
+`qa-test-cases-tracker.csv`) dipertahankan saat regenerasi — hanya test case
+baru / yang masih kosong yang di-set 'Not Run'. Jadi QA bisa mengisi hasil
+eksekusi lalu menjalankan ulang generator tanpa kehilangan data.
+
 Menjalankan:  python scripts/generate-qa-test-cases.py
 """
 from __future__ import annotations
@@ -223,7 +228,52 @@ def precond_of(rec: dict) -> str:
     return DEFAULT_PRECOND
 
 
-def enrich(records: list[dict]) -> list[dict]:
+def load_existing_statuses() -> dict[str, str]:
+    """Baca Status yang sudah diisi QA dari output sebelumnya, agar regenerasi
+    tidak me-reset hasil eksekusi ke 'Not Run'.
+
+    Prioritas: `qa-test-cases.xlsx` (sheet 'Test Cases') — file paling baru
+    karena ditulis setelah tracker CSV. Fallback: `qa-test-cases-tracker.csv`
+    (mis. XLSX belum pernah dibuat / korup). Nilai sel kosong diabaikan.
+    """
+    existing: dict[str, str] = {}
+
+    xlsx = ROOT / "qa-test-cases.xlsx"
+    if xlsx.exists():
+        try:
+            from openpyxl import load_workbook
+            wb = load_workbook(xlsx, read_only=True, data_only=True)
+            ws = wb["Test Cases"] if "Test Cases" in wb.sheetnames else wb.worksheets[0]
+            rows = ws.iter_rows(values_only=True)
+            header = next(rows, None)
+            if header:
+                cols = {str(h).strip(): i for i, h in enumerate(header)}
+                idx_id = cols.get("ID")
+                idx_status = cols.get("Status")
+                if idx_id is not None and idx_status is not None:
+                    for row in rows:
+                        cid = row[idx_id]
+                        st = row[idx_status]
+                        if cid is not None and st not in (None, ""):
+                            existing[str(cid).strip()] = str(st).strip()
+            wb.close()
+            return existing
+        except Exception:
+            pass  # XLSX tidak bisa dibaca → fallback ke tracker CSV
+
+    csv_path = ROOT / "qa-test-cases-tracker.csv"
+    if csv_path.exists():
+        with csv_path.open(encoding="utf-8-sig", newline="") as f:
+            for row in csv.DictReader(f):
+                cid = (row.get("ID") or "").strip()
+                st = (row.get("Status") or "").strip()
+                if cid and st:
+                    existing[cid] = st
+    return existing
+
+
+def enrich(records: list[dict], existing_statuses: dict[str, str] | None = None) -> list[dict]:
+    existing = existing_statuses or {}
     for r in records:
         r["story"] = story_of(r["ref"])
         r["sprint"] = sprint_of(r["ref"])
@@ -231,10 +281,46 @@ def enrich(records: list[dict]) -> list[dict]:
         r["priority"] = SEVERITY_PRIORITY.get(r["sev"], "3 - Medium")
         r["type"] = "Regression" if r["id"].startswith("RG-") else "Functional"
         r["preconditions"] = precond_of(r)
-        r["status"] = "Not Run"
+        # Status hasil eksekusi sebelumnya dipertahankan; sisanya Not Run
+        r["status"] = existing.get(r["id"], "Not Run")
         r["run_date"] = RUN_DATE_DEFAULT
         r["environment"] = ENVIRONMENT_DEFAULT
     return records
+
+
+# ---------------------------------------------------------------------------
+# Conditional formatting kolom Status (warna otomatis, ikut nilai sel)
+# ---------------------------------------------------------------------------
+def add_status_cf(ws, col: str, first_row: int, last_row: int) -> None:
+    """Pasang conditional formatting di kolom Status: warna otomatis sesuai
+    nilai sel (Passed hijau, Fail/Failed merah, Not Run abu-abu, Blocked/Retest
+    amber, Skipped biru-abu). Berlaku untuk seluruh rentang data yang diberikan
+    — warna ikut berubah jika QA mengedit nilai di Excel.
+    """
+    from openpyxl.formatting.rule import FormulaRule
+    from openpyxl.styles import Font, PatternFill
+
+    palette = [
+        (("Passed",), "C6EFCE", "006100"),
+        (("Fail", "Failed"), "FFC7CE", "9C0006"),
+        (("Not Run",), "D9D9D9", "595959"),
+        (("Blocked", "Retest"), "FFEB9C", "9C6500"),
+        (("Skipped",), "DDEBF7", "1F4E78"),
+    ]
+    rng = f"{col}{first_row}:{col}{last_row}"
+    for statuses, fill_hex, font_hex in palette:
+        cond = " OR ".join(f'${col}{first_row}="{s}"' for s in statuses)
+        if len(statuses) == 1:
+            cond = f'${col}{first_row}="{statuses[0]}"'
+        ws.conditional_formatting.add(
+            rng,
+            FormulaRule(
+                formula=[cond],
+                fill=PatternFill("solid", fgColor=fill_hex),
+                font=Font(color=font_hex, bold=True),
+                stopIfTrue=False,
+            ),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -310,6 +396,9 @@ def write_xlsx(records: list[dict]) -> Path:
         for col in range(1, len(headers) + 1):
             ws.cell(row=row, column=col).alignment = Alignment(
                 vertical="top", wrap_text=(col in (12, 13, 14)))
+
+    # Warna otomatis kolom Status (Passed/Failed/Not Run, dll.)
+    add_status_cf(ws, "I", 2, ws.max_row)
 
     widths = [14, 20, 38, 12, 14, 9, 12, 9, 11, 12, 20, 60, 60, 38]
     for col, w in enumerate(widths, 1):
@@ -459,6 +548,9 @@ def write_results_template_xlsx(records: list[dict]) -> Path:
     ws.add_data_validation(dv)
     dv.add(f"F{first_data}:F{last_data}")
 
+    # Warna otomatis kolom Status — ikut nilai dropdown yang dipilih
+    add_status_cf(ws, "F", first_data, last_data)
+
     # ---- Ringkasan otomatis (formula COUNTIF — dihitung Excel saat dibuka) ----
     ws.append([])
     ws.append(["RINGKASAN RUN", ""])
@@ -521,11 +613,15 @@ def write_results_template_xlsx(records: list[dict]) -> Path:
 
 
 def main() -> None:
-    records = enrich(parse_tables())
+    existing = load_existing_statuses()
+    records = enrich(parse_tables(), existing)
     tc = [r for r in records if r["id"].startswith("TC-")]
     rg = [r for r in records if r["id"].startswith("RG-")]
     assert len(tc) == 137, f"Jumlah TC tidak sesuai: {len(tc)} (harus 137)"
     assert len(rg) == 12, f"Jumlah RG tidak sesuai: {len(rg)} (harus 12)"
+    carried = sum(1 for r in records if r["id"] in existing)
+    if carried:
+        print(f"[INFO] Mempertahankan status {carried} test case dari output sebelumnya")
     for f in (write_testrail_csv, write_tracker_csv, write_xlsx, write_results_csv, write_results_template_xlsx):
         print(f"[OK] {f(records)}")
     print(f"\nTotal: {len(tc)} TC + {len(rg)} RG = {len(records)} test case")
