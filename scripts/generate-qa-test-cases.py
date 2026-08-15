@@ -41,7 +41,7 @@ ENVIRONMENT_DEFAULT = "QA Local (mock API)"
 OPEN_STATUSES = {"Not Run", "Fail"}
 
 # ---------------------------------------------------------------------------
-# Peta story (BW-xxx) → sprint, dari matriks traceability (QA Test Plan §5)
+# Peta story (AAJ-xxx) → sprint, dari matriks traceability (QA Test Plan §5)
 # ---------------------------------------------------------------------------
 STORY_SPRINT: dict[str, int] = {}
 for sprint, n_range in {
@@ -53,7 +53,7 @@ for sprint, n_range in {
     6: range(30, 35),
 }.items():
     for n in n_range:
-        STORY_SPRINT[f"BW-{n:03d}"] = sprint
+        STORY_SPRINT[f"AAJ-{n:03d}"] = sprint
 
 SEVERITY_PRIORITY = {
     "S1": "1 - Critical",
@@ -200,7 +200,7 @@ def parse_tables() -> list[dict]:
 # Enrichment
 # ---------------------------------------------------------------------------
 def story_of(ref: str) -> str:
-    m = re.search(r"BW-\d{3}", ref)
+    m = re.search(r"AAJ-\d{3}", ref)
     return m.group(0) if m else ""
 
 

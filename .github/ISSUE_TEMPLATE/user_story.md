@@ -1,24 +1,24 @@
 ---
 name: "📋 User Story"
-about: "Story siap sprint dari Backlog - Accounting.md (format BW-xxx)"
+about: "Story siap sprint dari Backlog - Accounting.md (format AAJ-xxx)"
 title: "[Story] "
 labels: ["story"]
 assignees: []
 ---
 
 <!-- Hapus baris ini: gunakan template ini untuk story baru dari Backlog - Accounting.md.
-     Referensi silang: ID backlog (BW-xxx), dokumen PRD Ver 3, dan API - Accounting.md -->
+     Referensi silang: ID backlog (AAJ-xxx), dokumen PRD Ver 3, dan API - Accounting.md -->
 
 ## Informasi Story
 
 | Field | Nilai |
 |-------|-------|
-| **ID Backlog** | BW-XXX |
+| **ID Backlog** | AAJ-XXX |
 | **Referensi PRD** | P0-XX / COA-XX (PRD Ver 3 §8) |
 | **Sprint** | Sprint X |
 | **Prioritas** | P0 / P1 / P2 |
 | **Estimasi** | X SP |
-| **Dependensi** | BW-XXX, BW-XXX |
+| **Dependensi** | AAJ-XXX, AAJ-XXX |
 
 ## User Story
 

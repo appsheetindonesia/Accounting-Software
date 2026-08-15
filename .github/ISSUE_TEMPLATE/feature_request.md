@@ -34,5 +34,5 @@ Solusi lain yang pernah dipertimbangkan (jika ada).
 ## Referensi
 
 - PRD Ver 3: [section terkait, jika sudah ada]
-- Backlog: [ID BW-xxx jika sudah masuk icebox / Backlog - Accounting.md §10]
+- Backlog: [ID AAJ-xxx jika sudah masuk icebox / Backlog - Accounting.md §10]
 - API: [endpoint yang terpengaruh]

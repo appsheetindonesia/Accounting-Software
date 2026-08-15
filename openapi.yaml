@@ -14,7 +14,7 @@ info:
   contact:
     name: Tim Appsheet Accounting Journal
 servers:
-  - url: https://api.bukuwarung.com/v1
+  - url: https://api.appsheetaccountingjournal.com/v1
     description: Production
   - url: http://localhost:3000/v1
     description: Local development

@@ -313,11 +313,11 @@ npm run build
 # Output: dist/ — static files (SPA)
 
 # Deployment — Docker + Nginx
-docker build -t bukuwarung-akuntansi:latest .
-docker push {{REGISTRY}}/bukuwarung-akuntansi:latest
+docker build -t appsheet-accounting-journal:latest .
+docker push {{REGISTRY}}/appsheet-accounting-journal:latest
 
 # Environment Variables
-VITE_API_URL=https://api.bukuwarung.com/v1
+VITE_API_URL=https://api.appsheetaccountingjournal.com/v1
 VITE_APP_NAME=Appsheet Accounting Journal
 VITE_SENTRY_DSN={{SENTRY_DSN}}
 VITE_GA_ID={{GA_TRACKING_ID}}

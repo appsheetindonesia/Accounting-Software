@@ -34,13 +34,13 @@ sprint-4       sprint-5        sprint-6
 ┌───────────────┬───────────────┬───────────────┬───────────────┬──────────────┐
 │ Backlog       │ Ready         │ In Progress   │ In Review     │ Done         │
 ├───────────────┼───────────────┼───────────────┼───────────────┼──────────────┤
-│ BW-011 Filter │ BW-002 Nav    │ BW-006 Form   │ BW-009 Daftar │              │
-│ BW-012 Periode│ BW-003 COA    │ Jurnal (8SP)  │ Jurnal (5SP)  │              │
-│ BW-013 Edit   │ BW-004 CRUD   │               │               │              │
-│ BW-014 Kartu  │ BW-005 Templ. │               │               │              │
-│ BW-015 Tren   │ BW-007 No.    │               │               │              │
-│               │ BW-008 Posting│               │               │              │
-│               │ BW-010 Buku   │               │               │              │
+│ AAJ-011 Filter │ AAJ-002 Nav    │ AAJ-006 Form   │ AAJ-009 Daftar │              │
+│ AAJ-012 Periode│ AAJ-003 COA    │ Jurnal (8SP)  │ Jurnal (5SP)  │              │
+│ AAJ-013 Edit   │ AAJ-004 CRUD   │               │               │              │
+│ AAJ-014 Kartu  │ AAJ-005 Templ. │               │               │              │
+│ AAJ-015 Tren   │ AAJ-007 No.    │               │               │              │
+│               │ AAJ-008 Posting│               │               │              │
+│               │ AAJ-010 Buku   │               │               │              │
 ├───────────────┼───────────────┼───────────────┼───────────────┼──────────────┤
 │ Sprint 2+     │ Siap dikerjakan│ Sedang dikerjakan │ Sudah ada PR / review QA │
 │ (lihat §5)    │ (sudah clear) │ (assignee + label sprint)  │                  │
@@ -88,7 +88,7 @@ Buat workflow di **Project → Workflows**:
 # contoh satu story
 gh issue create \
   --repo appsheetindonesia/Accounting-Software \
-  --title "BW-006 · Form Entri Jurnal (Multi-Line, Auto-Balance)" \
+  --title "AAJ-006 · Form Entri Jurnal (Multi-Line, Auto-Balance)" \
   --label "story,priority:P0,sprint-1" \
   --body "**User story:** Sebagai pemilik usaha, saya ingin mencatat transaksi dengan beberapa baris debit/kredit, agar jurnal selalu balance otomatis.
 
@@ -110,12 +110,12 @@ gh issue create \
 
 | Sprint | Fokus | Story | Total SP |
 |--------|-------|-------|----------|
-| **Sprint 1** | Foundation: Layout, COA, Jurnal Dasar | BW-001 – BW-009 | 48 |
-| **Sprint 2** | Buku Besar, Filter, Periode, Dashboard | BW-010 – BW-015 | 36 |
-| **Sprint 3** | Pelaporan: Laba Rugi, Neraca, Neraca Lajur | BW-016 – BW-019 | 24 |
-| **Sprint 4** | Quality: Export, Reverse, Lampiran, Approval | BW-020 – BW-024 | 26 |
-| **Sprint 5** | Multi-user: Role, Entitas, Arus Kas, Search | BW-025 – BW-029 | 27 |
-| **Sprint 6** | Advanced & Polish | BW-030 – BW-034 | 36 |
+| **Sprint 1** | Foundation: Layout, COA, Jurnal Dasar | AAJ-001 – AAJ-009 | 48 |
+| **Sprint 2** | Buku Besar, Filter, Periode, Dashboard | AAJ-010 – AAJ-015 | 36 |
+| **Sprint 3** | Pelaporan: Laba Rugi, Neraca, Neraca Lajur | AAJ-016 – AAJ-019 | 24 |
+| **Sprint 4** | Quality: Export, Reverse, Lampiran, Approval | AAJ-020 – AAJ-024 | 26 |
+| **Sprint 5** | Multi-user: Role, Entitas, Arus Kas, Search | AAJ-025 – AAJ-029 | 27 |
+| **Sprint 6** | Advanced & Polish | AAJ-030 – AAJ-034 | 36 |
 | **Total MVP** | | **34 story** | **197 SP** |
 
 **Catatan:** estimasi kecepatan tim 2–3 developer ±15 SP/sprint → MVP ≈ 12–14 minggu.

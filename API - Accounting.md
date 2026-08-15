@@ -9,7 +9,7 @@
 |-------|-------|
 | **Produk** | Appsheet Accounting Journal |
 | **Versi API** | v1 |
-| **Base URL** | `https://api.bukuwarung.com/v1` |
+| **Base URL** | `https://api.appsheetaccountingjournal.com/v1` |
 | **Format** | JSON (UTF-8), `Content-Type: application/json` |
 | **Status** | Draft untuk review backend |
 | **Sumber** | PRD Ver 3 - Accounting, TRD - Accounting |
