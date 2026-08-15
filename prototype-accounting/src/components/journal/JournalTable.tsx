@@ -5,6 +5,7 @@ import { useStore } from '../../store/useStore'
 import StatusBadge from '../StatusBadge'
 import { formatDateShort, formatIDRPlain } from '../../lib/format'
 import { canApproveJournal, canWriteJournal } from '../../lib/permissions'
+import RejectJournalDialog from './RejectJournalDialog'
 
 const TONE_CLASS = { debit: 'text-debit', credit: 'text-credit' } as const
 
@@ -34,6 +35,7 @@ export default function JournalTable({ journals }: { journals: JournalEntry[] })
   const canApprove = canApproveJournal(role)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [rejectingJournal, setRejectingJournal] = useState<JournalEntry | null>(null)
 
   const toggle = (id: string) =>
     setExpanded((prev) => {
@@ -138,6 +140,14 @@ export default function JournalTable({ journals }: { journals: JournalEntry[] })
                                   ? 'Jurnal telah dibatalkan dengan jurnal pembalik'
                                   : 'Belum diposting'}
                             </p>
+                            {journal.rejectionReason && (
+                              <p className="mt-2 inline-flex items-start gap-1.5 rounded-lg border border-bad/30 bg-bad/5 px-2.5 py-1.5 text-xs font-medium text-bad">
+                                <X size={12} className="mt-0.5 shrink-0" />
+                                <span>
+                                  Ditolak — alasan: <span className="font-semibold">{journal.rejectionReason}</span>
+                                </span>
+                              </p>
+                            )}
                           </div>
                           <div className="flex items-center gap-2">
                             {journal.status === 'draft' && canWrite && (
@@ -189,7 +199,7 @@ export default function JournalTable({ journals }: { journals: JournalEntry[] })
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => rejectJournal(journal.id)}
+                                  onClick={() => setRejectingJournal(journal)}
                                   className="inline-flex items-center gap-1.5 rounded-lg border border-bad/40 bg-bad/5 px-3.5 py-2 text-xs font-medium text-bad transition hover:bg-bad/10"
                                 >
                                   <X size={13} /> Reject
@@ -222,6 +232,7 @@ export default function JournalTable({ journals }: { journals: JournalEntry[] })
           </tbody>
         </table>
       </div>
+      <RejectJournalDialog journal={rejectingJournal} onClose={() => setRejectingJournal(null)} />
     </div>
   )
 }

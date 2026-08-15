@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { CheckCircle2, Plus, Trash2, X } from 'lucide-react'
 import { useStore } from '../../store/useStore'
+import { api } from '../../api'
 import { journalPrefixes } from '../../data/mock'
 import { formatIDR } from '../../lib/format'
 import { computeLineTotals, toNumber } from '../../lib/accounting'
@@ -38,11 +39,36 @@ export default function JournalEntryModal() {
     { key: 2, accountId: '4-1000', debit: '', credit: '', description: '' },
   ])
 
-  const nextNumber = useMemo(() => {
-    const period = activePeriod.replace('-', '-')
-    const count = journals.length + 1
-    return `${prefix}-${period}-${String(count).padStart(4, '0')}`
-  }, [prefix, journals.length, activePeriod])
+  // Fallback offline: nomor berikutnya dari deret maksimum yang ada di store (per prefix + periode)
+  const fallbackNextNumber = useMemo(() => {
+    const re = new RegExp(`^${prefix}-${activePeriod}-(\\d{4})$`)
+    let max = 0
+    for (const j of journals) {
+      const m = j.transactionNumber.match(re)
+      if (m) max = Math.max(max, Number(m[1]))
+    }
+    return `${prefix}-${activePeriod}-${String(max + 1).padStart(4, '0')}`
+  }, [prefix, activePeriod, journals])
+
+  // Server adalah sumber kebenaran penomoran (scoped per entity+periode+prefix)
+  const [serverNextNumber, setServerNextNumber] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    setServerNextNumber(null)
+    api
+      .getNextNumber(prefix, activePeriod)
+      .then(({ transactionNumber }) => {
+        if (!cancelled) setServerNextNumber(transactionNumber)
+      })
+      .catch(() => {
+        if (!cancelled) setServerNextNumber(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [prefix, activePeriod])
+
+  const nextNumber = serverNextNumber ?? fallbackNextNumber
 
   const totals = useMemo(() => computeLineTotals(lines), [lines])
   const isBalanced = totals.isBalanced
@@ -65,7 +91,7 @@ export default function JournalEntryModal() {
 
   const removeLine = (key: number) => setLines((prev) => (prev.length > 1 ? prev.filter((l) => l.key !== key) : prev))
 
-  const submit = (action: 'draft' | 'post') => {
+  const submit = (action: 'draft' | 'submit' | 'post') => {
     if (!canSave) return
     saveJournal(
       {
@@ -257,6 +283,14 @@ export default function JournalEntryModal() {
                 className="rounded-lg border border-line bg-surface px-4 py-2.5 text-sm font-medium text-ink transition hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Simpan Draft
+              </button>
+              <button
+                type="button"
+                onClick={() => submit('submit')}
+                disabled={!canSave}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#7c3aed]/40 bg-[#7c3aed]/10 px-4 py-2.5 text-sm font-semibold text-[#6d28d9] transition hover:bg-[#7c3aed]/20 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Simpan & Ajukan
               </button>
               <button
                 type="button"

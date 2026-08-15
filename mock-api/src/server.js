@@ -164,6 +164,7 @@ const journalBrief = (j) => {
     approvedBy: j.approvedBy,
     approvedAt: j.approvedAt,
     hasAttachment: (j.attachments ?? []).length > 0,
+    rejectionReason: j.rejectionReason,
     lines: j.lines,
   }
 }
@@ -816,8 +817,10 @@ app.post('/journals/:id/reject', requireAuth, requirePermission('journal.approve
   const journal = db.journals.find((j) => j.id === req.params.id)
   if (!journal) return fail(res, 404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
   if (journal.status !== 'pending-approval') return fail(res, 409, 'INVALID_STATUS_TRANSITION', 'Hanya jurnal pending-approval yang dapat di-reject')
+  const reason = req.body?.reason?.trim?.()
+  if (!reason) return fail(res, 422, 'REASON_REQUIRED', 'Alasan penolakan wajib diisi')
   journal.status = 'draft'
-  journal.rejectionReason = req.body?.reason ?? 'Tidak disetujui'
+  journal.rejectionReason = reason
   journal.auditTrail.push({ userId: req.user.id, action: 'reject', timestamp: nowIso() })
   ok(res, { id: journal.id, status: 'draft', rejectionReason: journal.rejectionReason })
 })

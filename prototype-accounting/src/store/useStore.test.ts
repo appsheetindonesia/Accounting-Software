@@ -415,6 +415,21 @@ describe('saveJournal — path online (via API)', () => {
     expect(useStore.getState().journals[0].status).toBe('draft')
   })
 
+  it('submit: createJournal dengan submitForApproval=true → status pending-approval langsung', async () => {
+    useStore.setState({ apiStatus: 'online', user: demoUser })
+    mockedApi.createJournal.mockResolvedValue({ ...createdJournal, status: 'pending-approval' })
+
+    await useStore.getState().saveJournal(input, 'submit')
+
+    expect(mockedApi.createJournal).toHaveBeenCalledWith(
+      expect.objectContaining({ transactionNumber: 'BKM-2026-03-0009', submitForApproval: true }),
+    )
+    expect(mockedApi.postJournal).not.toHaveBeenCalled()
+    const j = useStore.getState().journals[0]
+    expect(j.status).toBe('pending-approval')
+    expect(useStore.getState().toast?.message).toContain('diajukan untuk persetujuan')
+  })
+
   it('server menolak (ApiError) → jurnal TIDAK disimpan lokal, toast error', async () => {
     useStore.setState({ apiStatus: 'online', user: demoUser })
     mockedApi.createJournal.mockRejectedValue(new ApiError(422, 'JOURNAL_UNBALANCED', 'Total debit dan kredit harus sama'))
@@ -502,6 +517,7 @@ describe('approval workflow — submit/approve/reject', () => {
     expect(mockedApi.rejectJournal).toHaveBeenCalledWith('JNL-2026-03-006', 'Nominal tidak sesuai')
     const j = useStore.getState().journals.find((x) => x.id === 'JNL-2026-03-006')!
     expect(j.status).toBe('draft')
+    expect(j.rejectionReason).toBe('Nominal tidak sesuai') // tersimpan dari respons API
     expect(bal().get('5-3000')).toBe(6_000_000) // tetap tidak dihitung
   })
 

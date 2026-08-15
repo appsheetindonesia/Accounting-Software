@@ -323,17 +323,45 @@ test.describe('RG-05 s/d RG-08 — entitas, approval, search, periode', () => {
     await gotoNav(page, 'Dashboard')
     await expect(page.getByText('Rp 567.000.000', { exact: true }).first()).toBeVisible()
 
-    // 3. Jurnal 2 (BKM-0010): buat draft → submit → reject via UI → kembali Draft; saldo tetap 567jt
+    // 3. Jurnal 2 (BKM-0010): buat draft → submit → reject via UI (alasan WAJIB) →
+    //    kembali Draft; rejectionReason tampil di detail; saldo tetap 567jt
     await createDraftUi('RG-06 jurnal reject')
     await gotoNav(page, 'Jurnal')
     await page.locator('tbody tr', { hasText: 'BKM-2026-03-0010' }).first().getByRole('button', { name: 'Buka detail' }).click()
     await page.getByRole('button', { name: 'Submit', exact: true }).click()
     await expect(page.getByRole('status')).toContainText('diajukan untuk persetujuan')
+
+    // Reject membuka dialog dengan alasan wajib: tombol nonaktif tanpa isi
     await page.getByRole('button', { name: 'Reject', exact: true }).click()
+    const rejectDialog = page.getByRole('dialog', { name: 'Tolak jurnal' })
+    await expect(rejectDialog).toBeVisible()
+    await expect(rejectDialog.getByRole('button', { name: 'Reject', exact: true })).toBeDisabled()
+    await rejectDialog.getByLabel('Alasan penolakan').fill('Nomor bukti tidak valid')
+    await rejectDialog.getByRole('button', { name: 'Reject', exact: true }).click()
+
     await expect(page.getByRole('status')).toContainText('ditolak — kembali ke draft')
     await expect(page.locator('tbody').getByText('Draft', { exact: true }).first()).toBeVisible()
+    // rejectionReason tampil di detail jurnal (UI)
+    await expect(page.getByText('Ditolak — alasan: Nomor bukti tidak valid')).toBeVisible()
+
+    // Reload → alasan tetap tampil (berasal dari fetch ulang, bukan hanya state lokal)
+    await page.reload()
+    await expect(page.locator('footer')).toContainText('Online · Mock API', { timeout: 20_000 })
+    await gotoNav(page, 'Jurnal')
+    await page.locator('tbody tr', { hasText: 'BKM-2026-03-0010' }).first().getByRole('button', { name: 'Buka detail' }).click()
+    await expect(page.getByText('Ditolak — alasan: Nomor bukti tidak valid')).toBeVisible()
+
+    // 4. "Simpan & Ajukan" → jurnal langsung Menunggu Approval (tanpa submit manual)
+    const dialog2 = await openJournalModal(page)
+    await fillBalancedJournal(dialog2, '3000000', 'RG-06 simpan & ajukan langsung')
+    await dialog2.getByRole('button', { name: 'Simpan & Ajukan' }).click()
+    await expect(page.getByRole('status')).toContainText('diajukan untuk persetujuan')
+    await expect(page.locator('tbody').getByText('Menunggu Approval', { exact: true }).first()).toBeVisible()
+
     await gotoNav(page, 'Dashboard')
     await expect(page.getByText('Rp 567.000.000', { exact: true }).first()).toBeVisible() // tidak berubah
+
+    // 5. Detail server (UI tidak menampilkan audit trail): rejectionReason + riwayat lengkap
 
     // 4. Detail server (UI tidak menampilkan audit trail): rejectionReason + riwayat lengkap
     const token = await loginToken(request)
@@ -344,7 +372,7 @@ test.describe('RG-05 s/d RG-08 — entitas, approval, search, periode', () => {
     }
     const rejected = await (await request.get(`${API_BASE}/journals/${await findId('BKM-2026-03-0010')}`, { headers: h })).json()
     expect(rejected.data.status).toBe('draft')
-    expect(rejected.data.rejectionReason).toContain('Tidak disetujui')
+    expect(rejected.data.rejectionReason).toBe('Nomor bukti tidak valid')
     const audited = await (await request.get(`${API_BASE}/journals/${await findId('BKM-2026-03-0009')}`, { headers: h })).json()
     const actions = audited.data.auditTrail.map((a: { action: string }) => a.action)
     for (const expected of ['create', 'submit', 'approve']) expect(actions).toContain(expected)

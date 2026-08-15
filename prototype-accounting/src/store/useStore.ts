@@ -71,7 +71,7 @@ interface AccountingState {
   logout: () => void
   handleSessionExpired: () => void
 
-  saveJournal: (input: NewJournalInput, action: 'draft' | 'post') => Promise<void>
+  saveJournal: (input: NewJournalInput, action: 'draft' | 'submit' | 'post') => Promise<void>
   postJournal: (id: string) => Promise<void>
   submitJournal: (id: string) => Promise<void>
   approveJournal: (id: string) => Promise<void>
@@ -177,7 +177,7 @@ export const useStore = create<AccountingState>()(
                 description: ln.description,
               }
             }),
-            status: action === 'post' ? 'posted' : 'draft',
+            status: action === 'post' ? 'posted' : action === 'submit' ? 'pending-approval' : 'draft',
             source: 'manual' as const, // format persist v2
             createdBy: get().user?.name ?? 'Rina',
             createdAt: nowIso(),
@@ -187,7 +187,12 @@ export const useStore = create<AccountingState>()(
             journals: [entry, ...state.journals],
             modalOpen: false,
             toast: {
-              message: action === 'post' ? 'Jurnal berhasil diposting' : 'Jurnal disimpan sebagai draft',
+              message:
+                action === 'post'
+                  ? 'Jurnal berhasil diposting'
+                  : action === 'submit'
+                    ? 'Jurnal diajukan untuk persetujuan'
+                    : 'Jurnal disimpan sebagai draft',
               kind: 'success',
             },
           }
@@ -224,10 +229,10 @@ export const useStore = create<AccountingState>()(
         }))
       }
 
-      const localReject = (id: string) => {
+      const localReject = (id: string, reason: string) => {
         set((state) => ({
           journals: state.journals.map((j) =>
-            j.id === id && j.status === 'pending-approval' ? { ...j, status: 'draft' as const } : j,
+            j.id === id && j.status === 'pending-approval' ? { ...j, status: 'draft' as const, rejectionReason: reason } : j,
           ),
           toast: { message: 'Jurnal ditolak — kembali ke draft', kind: 'success' },
         }))
@@ -478,7 +483,7 @@ export const useStore = create<AccountingState>()(
         saveJournal: async (input, action) => {
           if (get().apiStatus === 'online') {
             try {
-              const created = await api.createJournal({ ...input, submitForApproval: false })
+              const created = await api.createJournal({ ...input, submitForApproval: action === 'submit' })
               let entry = enrichCreatedBy(toJournalEntry(created), get().user)
               if (action === 'post') {
                 const r = await api.postJournal(created.id)
@@ -488,7 +493,12 @@ export const useStore = create<AccountingState>()(
                 journals: [entry, ...s.journals],
                 modalOpen: false,
                 toast: {
-                  message: action === 'post' ? 'Jurnal berhasil diposting' : 'Jurnal disimpan sebagai draft',
+                  message:
+                    action === 'post'
+                      ? 'Jurnal berhasil diposting'
+                      : action === 'submit'
+                        ? 'Jurnal diajukan untuk persetujuan'
+                        : 'Jurnal disimpan sebagai draft',
                   kind: 'success',
                 },
               }))
@@ -641,17 +651,19 @@ export const useStore = create<AccountingState>()(
         rejectJournal: async (id, reason) => {
           if (get().apiStatus === 'online') {
             try {
-              await api.rejectJournal(id, reason)
+              const res = await api.rejectJournal(id, reason)
               set((s) => ({
                 journals: s.journals.map((j) =>
-                  j.id === id && j.status === 'pending-approval' ? { ...j, status: 'draft' as const } : j,
+                  j.id === id && j.status === 'pending-approval'
+                    ? { ...j, status: 'draft' as const, rejectionReason: res.rejectionReason }
+                    : j,
                 ),
                 toast: { message: 'Jurnal ditolak — kembali ke draft', kind: 'success' },
               }))
             } catch (e) {
               if (isNetworkError(e)) {
                 set({ apiStatus: 'offline' })
-                localReject(id)
+                localReject(id, reason ?? 'Tidak disetujui')
                 get().enqueueOffline(toOp({ kind: 'reject', ref: id, reason }))
                 return
               }
@@ -659,7 +671,7 @@ export const useStore = create<AccountingState>()(
             }
             return
           }
-          localReject(id)
+          localReject(id, reason ?? 'Tidak disetujui')
           get().enqueueOffline(toOp({ kind: 'reject', ref: id, reason }))
         },
 
@@ -742,8 +754,8 @@ export const useStore = create<AccountingState>()(
           for (const op of [...pending]) {
             try {
               if (op.kind === 'create') {
-                const created = await api.createJournal({ ...op.input, submitForApproval: false })
-                let status: JournalStatus = 'draft'
+                const created = await api.createJournal({ ...op.input, submitForApproval: op.action === 'submit' })
+                let status: JournalStatus = op.action === 'submit' ? 'pending-approval' : 'draft'
                 let postedAt: string | undefined
                 if (op.action === 'post') {
                   const r = await api.postJournal(created.id)

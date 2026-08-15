@@ -45,6 +45,8 @@ export interface JournalEntry {
   createdAt: string
   postedAt?: string
   reversalOf?: string
+  // Alasan penolakan saat Reject (workflow approval) — tampil di detail jurnal.
+  rejectionReason?: string
   // Asal jurnal — field baru sejak format persist v2. Migrasi v1→v2
   // menambahkan nilai default 'manual' ke jurnal lama (lihat persist.ts).
   source?: 'manual' | 'import'
@@ -60,11 +62,12 @@ export interface NewJournalInput {
 // Operasi jurnal offline yang belum tersinkron ke server (antrian).
 // Disimpan di localStorage (persist) agar tidak hilang saat reload, dan
 // di-flush ke API otomatis begitu koneksi pulih.
-//   create  → POST /journals (+ POST /post bila action='post')
+//   create  → POST /journals (submitForApproval bila action='submit';
+//              + POST /post bila action='post')
 //   post/reverse/delete/submit/approve/reject → transisi status pada jurnal
 // `ref` merujuk id jurnal (localId saat masih lokal, atau id server).
 export type OfflineJournalOp =
-  | { id: string; kind: 'create'; localId: string; input: NewJournalInput; action: 'draft' | 'post' }
+  | { id: string; kind: 'create'; localId: string; input: NewJournalInput; action: 'draft' | 'submit' | 'post' }
   | { id: string; kind: 'post' | 'submit' | 'approve' | 'reverse' | 'delete'; ref: string }
   | { id: string; kind: 'reject'; ref: string; reason?: string }
 

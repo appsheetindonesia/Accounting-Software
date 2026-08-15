@@ -362,6 +362,20 @@ describe('422 — Validasi bisnis (API §13)', () => {
     expectError(res, 422, 'PERIOD_CLOSED')
   })
 
+  it('reject tanpa alasan → REASON_REQUIRED', async () => {
+    const create = await request(app).post('/journals').set(auth()).send({
+      date: '2026-03-15',
+      submitForApproval: true,
+      lines: [
+        { accountId: '1-1100', debit: 1_000_000, credit: 0 },
+        { accountId: '4-1000', debit: 0, credit: 1_000_000 },
+      ],
+    })
+    expect(create.status).toBe(201)
+    const res = await request(app).post(`/journals/${create.body.data.id}/reject`).set(auth()).send({})
+    expectError(res, 422, 'REASON_REQUIRED')
+  })
+
   it('format kode akun salah → INVALID_CODE_FORMAT', async () => {
     const res = await request(app).post('/accounts').set(auth()).send({ code: 'abc', name: 'X', type: 'asset' })
     expectError(res, 422, 'INVALID_CODE_FORMAT')

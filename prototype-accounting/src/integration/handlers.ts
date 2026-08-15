@@ -193,6 +193,19 @@ export const handlers = [
     return ok({ journals: db.journals, totals: { debit, credit, difference: debit - credit } })
   }),
 
+  http.get('*/journals/next-number', ({ request }) => {
+    const user = currentUser(request)
+    if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
+    const url = new URL(request.url)
+    const prefix = url.searchParams.get('prefix') || 'BKM'
+    const period = url.searchParams.get('period') || '2026-03'
+    const existing = db.journals
+      .filter((j) => j.transactionNumber.startsWith(`${prefix}-${period}-`))
+      .map((j) => Number(j.transactionNumber.split('-').pop()))
+    const next = existing.length ? Math.max(...existing) + 1 : 1
+    return ok({ transactionNumber: `${prefix}-${period}-${String(next).padStart(4, '0')}` })
+  }),
+
   http.post('*/journals', async ({ request }) => {
     const user = currentUser(request)
     if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
@@ -333,8 +346,10 @@ export const handlers = [
     if (journal.status !== 'pending-approval')
       return fail(409, 'INVALID_STATUS_TRANSITION', 'Hanya jurnal pending-approval yang dapat di-reject')
     const { reason } = (await request.json()) as { reason?: string }
+    const trimmed = reason?.trim?.()
+    if (!trimmed) return fail(422, 'REASON_REQUIRED', 'Alasan penolakan wajib diisi')
     journal.status = 'draft'
-    journal.rejectionReason = reason ?? 'Tidak disetujui'
+    journal.rejectionReason = trimmed
     return ok({ id: journal.id, status: 'draft', rejectionReason: journal.rejectionReason })
   }),
 

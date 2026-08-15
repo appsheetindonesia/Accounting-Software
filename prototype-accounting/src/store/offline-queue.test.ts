@@ -122,6 +122,15 @@ describe('antrian offline — operasi masuk antrian saat server mati', () => {
     expect(useStore.getState().journals[0].status).toBe('posted')
   })
 
+  it('saveJournal offline action=submit: create op action submit, status pending-approval lokal', async () => {
+    await useStore.getState().saveJournal(input, 'submit')
+    const op = useStore.getState().offlineQueue[0]
+    expect(op.kind).toBe('create')
+    if (op.kind === 'create') expect(op.action).toBe('submit')
+    // Efek lokal: langsung menunggu approval walau offline
+    expect(useStore.getState().journals[0].status).toBe('pending-approval')
+  })
+
   it('postJournal / reverse / delete / submit / approve / reject offline → op masuk antrian', async () => {
     const draftId = useStore.getState().journals[5].id
     await useStore.getState().postJournal(draftId)

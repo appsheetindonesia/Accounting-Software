@@ -148,6 +148,9 @@ export const api = {
   getJournals() {
     return request<{ journals: ApiJournal[]; totals: { debit: number; credit: number; difference: number } }>('/journals', { query: { pageSize: 200 } })
   },
+  getNextNumber(prefix: string, period: string) {
+    return request<{ transactionNumber: string }>('/journals/next-number', { query: { prefix, period } })
+  },
   createJournal(input: {
     date: string
     transactionNumber?: string
@@ -253,5 +256,6 @@ export const toJournalEntry = (j: ApiJournal): JournalEntry => ({
   createdAt: j.createdAt,
   postedAt: j.postedAt,
   reversalOf: j.reversalOf,
+  rejectionReason: j.rejectionReason,
   source: j.source,
 })
