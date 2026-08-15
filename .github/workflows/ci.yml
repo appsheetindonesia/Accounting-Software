@@ -7,7 +7,9 @@
 #      Setiap tahap menulis laporan JUnit (test-results/junit.xml)
 #      dan meng-upload-nya sebagai artifact saat GAGAL — debug CI
 #      lebih mudah (nama artifact per tahap, mis. junit-unit-prototipe).
-#   2. e2e   — E2E Playwright RG-01..RG-19 (chromium + firefox)
+#   2. e2e     — E2E Playwright RG-01..RG-19 (chromium + firefox)
+#   3. qa-sync — gate sinkronisasi artefak QA: CSV/XLSX harus sinkron
+#                dengan QA Test Plan (scripts/check-qa-sync.py)
 #
 # Keuntungan paralel: unit & integration selesai dalam hitungan detik
 # (tidak tertahan oleh E2E ~3 menit); kegagalan satu job TIDAK menahan
@@ -18,10 +20,10 @@
 # dimatikan, server di-start fresh oleh runner).
 #
 # Pemicu: setiap push ke branch mana pun + pull request + manual.
-# JOB test (unit+integration, cepat) tetap berjalan di SEMUA push; job e2e
-# (~3 menit × 2 browser) di-skip pada push branch non-main agar hemat waktu
-# CI — hanya berjalan di push main, pull request, dan manual (lihat if: di
-# job e2e).
+# JOB test (unit+integration, cepat) dan qa-sync (gate sinkronisasi,
+# juga cepat) tetap berjalan di SEMUA push; job e2e (~3 menit × 2 browser)
+# di-skip pada push branch non-main agar hemat waktu CI — hanya berjalan
+# di push main, pull request, dan manual (lihat if: di job e2e).
 # ============================================================
 name: CI (Unit + Integration + E2E)
 
@@ -142,3 +144,25 @@ jobs:
           name: test-results
           path: e2e/test-results/
           retention-days: 7
+
+  qa-sync:
+    name: QA artifacts sinkron dengan QA Test Plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install openpyxl
+        run: pip install openpyxl
+
+      # Backup → regenerate (tanggal run dipin dari yang ter-commit) →
+      # bandingkan konten CSV/XLSX. Gagal jika QA Test Plan berubah tanpa
+      # artefak di-regenerasi (lihat scripts/check-qa-sync.py).
+      - name: Cek sinkronisasi CSV/XLSX dengan QA Test Plan
+        run: python scripts/check-qa-sync.py
