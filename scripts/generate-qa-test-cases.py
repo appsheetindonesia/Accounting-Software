@@ -15,6 +15,10 @@ Output:
   qa-test-results-testrail.csv      → template HASIL eksekusi per run, siap
                                       di-import balik ke TestRail sebagai
                                       result (kolom Status/Comment/Elapsed/…)
+  qa-test-results-testrail.json     → payload add_results_for_cases, ditulis
+                                      OTOMATIS oleh konverter setelah
+                                      regenerasi bila ada status terisi
+                                      (kosong → INFO, JSON tidak ditulis)
   qa-test-results-template.xlsx     → worksheet eksekusi per run: dropdown
                                       Passed/Failed/Blocked, ringkasan otomatis
                                       (COUNTIF) + release gate S1
@@ -41,6 +45,8 @@ from __future__ import annotations
 
 import argparse
 import csv
+import importlib.util
+import json
 import os
 import re
 import sys
@@ -558,6 +564,41 @@ def write_xlsx(records: list[dict], path: Path | None = None) -> Path:
     return path
 
 
+def run_payload_converter() -> None:
+    """Jalankan otomatis konverter payload TestRail (convert-results-to-testrail.py)
+    setelah CSV hasil diregenerasi.
+
+    Status kosong / 'Not Run' / ID non-numerik tanpa --mapping dilewati
+    (aturan konverter). Bila tidak ada result siap kirim, beri INFO tanpa
+    menggagalkan generator — CSV hasil memang TEMPLATE yang diisi QA per run;
+    begitu status terisi, regenerasi berikutnya otomatis menulis
+    `qa-test-results-testrail.json`.
+    """
+    results_csv = ROOT / "qa-test-results-testrail.csv"
+    out_json = ROOT / "qa-test-results-testrail.json"
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "convert_results_to_testrail",
+            ROOT / "scripts" / "convert-results-to-testrail.py",
+        )
+        assert spec and spec.loader is not None
+        conv = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(conv)
+        results, stats = conv.convert(results_csv, {})
+    except Exception as e:  # konverter rusak/jarang — jangan hentikan generator
+        print(f"[WARN] Konverter payload tidak dijalankan: {e}")
+        return
+    if not results:
+        print("[INFO] Payload TestRail kosong — belum ada status terisi yang bisa "
+              "dikirim (atau butuh --mapping untuk ID non-numerik). "
+              "JSON tidak ditulis.")
+        return
+    out_json.write_text(
+        json.dumps({"results": results}, indent=2, ensure_ascii=False),
+        encoding="utf-8")
+    print(f"[OK] Payload TestRail: {out_json} ({len(results)} result siap kirim)")
+
+
 def write_results_csv(records: list[dict], path: Path | None = None) -> Path:
     """Template hasil eksekusi per run — siap di-import balik ke TestRail
     sebagai result (Test Run → Import Results → CSV). Kolom mengikuti format
@@ -758,6 +799,8 @@ def main() -> None:
     for f in (write_testrail_csv, write_tracker_csv, write_xlsx, write_results_csv, write_results_template_xlsx):
         print(f"[OK] {f(records)}")
     print(f"\nTotal: {len(tc)} TC + {len(rg)} RG = {len(records)} test case")
+    # Otomatis lanjut ke konverter payload TestRail (bila ada status terisi)
+    run_payload_converter()
 
 
 if __name__ == "__main__":
