@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, Landmark, Plus } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import { api } from '../../api'
+import { useApiFetch } from '../../hooks/useApiFetch'
 import { computeBalanceSheet, type BalanceSheetLine, type BalanceSheetView } from '../../lib/ledger'
 import { formatIDR } from '../../lib/format'
 import { canWriteJournal } from '../../lib/permissions'
+import { SkeletonLines } from '../Skeleton'
 import ExportButtons from './ExportButtons'
 
 const PERIODS = [
@@ -36,8 +38,6 @@ export default function BalanceSheetPage() {
   const user = useStore((s) => s.user)
   const canWrite = canWriteJournal(user?.role)
   const [periodIdx, setPeriodIdx] = useState(2) // Maret 2026
-  const [apiView, setApiView] = useState<BSView | null>(null)
-  const [offline, setOffline] = useState(false)
 
   const period = PERIODS[periodIdx]
 
@@ -53,14 +53,11 @@ export default function BalanceSheetPage() {
 
   // Data via API: GET /reports/balance-sheet?asOf= (tunggu koneksi menetap)
   const ready = apiStatus === 'online' || apiStatus === 'offline'
-  useEffect(() => {
-    if (!ready) return
-    let alive = true
-    setOffline(false)
-    api
-      .getBalanceSheet(period.end)
-      .then((d) => {
-        if (!alive) return
+  const { data: apiView, loading, offline } = useApiFetch<BSView>(
+    `balance-sheet:${period.key}:${apiStatus}`,
+    ready,
+    () =>
+      api.getBalanceSheet(period.end).then((d) => {
         const mk = (title: string) => {
           const section = d.sections.find((s) => s.title === title)
           return {
@@ -78,31 +75,20 @@ export default function BalanceSheetPage() {
         const retained = liabEq.lines.find((l) => l.name.includes('Laba Ditahan'))?.amount ?? 0
         const totalLiabEq = liabEqSum + retained
         const balanced = d.totalAssets === totalLiabEq
-        setApiView(
-          toBSView(
-            {
-              sections: [aset, liabEq],
-              totalAssets: d.totalAssets,
-              totalLiabilitiesEquity: totalLiabEq,
-              balanced,
-              difference: d.totalAssets - totalLiabEq,
-              netIncome: retained,
-            },
-            `Per ${d.asOf.slice(8)} ${['Januari', 'Februari', 'Maret'][periodIdx]} ${period.key.slice(0, 4)}`,
-          ),
+        return toBSView(
+          {
+            sections: [aset, liabEq],
+            totalAssets: d.totalAssets,
+            totalLiabilitiesEquity: totalLiabEq,
+            balanced,
+            difference: d.totalAssets - totalLiabEq,
+            netIncome: retained,
+          },
+          `Per ${d.asOf.slice(8)} ${['Januari', 'Februari', 'Maret'][periodIdx]} ${period.key.slice(0, 4)}`,
         )
-      })
-      .catch(() => {
-        if (alive) {
-          setApiView(null)
-          setOffline(true)
-        }
-      })
-    return () => {
-      alive = false
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [periodIdx, ready])
+      }),
+    () => localView,
+  )
 
   const view: BSView = apiView ?? localView
   const empty = view.sections.every((s) => s.lines.length === 0)
@@ -174,61 +160,70 @@ export default function BalanceSheetPage() {
         </p>
       )}
 
-      {/* Indikator keseimbangan Aset = Kewajiban + Ekuitas */}
-      <div
-        className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-5 py-4 shadow-card ${
-          view.balanced ? 'border-ok/40 bg-ok/10' : 'border-bad/40 bg-bad/10'
-        }`}
-      >
-        <div className="flex items-center gap-3">
-          <Landmark size={20} className={view.balanced ? 'text-ok' : 'text-bad'} />
-          <div>
-            <p className={`text-sm font-bold ${view.balanced ? 'text-ok' : 'text-bad'}`}>
-              {view.balanced ? '✓ Seimbang (Aset = Kewajiban + Ekuitas)' : '✗ Tidak seimbang'}
-            </p>
-            <p className="text-xs text-ink-soft">
-              Aset {formatIDR(view.totalAssets)} = Kewajiban + Ekuitas {formatIDR(view.totalLiabEq)}
-              {!view.balanced && <> · selisih {formatIDR(Math.abs(view.difference))}</>}
-            </p>
-          </div>
-        </div>
-        <div className="num text-right text-sm">
-          <span className="font-semibold text-ink">A {formatIDR(view.totalAssets)}</span>
-          <span className="mx-2 text-ink-faint">=</span>
-          <span className="font-semibold text-ink">K+E {formatIDR(view.totalLiabEq)}</span>
-        </div>
-      </div>
-
-      {empty ? (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-line-strong bg-surface px-6 py-16 text-center">
-          <div className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <Landmark size={22} />
-          </div>
-          <p className="text-sm font-semibold text-ink">Belum ada transaksi di periode ini</p>
-          <p className="max-w-sm text-sm text-ink-soft">
-            Posting jurnal pada {period.label} untuk melihat posisi keuangan.
-          </p>
-          {canWrite && (
-            <button
-              type="button"
-              onClick={openModal}
-              className="mt-1 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-primary-light"
-            >
-              <Plus size={15} /> Buat Jurnal
-            </button>
-          )}
+      {loading && !apiView ? (
+        <div className="space-y-5">
+          <SkeletonLines rows={3} />
+          <SkeletonLines rows={6} />
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-card">
-          <div className="border-b border-line bg-canvas px-5 py-4">
-            <p className="text-sm font-bold text-ink">{entityName}</p>
-            <p className="text-xs text-ink-soft">
-              Laporan Neraca · {view.asOfLabel}
-            </p>
+        <>
+          {/* Indikator keseimbangan Aset = Kewajiban + Ekuitas */}
+          <div
+            className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-5 py-4 shadow-card ${
+              view.balanced ? 'border-ok/40 bg-ok/10' : 'border-bad/40 bg-bad/10'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <Landmark size={20} className={view.balanced ? 'text-ok' : 'text-bad'} />
+              <div>
+                <p className={`text-sm font-bold ${view.balanced ? 'text-ok' : 'text-bad'}`}>
+                  {view.balanced ? '✓ Seimbang (Aset = Kewajiban + Ekuitas)' : '✗ Tidak seimbang'}
+                </p>
+                <p className="text-xs text-ink-soft">
+                  Aset {formatIDR(view.totalAssets)} = Kewajiban + Ekuitas {formatIDR(view.totalLiabEq)}
+                  {!view.balanced && <> · selisih {formatIDR(Math.abs(view.difference))}</>}
+                </p>
+              </div>
+            </div>
+            <div className="num text-right text-sm">
+              <span className="font-semibold text-ink">A {formatIDR(view.totalAssets)}</span>
+              <span className="mx-2 text-ink-faint">=</span>
+              <span className="font-semibold text-ink">K+E {formatIDR(view.totalLiabEq)}</span>
+            </div>
           </div>
-          <Section title="ASET" lines={view.sections[0].lines} total={view.totalAssets} />
-          <Section title="KEWAJIBAN & EKUITAS" lines={view.sections[1].lines} total={view.totalLiabEq} />
-        </div>
+
+          {empty ? (
+            <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-line-strong bg-surface px-6 py-16 text-center">
+              <div className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <Landmark size={22} />
+              </div>
+              <p className="text-sm font-semibold text-ink">Belum ada transaksi di periode ini</p>
+              <p className="max-w-sm text-sm text-ink-soft">
+                Posting jurnal pada {period.label} untuk melihat posisi keuangan.
+              </p>
+              {canWrite && (
+                <button
+                  type="button"
+                  onClick={openModal}
+                  className="mt-1 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-primary-light"
+                >
+                  <Plus size={15} /> Buat Jurnal
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-card">
+              <div className="border-b border-line bg-canvas px-5 py-4">
+                <p className="text-sm font-bold text-ink">{entityName}</p>
+                <p className="text-xs text-ink-soft">
+                  Laporan Neraca · {view.asOfLabel}
+                </p>
+              </div>
+              <Section title="ASET" lines={view.sections[0].lines} total={view.totalAssets} />
+              <Section title="KEWAJIBAN & EKUITAS" lines={view.sections[1].lines} total={view.totalLiabEq} />
+            </div>
+          )}
+        </>
       )}
 
       <p className="text-xs text-ink-faint">
