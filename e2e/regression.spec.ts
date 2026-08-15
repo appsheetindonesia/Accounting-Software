@@ -235,7 +235,7 @@ test.describe('RG-05 s/d RG-08 — entitas, approval, search, periode', () => {
   test('RG-05 Multi-entitas: data terisolasi via X-Entity-Id', async ({ page, request }) => {
     test.info().annotations.push({
       type: 'Gap',
-      description: 'Switch entitas belum ada di prototipe (sidebar statis PT Maju Jaya) — isolasi diverifikasi via header X-Entity-Id.',
+      description: 'Switch entitas belum ada di prototipe (sidebar statis PT. Kreasi Inovasi Estetika) — isolasi diverifikasi via header X-Entity-Id.',
     })
     const token = await loginToken(request)
     const h = authHeaders(token)
@@ -268,7 +268,7 @@ test.describe('RG-05 s/d RG-08 — entitas, approval, search, periode', () => {
     const ents = await (await request.get(`${API_BASE}/entities`, { headers: h })).json()
     expect(ents.data.map((e: { id: string }) => e.id).sort()).toEqual(['ent-001', 'ent-002'])
     await gotoNav(page, 'Dashboard')
-    await expect(page.getByText('PT Maju Jaya', { exact: true }).first()).toBeVisible()
+    await expect(page.getByText('PT. Kreasi Inovasi Estetika', { exact: true }).first()).toBeVisible()
   })
 
   test('RG-06 Approval flow: saldo hanya berubah saat approve; reject kembali draft', async ({ page, request }) => {

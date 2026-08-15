@@ -3,7 +3,7 @@
 Implementasi **semua endpoint** di `API - Accounting.md` dengan **logika akuntansi nyata**
 (double-entry), siap dipakai pengembangan frontend tanpa backend asli.
 
-- **Stack:** Node.js + Express 5 (tanpa database — state in-memory, reset saat restart)
+- **Stack:** Node.js + Express 5 (tanpa database — state in-memory, **persistence JSON opsional**)
 - **Port:** `4000` (override dengan env `MOCK_API_PORT`)
 - **Base URL:** `http://localhost:4000`
 
@@ -16,6 +16,21 @@ npm start          # atau: npm run dev (auto-restart saat edit file)
 ```
 
 Health check: `http://localhost:4000/health`
+
+## Dev terpadu (mock API + Vite bersamaan)
+
+Dari **root repo**, jalankan keduanya dengan satu perintah — seed di-reset otomatis
+begitu kedua server hidup, jadi prototipe selalu dibuka terhadap baseline yang terverifikasi:
+
+```bash
+npm install        # sekali saja di mock-api/ DAN prototype-accounting/
+node scripts/dev.mjs            # seed awal (Maret 2026)
+node scripts/dev.mjs --extra    # + jurnal lintas bulan (Jan–Feb 2026)
+```
+
+- Mock API (auto-restart saat edit file) → `http://localhost:4000`, prototipe → `http://localhost:5173`
+- URL Vite terdeteksi otomatis dari output (kebal jika port 5173 sibuk → berpindah)
+- `Ctrl+C` menghentikan kedua proses sekaligus (pohon proses ikut dimatikan)
 
 ## Integration test (Vitest + Supertest)
 
@@ -33,15 +48,36 @@ Modal 363jt; Neraca 557 = 150 + 363 + 44 (isBalanced); Trial balance 668 = 668;
 Laba Rugi 155 − 111 = 44jt; dashboard 4 kartu; alert 2 draft; posting 10jt → saldo
 live (87→97, 155→165, 557→567); reverse → kembali ke baseline (net 0).
 
+## Persistence opsional (jurnal tidak hilang saat restart)
+
+Secara **default AKTIF**: state (jurnal, akun, periode, sesi refresh token) disimpan ke file
+JSON setiap kali ada mutasi sukses, dan dimuat kembali saat server start — jurnal yang sudah
+diposting **tidak hilang** saat restart. File disimpan di `mock-api/.data/db.json` (ter-ignore git).
+
+| Env | Efek |
+|-----|------|
+| `MOCK_API_PERSIST=1` (default) | Persistence AKTIF — state dimuat & disimpan ke file |
+| `MOCK_API_PERSIST=0` | **Nonaktifkan** — perilaku in-memory lama (reset saat restart) |
+| `MOCK_API_PERSIST_FILE=<path>` | Lokasi file custom (default `.data/db.json`) |
+
+```bash
+MOCK_API_PERSIST=0 npm start        # tanpa persistence
+MOCK_API_PERSIST_FILE=/tmp/state.json npm start
+```
+
+Catatan: file rusak / bentuk salah → otomatis jatuh ke seed awal (log peringatan).
+`POST /admin/reset` & `POST /admin/seed-bulk` juga ikut di-persist (kecuali seed-bulk yang
+sengaja dikecualikan agar file tidak membengkak dengan data uji massal RG-09).
+
 ## Reset & seed tambahan
 
-State server **in-memory** — dua cara mengembalikan ke seed:
+Dua cara mengembalikan ke seed (persistence ikut di-reset juga):
 
 | Perintah | Efek |
 |----------|------|
 | `npm run reset` | Reset state server yang berjalan ke **seed awal** (Maret 2026) — tanpa restart |
 | `npm run seed:extra` | Muat **seed + jurnal lintas bulan** (Januari & Februari 2026, periode tertutup) |
-| (restart `npm start`) | Otomatis kembali ke seed awal |
+| `MOCK_API_PERSIST=0 npm start` | Tanpa persistence → restart otomatis kembali ke seed awal |
 
 Keduanya memanggil `POST /admin/reset` (dev-only, tanpa auth) di `http://localhost:4000`.
 Contoh pemakaian: setelah pengujian QA lewat API, `npm run reset` membersihkan jurnal uji
@@ -59,8 +95,8 @@ Multi-tenant: jurnal kini membawa `entityId` (dari `X-Entity-Id`, default entita
 | Peran | Email | Password |
 |-------|-------|----------|
 | Admin | `rina@bukuwarung.com` | `password123` |
-| Akuntan | `dimas@majujaya.co.id` | `password123` |
-| Viewer | `budi@majujaya.co.id` | `password123` |
+| Akuntan | `dimas@estetikakreasi.co.id` | `password123` |
+| Viewer | `budi@estetikakreasi.co.id` | `password123` |
 
 Semua endpoint (kecuali `/auth/login` & `/auth/refresh`) butuh
 `Authorization: Bearer mock.<userId>` — token didapat dari `POST /auth/login`.
@@ -113,7 +149,7 @@ Katalog error: `VALIDATION_ERROR`, `INVALID_CREDENTIALS`, `UNAUTHORIZED`, `FORBI
 
 ## Data mock (konsisten dengan prototipe & PRD Ver 3 §16)
 
-- **Entitas:** PT Maju Jaya (aktif), CV Karya Mandiri
+- **Entitas:** PT. Kreasi Inovasi Estetika (aktif), CV Karya Mandiri
 - **COA:** 12 akun (Aset, Utang, Modal, Pendapatan, Beban) + template COA UKM PSAK
 - **Jurnal Maret 2026:** 8 jurnal (5 posted, 2 draft, 1 reversed) — total posted 98jt debit/kredit
 - **Jurnal lintas bulan (opsional, `npm run seed:extra`):** 7 jurnal tambahan — Januari (3: BKM, BKK sewa, BKK gaji) & Februari (4: BKM, BKK listrik, BKK gaji, JV piutang), semua posted di periode tertutup; berguna untuk menguji navigasi periode, saldo awal buku besar, dan laporan lintas bulan. Saldo berantai Kas: 60 → 40 (Jan) → 64 (Feb) → 91jt (Mar)

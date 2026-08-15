@@ -6,14 +6,14 @@
 // ============================================================
 
 export const entities = [
-  { id: 'ent-001', name: 'PT Maju Jaya', code: 'MJ-001', address: 'Jl. Sudirman No. 45, Jakarta', isActive: true, createdAt: '2025-01-01T00:00:00Z' },
+  { id: 'ent-001', name: 'PT. Kreasi Inovasi Estetika', code: 'KI-001', address: 'Jl. Sudirman No. 45, Jakarta', isActive: true, createdAt: '2025-01-01T00:00:00Z' },
   { id: 'ent-002', name: 'CV Karya Mandiri', code: 'KM-002', address: 'Jl. Diponegoro No. 12, Bandung', isActive: false, createdAt: '2025-06-01T00:00:00Z' },
 ]
 
 export const users = [
   { id: 'user-001', name: 'Rina', email: 'rina@bukuwarung.com', password: 'password123', role: 'admin', entityId: 'ent-001', isActive: true, createdAt: '2025-01-01T00:00:00Z' },
-  { id: 'user-002', name: 'Dimas', email: 'dimas@majujaya.co.id', password: 'password123', role: 'accountant', entityId: 'ent-001', isActive: true, createdAt: '2025-01-02T00:00:00Z' },
-  { id: 'user-003', name: 'Budi', email: 'budi@majujaya.co.id', password: 'password123', role: 'viewer', entityId: 'ent-001', isActive: true, createdAt: '2025-01-03T00:00:00Z' },
+  { id: 'user-002', name: 'Dimas', email: 'dimas@estetikakreasi.co.id', password: 'password123', role: 'accountant', entityId: 'ent-001', isActive: true, createdAt: '2025-01-02T00:00:00Z' },
+  { id: 'user-003', name: 'Budi', email: 'budi@estetikakreasi.co.id', password: 'password123', role: 'viewer', entityId: 'ent-001', isActive: true, createdAt: '2025-01-03T00:00:00Z' },
 ]
 
 // Role → izin (sama dengan FRD §role & API §2.4 /auth/me)
@@ -23,7 +23,7 @@ export const rolePermissions = {
   viewer: ['report.read', 'export.read'],
 }
 
-// Chart of Accounts — PT Maju Jaya (PRD Ver 3 §16, API §4)
+// Chart of Accounts — PT. Kreasi Inovasi Estetika (PRD Ver 3 §16, API §4)
 // baseBalance = saldo awal (opening, sebelum transaksi Maret 2026).
 // parentId null = akun level atas; isHeader = akun grup (tidak diinput jurnal).
 export const accounts = [

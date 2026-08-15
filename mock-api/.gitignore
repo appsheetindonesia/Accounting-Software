@@ -1,0 +1,9 @@
+# State persistence mock API — data pengguna, jangan di-commit
+.data/
+
+# Log runtime mock API — mock-api.log, *.err, nohup.out, dsb.
+# (aturan khusus sub-proyek ini agar tidak pernah ter-commit
+#  walau aturan root *.log dihapus/diubah)
+*.log
+*.err
+nohup.out

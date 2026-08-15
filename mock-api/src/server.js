@@ -10,6 +10,7 @@ import express from 'express'
 import cors from 'cors'
 import { randomUUID } from 'crypto'
 import { entities, users, rolePermissions, accounts, coaTemplate, journals, periods, mockTrend, extraJournals } from './data.js'
+import { isEnabled as persistEnabled, getFilePath as persistFilePath, loadState as loadPersisted, saveState as savePersisted } from './persistence.js'
 
 const app = express()
 app.use(cors())
@@ -35,6 +36,52 @@ const createDb = ({ withExtra = false } = {}) => ({
 })
 
 let db = createDb()
+
+// ------------------------------------------------------------
+// Persistence opsional (MOCK_API_PERSIST / MOCK_API_PERSIST_FILE)
+// - AKTIF secara default: state dimuat dari file saat start dan
+//   disimpan setelah setiap mutasi sukses → jurnal yang diposting
+//   tidak hilang saat restart.
+// - Nonaktifkan: MOCK_API_PERSIST=0 (perilaku in-memory lama).
+// ------------------------------------------------------------
+const PERSIST = persistEnabled()
+const PERSIST_FILE = persistFilePath()
+
+if (PERSIST) {
+  const loaded = loadPersisted(PERSIST_FILE)
+  if (loaded) {
+    db = {
+      entities: loaded.entities,
+      users: loaded.users,
+      accounts: loaded.accounts,
+      journals: loaded.journals,
+      periods: loaded.periods,
+      sessions: new Map(loaded.sessions ?? []),
+      seq: loaded.seq ?? { journal: 100, line: 100, attachment: 100, user: 100, entity: 100 },
+    }
+    console.log(`💾 [persist] State dimuat dari ${PERSIST_FILE} (${db.journals.length} jurnal)`)
+  } else {
+    // File belum ada / rusak → seed awal, sekaligus tulis file agar
+    // state berikutnya punya baseline yang konsisten.
+    savePersisted(PERSIST_FILE, db)
+  }
+}
+
+// Simpan state setelah MUTASI sukses (status < 400). Dikecualikan:
+// - GET/HEAD/OPTIONS (read-only)
+// - POST /admin/seed-bulk (data uji massal RG-09, tidak perlu disimpan
+//   dan JSON-nya besar — membuat file persist membengkak)
+if (PERSIST) {
+  app.use((req, res, next) => {
+    const mutating = !['GET', 'HEAD', 'OPTIONS'].includes(req.method)
+    if (mutating && !req.path.startsWith('/admin/seed-bulk')) {
+      res.on('finish', () => {
+        if (res.statusCode < 400) savePersisted(PERSIST_FILE, db)
+      })
+    }
+    next()
+  })
+}
 
 // ------------------------------------------------------------
 // Helper
@@ -972,7 +1019,7 @@ app.get('/reports/cash-flow', requireAuth, (req, res) => {
 
 app.get('/reports/:id', requireAuth, (req, res) => {
   // Laporan tersimpan — mock: cari di katalog statis
-  const report = { id: req.params.id, type: 'income-statement', entity: { id: req.entityId, name: 'PT Maju Jaya' }, generatedAt: nowIso(), note: 'Laporan tersimpan (mock)' }
+  const report = { id: req.params.id, type: 'income-statement', entity: { id: req.entityId, name: 'PT. Kreasi Inovasi Estetika' }, generatedAt: nowIso(), note: 'Laporan tersimpan (mock)' }
   ok(res, report)
 })
 
