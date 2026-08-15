@@ -20,13 +20,20 @@ cd prototype-accounting && npm install && npm run dev   # http://localhost:5173
 node scripts/dev.mjs                     # http://localhost:5173 · http://localhost:4000
 node scripts/dev.mjs --extra             # + jurnal lintas bulan (Jan–Feb 2026)
 node scripts/dev.mjs --reset             # paksa seed segar walau persistence aktif
-MOCK_API_PERSIST=0 node scripts/dev.mjs  # tanpa persistence (seed di-reset tiap boot)
+node scripts/dev.mjs --no-persist        # tanpa persistence (seed di-reset tiap boot)
+
+# Sama lewat npm dari root (package.json root):
+npm run dev / dev:extra / dev:reset / dev:no-persist
 ```
 
 Persistence mock API default **AKTIF** → saat keduanya hidup, state tersimpan (jurnal yang
 diposting) dimuat, bukan di-reset. Untuk loop dev seed-segar, pakai `--reset` atau `MOCK_API_PERSIST=0`.
 
-Jika mock API mati, prototipe otomatis masuk **mode offline**: banner di bawah top bar + footer "Offline · Data lokal", data dari localStorage/seed, mutasi tetap jalan lokal. Klik "Coba lagi" untuk menyambung ulang.
+Jika mock API mati, prototipe otomatis masuk **mode offline**: banner di bawah top bar + footer "Offline · Data dari cache (sinkron X)", data dari localStorage/seed, mutasi tetap jalan lokal. Klik "Coba lagi" untuk menyambung ulang. Banner menampilkan **indikator keaslian data**: `Data dari cache · sinkron terakhir 10 menit lalu` (waktu sinkron terakhir dicatat di `lastSyncedAt` saat login/init/flush sukses, dipersist lintas reload — migrasi v5; kalau belum pernah sinkron: `Data demo lokal · belum pernah tersinkron`).
+
+**Migrasi seed & rehidrasi localStorage:** persist memakai **migrasi PER-VERSION** (`MIGRATIONS[v]` di `src/store/persist.ts`, dari versi tersimpan → `CURRENT_VERSION=5`): v1→v2 menambah field `source` pada jurnal, v2→v3 menambah akun seed **1-1500 Kas Kecil** (base 0, seimbang), v3→v4 antrian offline, v4→v5 `lastSyncedAt`; langkah akhir me-refresh seed (jurnal seed diganti nilai terbaru, **jurnal buatan pengguna bertahan**). Upgrade versi menembak handler → **toast "Data lokal dimigrasi ke versi baru (vX → v5) — N jurnal pengguna dipertahankan"** agar user tahu statenya tidak hilang. Dibuktikan test integrasi `src/store/rehydration.test.ts` (rehidrasi penuh lewat localStorage NYATA: upgrade + toast, sesi/antrian bertahan, round-trip save→storage→reload, storage korup aman) + unit per-version & handler di `persist.test.ts`.
+
+**Sinkronisasi antrian offline:** saat server mati, semua operasi jurnal (buat/posting/reverse/delete/submit/approve/reject) selain diterapkan lokal juga **masuk antrian** (`offlineQueue`, dipersist di localStorage — tidak hilang saat reload; versi persist v4). Begitu koneksi pulih — deteksi otomatis via **retry backoff eksponensial** (2s → 4s → 8s → … → 30s, reset saat online; `lib/retry.ts`) yang mencoba `init({ silent: true })` ulang sendiri tanpa user menekan "Coba lagi" — antrian di-*flush* ke API berurutan (id lokal di-remap ke id server, urutan dijaga) lalu state di-rekonsiliasi dari server. Banner offline menampilkan jumlah operasi yang menunggu; saat sinkron berjalan muncul banner "Menyinkronkan…". Operasi yang ditolak server (mis. periode tertutup) dikeluarkan dari antrian dengan toast error; jaringan putus di tengah flush membuat sisa operasi tetap antri untuk percobaan berikutnya.
 
 Base URL API bisa diubah lewat env `VITE_API_URL` (default `http://localhost:4000`).
 
@@ -35,7 +42,7 @@ Build, lint & test:
 ```bash
 npm run build
 npm run lint
-npm test          # Vitest — unit (akuntansi, Buku Besar/Laba Rugi, migrasi persist, refresh token) + integration MSW (88 test)
+npm test          # Vitest — unit (akuntansi, Buku Besar/Laba Rugi/Neraca/Neraca Lajur, migrasi persist per-version, refresh token, antrian offline, rehidrasi localStorage) + property-based (fast-check) + integration MSW (151 test)
 ```
 
 ## Yang Bisa Dicoba
@@ -50,7 +57,8 @@ npm test          # Vitest — unit (akuntansi, Buku Besar/Laba Rugi, migrasi pe
 - **Laba Rugi**: dihitung live dari jurnal posted (Pendapatan − Beban = Laba/Rugi Bersih), selector periode, empty state
 - **Neraca Lajur**: trial balance live (saldo YTD per akhir periode), kolom Debit/Kredit per akun, indikator **✓ Seimbang (Debit = Kredit)**, nav periode
 - **Neraca**: posisi keuangan live (section ASET & KEWAJIBAN + EKUITAS + Laba Ditahan berjalan), indikator **✓ Seimbang (Aset = Kewajiban + Ekuitas)**, "Per 31 Maret 2026", nav periode
-- Modul lain (Arus Kas, Laporan Lain, Pengaturan) menampilkan halaman placeholder
+- **Pengaturan**: tombol **"Reset ke data demo"** membuka modal konfirmasi (rincian yang dihapus: jurnal lokal, antrian offline, status server) — saat online memanggil `POST /admin/reset` di mock API **dan** membersihkan localStorage, jadi satu klik mereset lokal + server sekaligus; saat offline hanya reset lokal (toast mengabari server tidak ikut ter-reset)
+- **Akses cepat reset dari halaman mana pun**: klik **avatar user** (top bar) → dropdown berisi info akun + **Pengaturan** / **Reset data demo** (membuka modal konfirmasi yang sama) / **Keluar
 
 ## Lapisan API (async fetch — `API - Accounting.md`)
 

@@ -33,6 +33,10 @@ const API_PORT = Number(process.env.MOCK_API_PORT) || 4000
 const API_HEALTH_URL = `http://localhost:${API_PORT}/health`
 const withExtra = process.argv.includes('--extra')
 const forceReset = process.argv.includes('--reset')
+const noPersist = process.argv.includes('--no-persist')
+// --no-persist: nonaktifkan persistence (state in-memory, reset tiap boot)
+// dan teruskan ke child (mock API) via env.
+if (noPersist) process.env.MOCK_API_PERSIST = '0'
 // Sama dengan parsing di mock-api/src/persistence.js
 const persistOn = !['0', 'false', 'off', 'no', 'n', 'disabled'].includes(
   String(process.env.MOCK_API_PERSIST ?? '1').trim().toLowerCase(),

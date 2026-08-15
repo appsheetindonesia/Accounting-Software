@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, Landmark, Plus } from 'lucide-react'
-import { useStore, isEffectJournal } from '../../store/useStore'
+import { useStore } from '../../store/useStore'
 import { api } from '../../api'
+import { computeBalanceSheet, type BalanceSheetLine, type BalanceSheetView } from '../../lib/ledger'
 import { formatIDR } from '../../lib/format'
-import type { Account, JournalEntry } from '../../types'
 
 const PERIODS = [
   { key: '2026-01', label: 'Januari 2026', end: '2026-01-31' },
@@ -11,38 +11,17 @@ const PERIODS = [
   { key: '2026-03', label: 'Maret 2026', end: '2026-03-31' },
 ]
 
-interface BSLine {
-  code: string
-  name: string
-  amount: number
-  isBold?: boolean
-}
-
-interface BSView {
+// BSView = hasil lib + label lokal (asOfLabel dipakai di kop laporan)
+interface BSView extends BalanceSheetView {
   asOfLabel: string
-  sections: { title: string; lines: BSLine[]; total: number }[]
-  totalAssets: number
-  totalLiabEq: number
-  balanced: boolean
-  difference: number
-  netIncome: number
+  totalLiabEq: number // alias tampilan = totalLiabilitiesEquity
 }
 
-// Saldo YTD per akhir periode (fallback offline & kalkulasi keseimbangan)
-function closingMap(accounts: Account[], journals: JournalEntry[], end: string) {
-  const closing = new Map<string, number>()
-  for (const a of accounts) closing.set(a.id, a.baseBalance)
-  for (const j of journals) {
-    if (!isEffectJournal(j) || j.date > end) continue
-    for (const ln of j.lines) {
-      const account = accounts.find((a) => a.id === ln.accountId)
-      if (!account) continue
-      const delta = account.normalBalance === 'debit' ? ln.debit - ln.credit : ln.credit - ln.debit
-      closing.set(account.id, (closing.get(account.id) ?? 0) + delta)
-    }
-  }
-  return closing
-}
+const toBSView = (v: BalanceSheetView, asOfLabel: string): BSView => ({
+  ...v,
+  asOfLabel,
+  totalLiabEq: v.totalLiabilitiesEquity,
+})
 
 export default function BalanceSheetPage() {
   const accounts = useStore((s) => s.accounts)
@@ -55,42 +34,15 @@ export default function BalanceSheetPage() {
 
   const period = PERIODS[periodIdx]
 
-  // Fallback offline + kalkulasi keseimbangan dari data lokal
-  const localView = useMemo<BSView>(() => {
-    const closing = closingMap(accounts, journals, period.end)
-    const sumOf = (type: 'asset' | 'liability' | 'equity' | 'revenue' | 'expense') =>
-      accounts.filter((a) => a.type === type).reduce((s, a) => s + (closing.get(a.id) ?? 0), 0)
-    const totalAssets = sumOf('asset')
-    const totalLiab = sumOf('liability')
-    const totalEquity = sumOf('equity')
-    const netIncome = sumOf('revenue') - sumOf('expense')
-    const totalLiabEq = totalLiab + totalEquity + netIncome
-    const balanced = totalAssets === totalLiabEq
-
-    const assetLines = accounts
-      .filter((a) => a.type === 'asset' && (closing.get(a.id) ?? 0) !== 0)
-      .map((a) => ({ code: a.code, name: a.name, amount: closing.get(a.id) ?? 0 }))
-    const liabEqLines = accounts
-      .filter((a) => (a.type === 'liability' || a.type === 'equity') && (closing.get(a.id) ?? 0) !== 0)
-      .map((a) => ({ code: a.code, name: a.name, amount: closing.get(a.id) ?? 0 }))
-
-    return {
-      asOfLabel: `Per ${period.end.slice(8)} ${period.label.split(' ')[0]} ${period.key.slice(0, 4)}`,
-      sections: [
-        { title: 'ASET', lines: assetLines, total: totalAssets },
-        {
-          title: 'KEWAJIBAN & EKUITAS',
-          lines: [...liabEqLines, { code: '', name: 'Laba Ditahan (berjalan)', amount: netIncome, isBold: true }],
-          total: totalLiabEq,
-        },
-      ],
-      totalAssets,
-      totalLiabEq,
-      balanced,
-      difference: totalAssets - totalLiabEq,
-      netIncome,
-    }
-  }, [accounts, journals, period])
+  // Fallback offline: identitas Aset = Kewajiban + Ekuitas dari data lokal
+  const localView = useMemo<BSView>(
+    () =>
+      toBSView(
+        computeBalanceSheet(accounts, journals, period.end),
+        `Per ${period.end.slice(8)} ${period.label.split(' ')[0]} ${period.key.slice(0, 4)}`,
+      ),
+    [accounts, journals, period],
+  )
 
   // Data via API: GET /reports/balance-sheet?asOf= (tunggu koneksi menetap)
   const ready = apiStatus === 'online' || apiStatus === 'offline'
@@ -119,15 +71,19 @@ export default function BalanceSheetPage() {
         const retained = liabEq.lines.find((l) => l.name.includes('Laba Ditahan'))?.amount ?? 0
         const totalLiabEq = liabEqSum + retained
         const balanced = d.totalAssets === totalLiabEq
-        setApiView({
-          asOfLabel: `Per ${d.asOf.slice(8)} ${['Januari', 'Februari', 'Maret'][periodIdx]} ${period.key.slice(0, 4)}`,
-          sections: [aset, liabEq],
-          totalAssets: d.totalAssets,
-          totalLiabEq,
-          balanced,
-          difference: d.totalAssets - totalLiabEq,
-          netIncome: retained,
-        })
+        setApiView(
+          toBSView(
+            {
+              sections: [aset, liabEq],
+              totalAssets: d.totalAssets,
+              totalLiabilitiesEquity: totalLiabEq,
+              balanced,
+              difference: d.totalAssets - totalLiabEq,
+              netIncome: retained,
+            },
+            `Per ${d.asOf.slice(8)} ${['Januari', 'Februari', 'Maret'][periodIdx]} ${period.key.slice(0, 4)}`,
+          ),
+        )
       })
       .catch(() => {
         if (alive) {
@@ -144,7 +100,7 @@ export default function BalanceSheetPage() {
   const view: BSView = apiView ?? localView
   const empty = view.sections.every((s) => s.lines.length === 0)
 
-  const Section = ({ title, lines, total }: { title: string; lines: BSLine[]; total: number }) => (
+  const Section = ({ title, lines, total }: { title: string; lines: BalanceSheetLine[]; total: number }) => (
     <div>
       <p className="px-5 pb-2 pt-4 text-[11px] font-bold uppercase tracking-wider text-primary">{title}</p>
       <div>

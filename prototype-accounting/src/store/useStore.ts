@@ -1,13 +1,13 @@
 import { create } from 'zustand'
 import { persist, type PersistOptions } from 'zustand/middleware'
 import { useMemo } from 'react'
-import type { Account, JournalEntry, NewJournalInput, PageKey } from '../types'
+import type { Account, JournalEntry, JournalStatus, NewJournalInput, OfflineJournalOp, OfflineOpInput, PageKey } from '../types'
 import { mockAccounts, mockJournals, SEED_JOURNAL_IDS, SEED_VERSION } from '../data/mock'
 import { api, ApiError, isNetworkError, toJournalEntry } from '../api'
 import { setAuth, setRefreshToken, setSessionExpiredHandler, setTokensRefreshedHandler } from '../api/client'
 import type { AuthUser } from '../api'
 import { isEffectJournal } from '../lib/ledger'
-import { CURRENT_VERSION, migratePersistedState, type PersistedShape } from './persist'
+import { CURRENT_VERSION, migratePersistedState, setMigrationHandler, type PersistedShape } from './persist'
 
 export { isEffectJournal }
 export { CURRENT_VERSION, migratePersistedState } from './persist'
@@ -34,12 +34,16 @@ interface AccountingState {
 
   // Lapisan API (API - Accounting.md)
   apiStatus: ApiStatus
+  // Waktu sinkronisasi terakhir dengan server. Saat offline, data yang tampil
+  // berasal dari cache (localStorage) — dipakai untuk indikator "Data dari
+  // cache · sinkron terakhir X". null = belum pernah tersinkron (data demo).
+  lastSyncedAt: string | null
   user: Pick<AuthUser, 'id' | 'name' | 'email' | 'role'> | null
   accessToken: string | null
   refreshToken: string | null
   authLoading: boolean
   authError: string | null
-  init: () => Promise<void>
+  init: (opts?: { silent?: boolean }) => Promise<void>
   login: (email: string, password: string) => Promise<void>
   loginOffline: () => void
   logout: () => void
@@ -52,13 +56,39 @@ interface AccountingState {
   rejectJournal: (id: string, reason?: string) => Promise<void>
   reverseJournal: (id: string) => Promise<void>
   deleteJournal: (id: string) => Promise<void>
-  resetDemoData: () => void
+  resetDemoData: () => Promise<void>
+
+  // Antrian sinkronisasi offline: operasi yang dibuat saat server mati,
+  // di-flush ke API begitu koneksi pulih (lihat flushOfflineQueue).
+  offlineQueue: OfflineJournalOp[]
+  isSyncing: boolean
+  enqueueOffline: (op: OfflineJournalOp) => void
+  flushOfflineQueue: () => Promise<void>
 
   toast: Toast | null
   showToast: (message: string, kind?: Toast['kind']) => void
 }
 
 const nowIso = () => new Date().toISOString()
+
+// Id unik untuk operasi antrian (bukan id jurnal).
+const uid = () =>
+  typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `op-${Date.now()}-${Math.random().toString(36).slice(2)}`
+
+// Operasi offline → enqueue + tetap diterapkan lokal (UI konsisten).
+// Id antrian unik per operasi; urutan penting (replay berurutan saat flush).
+const toOp = (partial: OfflineOpInput): OfflineJournalOp => ({ id: uid(), ...partial })
+
+// Nomor urut jurnal lokal berikutnya — berbasis id TERBESAR yang sudah ada
+// (bukan journals.length + 1), supaya TIDAK tabrakan dengan id seed/jurnal
+// user lain (mis. seed JNL-2026-03-010 → jurnal lokal berikutnya 011).
+const nextLocalSeq = (journals: JournalEntry[]) =>
+  journals.reduce((max, j) => {
+    const m = /(\d+)$/.exec(j.id)
+    return m ? Math.max(max, Number(m[1])) : max
+  }, 0) + 1
 
 // Key localStorage. JANGAN ganti nama key: data lama dimigrasi lewat
 // version + migrate() (lihat src/store/persist.ts), bukan di-reset.
@@ -79,8 +109,10 @@ const persistOptions: PersistOptions<AccountingState, PersistedShape> = {
     accessToken: s.accessToken,
     refreshToken: s.refreshToken,
     user: s.user,
+    offlineQueue: s.offlineQueue,
+    lastSyncedAt: s.lastSyncedAt,
   }),
-  migrate: (persisted) => migratePersistedState(persisted),
+  migrate: (persisted, version) => migratePersistedState(persisted, version),
 }
 
 // Ganti createdBy user id (mis. "user-001") dengan nama untuk tampilan UI
@@ -93,7 +125,7 @@ export const useStore = create<AccountingState>()(
       // ---------- Mutasi lokal (fallback offline) ----------
       const localSave = (input: NewJournalInput, action: 'draft' | 'post') => {
         set((state) => {
-          const seq = state.journals.length + 1
+          const seq = nextLocalSeq(state.journals)
           const entry: JournalEntry = {
             id: `JNL-${input.date.slice(0, 7).replace('-', '-')}-${String(seq).padStart(3, '0')}`,
             transactionNumber: input.transactionNumber,
@@ -112,6 +144,7 @@ export const useStore = create<AccountingState>()(
               }
             }),
             status: action === 'post' ? 'posted' : 'draft',
+            source: 'manual' as const, // format persist v2
             createdBy: get().user?.name ?? 'Rina',
             createdAt: nowIso(),
             postedAt: action === 'post' ? nowIso() : undefined,
@@ -171,7 +204,7 @@ export const useStore = create<AccountingState>()(
           const original = state.journals.find((j) => j.id === id)
           if (!original || original.status !== 'posted') return state
 
-          const seq = state.journals.length + 1
+          const seq = nextLocalSeq(state.journals)
           const reversal: JournalEntry = {
             id: `JNL-2026-03-${String(seq).padStart(3, '0')}`,
             transactionNumber: `REV-${original.transactionNumber}`,
@@ -186,6 +219,7 @@ export const useStore = create<AccountingState>()(
               credit: ln.debit,
             })),
             status: 'posted',
+            source: 'manual' as const, // format persist v2
             createdBy: get().user?.name ?? 'Rina',
             createdAt: nowIso(),
             postedAt: nowIso(),
@@ -232,8 +266,10 @@ export const useStore = create<AccountingState>()(
         authLoading: false,
         authError: null,
         // Reconnect sesi tersimpan (reload) — TANPA auto-login demo.
-        // Dipanggil App saat mount & tombol "Coba lagi" (OfflineBanner).
-        init: async () => {
+        // Dipanggil App saat mount, tombol "Coba lagi" (OfflineBanner), dan
+        // retry otomatis backoff (App.tsx). `silent` menekan toast error saat
+        // percobaan otomatis — toast hanya untuk aksi user (mount/manual).
+        init: async (opts) => {
           const token = get().accessToken
           if (!token) return
           if (token !== 'local.demo') setAuth(token, undefined, get().refreshToken)
@@ -248,13 +284,17 @@ export const useStore = create<AccountingState>()(
               accounts: accRes.accounts,
               journals,
               activePeriod: get().activePeriod,
+              lastSyncedAt: nowIso(),
             })
           } catch {
             set({
               apiStatus: 'offline',
-              toast: { message: 'Mock API tidak terhubung — menampilkan data lokal', kind: 'error' },
+              ...(opts?.silent ? {} : { toast: { message: 'Mock API tidak terhubung — menampilkan data lokal', kind: 'error' as const } }),
             })
+            return
           }
+          // Koneksi pulih → kirim operasi offline yang tertunda ke server.
+          await get().flushOfflineQueue()
         },
 
         // Login sungguhan: POST /auth/login dengan email/password dari form.
@@ -272,6 +312,7 @@ export const useStore = create<AccountingState>()(
               accounts: accRes.accounts,
               journals,
               activePeriod: auth.activePeriod?.id ?? get().activePeriod,
+              lastSyncedAt: nowIso(),
               authLoading: false,
               toast: { message: `Selamat datang, ${auth.user.name}`, kind: 'success' },
             })
@@ -294,6 +335,7 @@ export const useStore = create<AccountingState>()(
             user: null,
             accounts: mockAccounts,
             journals: mockJournals,
+            lastSyncedAt: null, // data demo — belum pernah tersinkron
             authLoading: false,
             authError: null,
             toast: { message: 'Masuk offline — menampilkan data demo lokal', kind: 'error' },
@@ -318,6 +360,9 @@ export const useStore = create<AccountingState>()(
             activePeriod: '2026-03',
             page: 'dashboard',
             modalOpen: false,
+            offlineQueue: [],
+            isSyncing: false,
+            lastSyncedAt: null,
             toast: { message: 'Anda telah keluar', kind: 'success' },
           })
         },
@@ -356,6 +401,8 @@ export const useStore = create<AccountingState>()(
               if (isNetworkError(e)) {
                 set({ apiStatus: 'offline' })
                 localSave(input, action)
+                // Masuk antrian offline — di-flush otomatis saat koneksi pulih.
+                get().enqueueOffline(toOp({ kind: 'create', localId: get().journals[0].id, input, action }))
                 return
               }
               const msg = e instanceof ApiError ? e.message : 'Gagal menyimpan jurnal'
@@ -364,6 +411,7 @@ export const useStore = create<AccountingState>()(
             return
           }
           localSave(input, action)
+          get().enqueueOffline(toOp({ kind: 'create', localId: get().journals[0].id, input, action }))
         },
 
         postJournal: async (id) => {
@@ -380,6 +428,7 @@ export const useStore = create<AccountingState>()(
               if (isNetworkError(e)) {
                 set({ apiStatus: 'offline' })
                 localPost(id)
+                get().enqueueOffline(toOp({ kind: 'post', ref: id }))
                 return
               }
               set({ toast: { message: e instanceof ApiError ? e.message : 'Gagal posting jurnal', kind: 'error' } })
@@ -387,6 +436,7 @@ export const useStore = create<AccountingState>()(
             return
           }
           localPost(id)
+          get().enqueueOffline(toOp({ kind: 'post', ref: id }))
         },
 
         reverseJournal: async (id) => {
@@ -407,6 +457,7 @@ export const useStore = create<AccountingState>()(
               if (isNetworkError(e)) {
                 set({ apiStatus: 'offline' })
                 localReverse(id)
+                get().enqueueOffline(toOp({ kind: 'reverse', ref: id }))
                 return
               }
               set({ toast: { message: e instanceof ApiError ? e.message : 'Gagal reverse jurnal', kind: 'error' } })
@@ -414,6 +465,7 @@ export const useStore = create<AccountingState>()(
             return
           }
           localReverse(id)
+          get().enqueueOffline(toOp({ kind: 'reverse', ref: id }))
         },
 
         deleteJournal: async (id) => {
@@ -428,6 +480,7 @@ export const useStore = create<AccountingState>()(
               if (isNetworkError(e)) {
                 set({ apiStatus: 'offline' })
                 localDelete(id)
+                get().enqueueOffline(toOp({ kind: 'delete', ref: id }))
                 return
               }
               set({ toast: { message: e instanceof ApiError ? e.message : 'Gagal hapus jurnal', kind: 'error' } })
@@ -435,6 +488,7 @@ export const useStore = create<AccountingState>()(
             return
           }
           localDelete(id)
+          get().enqueueOffline(toOp({ kind: 'delete', ref: id }))
         },
 
         submitJournal: async (id) => {
@@ -451,6 +505,7 @@ export const useStore = create<AccountingState>()(
               if (isNetworkError(e)) {
                 set({ apiStatus: 'offline' })
                 localSubmit(id)
+                get().enqueueOffline(toOp({ kind: 'submit', ref: id }))
                 return
               }
               set({ toast: { message: e instanceof ApiError ? e.message : 'Gagal submit jurnal', kind: 'error' } })
@@ -458,6 +513,7 @@ export const useStore = create<AccountingState>()(
             return
           }
           localSubmit(id)
+          get().enqueueOffline(toOp({ kind: 'submit', ref: id }))
         },
 
         approveJournal: async (id) => {
@@ -476,6 +532,7 @@ export const useStore = create<AccountingState>()(
               if (isNetworkError(e)) {
                 set({ apiStatus: 'offline' })
                 localApprove(id)
+                get().enqueueOffline(toOp({ kind: 'approve', ref: id }))
                 return
               }
               set({ toast: { message: e instanceof ApiError ? e.message : 'Gagal approve jurnal', kind: 'error' } })
@@ -483,6 +540,7 @@ export const useStore = create<AccountingState>()(
             return
           }
           localApprove(id)
+          get().enqueueOffline(toOp({ kind: 'approve', ref: id }))
         },
 
         rejectJournal: async (id, reason) => {
@@ -499,6 +557,7 @@ export const useStore = create<AccountingState>()(
               if (isNetworkError(e)) {
                 set({ apiStatus: 'offline' })
                 localReject(id)
+                get().enqueueOffline(toOp({ kind: 'reject', ref: id, reason }))
                 return
               }
               set({ toast: { message: e instanceof ApiError ? e.message : 'Gagal reject jurnal', kind: 'error' } })
@@ -506,12 +565,31 @@ export const useStore = create<AccountingState>()(
             return
           }
           localReject(id)
+          get().enqueueOffline(toOp({ kind: 'reject', ref: id, reason }))
         },
 
         // Reset demo: hapus localStorage (data pengguna) + kembali ke seed murni.
-        // Koneksi mock API tidak diubah — reload berikutnya akan memuat ulang
-        // dari server (server di-reset terpisah via `npm run reset` di mock-api).
-        resetDemoData: () => {
+        // Saat online, sekaligus reset state server mock via POST /admin/reset
+        // (dev-only, tanpa auth) — satu klik mereset lokal + server.
+        resetDemoData: async () => {
+          const wasOnline = get().apiStatus === 'online'
+          let serverReset = false
+          let serverFailed = false
+          let serverUnreachable = false
+          if (wasOnline) {
+            try {
+              await api.resetServerData()
+              serverReset = true
+            } catch (e) {
+              // Reset server gagal — tetap lanjut reset lokal. Jaringan putus
+              // ditandai offline; error lain (mis. 500) tidak menghentikan reset.
+              serverFailed = true
+              if (isNetworkError(e)) {
+                serverUnreachable = true
+                set({ apiStatus: 'offline' })
+              }
+            }
+          }
           // `persist` API hanya ada saat storage tersedia (browser);
           // di lingkungan tanpa storage (test) di-skip aman.
           useStore.persist?.clearStorage()
@@ -521,8 +599,138 @@ export const useStore = create<AccountingState>()(
             activePeriod: '2026-03',
             page: 'dashboard',
             modalOpen: false,
-            toast: { message: 'Data demo di-reset ke seed awal', kind: 'success' },
+            offlineQueue: [],
+            isSyncing: false,
+            lastSyncedAt: null,
+            toast: {
+              message: serverReset
+                ? 'Data demo di-reset ke seed awal (lokal + server mock)'
+                : serverFailed
+                  ? serverUnreachable
+                    ? 'Data lokal di-reset — server mock tidak dapat dijangkau (offline)'
+                    : 'Data lokal di-reset — server mock tidak ikut ter-reset'
+                  : 'Data demo di-reset ke seed awal',
+              kind: serverReset || !serverFailed ? 'success' : 'error',
+            },
           })
+        },
+
+        // ---------- Antrian sinkronisasi offline ----------
+        // Operasi masuk antrian saat server mati (tetap diterapkan lokal agar
+        // UI konsisten), lalu di-replay berurutan begitu koneksi pulih.
+        offlineQueue: [],
+        isSyncing: false,
+        lastSyncedAt: null,
+
+        enqueueOffline: (op) => {
+          set((s) => ({ offlineQueue: [...s.offlineQueue, op] }))
+        },
+
+        // Kirim semua operasi tertunda ke API (berurutan), lalu rekonsiliasi
+        // dengan state server. Dipanggil otomatis saat koneksi pulih (init),
+        // dan bisa dipicu manual via tombol "Coba lagi" di banner offline.
+        flushOfflineQueue: async () => {
+          if (get().apiStatus !== 'online') return
+          const pending = get().offlineQueue
+          if (pending.length === 0) return
+
+          set({ isSyncing: true })
+
+          // Map id lokal (dibuat offline) → id server, agar operasi ref-based
+          // (post/reverse/delete/...) yang menyusul menunjuk jurnal yang benar.
+          const idMap = new Map<string, string>()
+          const errors: string[] = []
+          let synced = 0
+
+          for (const op of [...pending]) {
+            try {
+              if (op.kind === 'create') {
+                const created = await api.createJournal({ ...op.input, submitForApproval: false })
+                let status: JournalStatus = 'draft'
+                let postedAt: string | undefined
+                if (op.action === 'post') {
+                  const r = await api.postJournal(created.id)
+                  status = 'posted'
+                  postedAt = r.postedAt
+                }
+                // Id lokal → id server, untuk operasi selanjutnya di antrian.
+                idMap.set(op.localId, created.id)
+                // Update store: jurnal lokal memakai id server (untuk kasus
+                // flush terputus di tengah, ref berikutnya tetap valid).
+                set((s) => ({
+                  journals: s.journals.map((j) =>
+                    j.id === op.localId ? { ...j, id: created.id, status, postedAt } : j,
+                  ),
+                }))
+                // Rewrite sisa antrian: ref yang menunjuk id lokal → id server.
+                set((s) => ({
+                  offlineQueue: s.offlineQueue.map((o) =>
+                    'ref' in o && o.ref === op.localId ? { ...o, ref: created.id } : o,
+                  ),
+                }))
+              } else {
+                const ref = idMap.get(op.ref) ?? op.ref
+                switch (op.kind) {
+                  case 'post':
+                    await api.postJournal(ref)
+                    break
+                  case 'submit':
+                    await api.submitJournal(ref)
+                    break
+                  case 'approve':
+                    await api.approveJournal(ref)
+                    break
+                  case 'reject':
+                    await api.rejectJournal(ref, op.reason)
+                    break
+                  case 'reverse':
+                    await api.reverseJournal(ref)
+                    break
+                  case 'delete':
+                    await api.deleteJournal(ref)
+                    break
+                }
+              }
+              // Sukses → hapus dari antrian (urut, pakai op.id asli).
+              set((s) => ({ offlineQueue: s.offlineQueue.filter((o) => o.id !== op.id) }))
+              synced += 1
+            } catch (e) {
+              if (isNetworkError(e)) {
+                // Koneksi putus lagi di tengah flush — berhenti, sisanya
+                // tetap di antrian untuk flush berikutnya.
+                set({ apiStatus: 'offline', isSyncing: false })
+                return
+              }
+              // Server menolak operasi (mis. PERIOD_CLOSED) → keluarkan dari
+              // antrian agar tidak macet, laporkan ke user, lanjut ke berikutnya.
+              set((s) => ({ offlineQueue: s.offlineQueue.filter((o) => o.id !== op.id) }))
+              errors.push(e instanceof ApiError ? e.message : 'Operasi gagal disinkronkan')
+            }
+          }
+
+          // Rekonsiliasi: ambil state terbaru dari server (termasuk id & status
+          // asli server, jurnal pembalik, dst.). Jika rekonsiliasi gagal karena
+          // jaringan, jangan timpa — biarkan antrian/state apa adanya.
+          try {
+            const [accRes, jrnRes] = await Promise.all([api.getAccounts(), api.getJournals()])
+            const journals = jrnRes.journals.map((j) => enrichCreatedBy(toJournalEntry(j), get().user))
+            set({ accounts: accRes.accounts, journals, lastSyncedAt: nowIso() })
+          } catch {
+            // Jaringan turun tepat setelah flush — tetap online tidak valid.
+            set({ apiStatus: 'offline' })
+          }
+
+          set({ isSyncing: false })
+          if (errors.length > 0) {
+            set({
+              toast: {
+                message: `${errors.length} operasi offline gagal disinkronkan: ${errors[0]}`,
+                kind: 'error',
+              },
+            })
+          } else if (synced > 0) {
+            set({ toast: { message: `${synced} operasi offline berhasil disinkronkan`, kind: 'success' } })
+          }
         },
 
         toast: null,
@@ -540,6 +748,19 @@ setTokensRefreshedHandler(({ accessToken, refreshToken }) => {
   useStore.setState({ accessToken, refreshToken })
 })
 setSessionExpiredHandler(() => useStore.getState().handleSessionExpired())
+
+// Migrasi state tersimpan berhasil (upgrade versi) → beri tahu user bahwa
+// data lokalnya TIDAK hilang: seed diganti nilai terbaru, jurnal pengguna
+// dipertahankan. (Rehydrate berjalan async — handler ini sudah ter-register
+// saat modul selesai dievaluasi, jadi aman dipanggil kapan pun.)
+setMigrationHandler(({ fromVersion, toVersion, preservedUserJournals }) => {
+  useStore.setState({
+    toast: {
+      message: `Data lokal dimigrasi ke versi baru (v${fromVersion} → v${toVersion}) — ${preservedUserJournals} jurnal pengguna dipertahankan`,
+      kind: 'success',
+    },
+  })
+})
 
 // Hitung saldo live: saldo awal + efek jurnal posted (BR-6, BR-7)
 export const computeBalances = (accounts: Account[], journals: JournalEntry[]) => {

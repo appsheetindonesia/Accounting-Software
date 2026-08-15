@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, ExternalLink, NotebookPen } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import { api } from '../../api'
+import { useApiFetch } from '../../hooks/useApiFetch'
 import { computeLedger } from '../../lib/ledger'
 import { formatDateShort, formatIDR } from '../../lib/format'
+import { SkeletonBar, SkeletonLines, SkeletonTable } from '../Skeleton'
 
 const PERIODS = [
   { key: '2026-01', label: 'Januari 2026', start: '2026-01-01', end: '2026-01-31' },
@@ -34,8 +36,6 @@ export default function LedgerPage() {
 
   const [accountId, setAccountId] = useState('1-1100')
   const [periodIdx, setPeriodIdx] = useState(2) // Maret 2026
-  const [apiView, setApiView] = useState<LedgerView | null>(null)
-  const [offline, setOffline] = useState(false)
 
   const account = accounts.find((a) => a.id === accountId) ?? accounts[0]
   const period = PERIODS[periodIdx]
@@ -48,40 +48,26 @@ export default function LedgerPage() {
 
   // Data via API: GET /ledger/accounts/:id?period= (tunggu koneksi menetap)
   const ready = apiStatus === 'online' || apiStatus === 'offline'
-  useEffect(() => {
-    if (!ready) return
-    let alive = true
-    setOffline(false)
-    if (account) {
-      api
-        .getLedger(account.id, period.key)
-        .then((d) => {
-          if (!alive) return
-          setApiView({
-            opening: d.openingBalance,
-            closing: d.closingBalance,
-            rows: d.entries.map((e) => ({
-              reference: e.reference,
-              date: e.date,
-              description: e.description,
-              debit: e.debit,
-              credit: e.credit,
-              balance: e.balance,
-            })),
-          })
-        })
-        .catch(() => {
-          if (alive) {
-            setApiView(null)
-            setOffline(true)
-          }
-        })
-    }
-    return () => {
-      alive = false
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [account?.id, periodIdx, ready])
+  const { data: apiView, loading, offline } = useApiFetch<LedgerView>(
+    `ledger:${account?.id}:${period.key}:${apiStatus}`,
+    ready,
+    () => {
+      if (!account) return Promise.resolve(localView)
+      return api.getLedger(account.id, period.key).then((d) => ({
+        opening: d.openingBalance,
+        closing: d.closingBalance,
+        rows: d.entries.map((e) => ({
+          reference: e.reference,
+          date: e.date,
+          description: e.description,
+          debit: e.debit,
+          credit: e.credit,
+          balance: e.balance,
+        })),
+      }))
+    },
+    () => localView,
+  )
 
   const view: LedgerView = apiView ?? localView
 
@@ -142,46 +128,67 @@ export default function LedgerPage() {
         </p>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-surface px-5 py-3 shadow-card">
-        <div>
-          <p className="text-lg font-bold text-ink">{account?.name}</p>
-          <p className="num text-xs text-ink-soft">
-            {account?.code} ·{' '}
-            {account?.type === 'asset'
-              ? 'Aset'
-              : account?.type === 'liability'
-                ? 'Utang'
-                : account?.type === 'equity'
-                  ? 'Modal'
-                  : account?.type === 'revenue'
-                    ? 'Pendapatan'
-                    : 'Beban'}{' '}
-            · saldo normal {account?.normalBalance}
-          </p>
+      {loading && !apiView ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-surface px-5 py-3 shadow-card">
+          <div className="space-y-2">
+            <SkeletonBar className="h-5 w-40" />
+            <SkeletonBar className="h-3 w-56" />
+          </div>
+          <div className="flex gap-2">
+            <SkeletonBar className="h-8 w-32" />
+            <SkeletonBar className="h-8 w-32" />
+          </div>
         </div>
-        <div className="num flex gap-2 text-sm">
-          <span className="rounded-lg bg-canvas px-3 py-1.5 text-ink-soft">
-            Saldo Awal <strong className="text-ink">{formatIDR(view.opening)}</strong>
-          </span>
-          <span className="rounded-lg bg-primary/10 px-3 py-1.5 font-semibold text-primary">
-            Saldo Akhir <strong>{formatIDR(view.closing)}</strong>
-          </span>
-        </div>
-      </div>
-
-      <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-card">
-        {view.rows.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 px-6 py-14 text-center">
-            <NotebookPen size={22} className="text-primary/60" />
-            <p className="text-sm font-semibold text-ink">Belum ada transaksi di periode ini</p>
-            <p className="text-sm text-ink-soft">
-              {view.opening !== 0
-                ? `Saldo tetap ${formatIDR(view.opening)} karena tidak ada jurnal posted pada ${period.label}.`
-                : 'Catat dan posting jurnal pada periode ini agar muncul di buku besar.'}
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-surface px-5 py-3 shadow-card">
+          <div>
+            <p className="text-lg font-bold text-ink">{account?.name}</p>
+            <p className="num text-xs text-ink-soft">
+              {account?.code} ·{' '}
+              {account?.type === 'asset'
+                ? 'Aset'
+                : account?.type === 'liability'
+                  ? 'Utang'
+                  : account?.type === 'equity'
+                    ? 'Modal'
+                    : account?.type === 'revenue'
+                      ? 'Pendapatan'
+                      : 'Beban'}{' '}
+              · saldo normal {account?.normalBalance}
             </p>
           </div>
-        ) : (
-          <div className="overflow-x-auto">
+          <div className="num flex gap-2 text-sm">
+            <span className="rounded-lg bg-canvas px-3 py-1.5 text-ink-soft">
+              Saldo Awal <strong className="text-ink">{formatIDR(view.opening)}</strong>
+            </span>
+            <span className="rounded-lg bg-primary/10 px-3 py-1.5 font-semibold text-primary">
+              Saldo Akhir <strong>{formatIDR(view.closing)}</strong>
+            </span>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <>
+          <SkeletonTable rows={5} />
+          <div className="mt-3">
+            <SkeletonLines rows={2} />
+          </div>
+        </>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-card">
+          {view.rows.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 px-6 py-14 text-center">
+              <NotebookPen size={22} className="text-primary/60" />
+              <p className="text-sm font-semibold text-ink">Belum ada transaksi di periode ini</p>
+              <p className="text-sm text-ink-soft">
+                {view.opening !== 0
+                  ? `Saldo tetap ${formatIDR(view.opening)} karena tidak ada jurnal posted pada ${period.label}.`
+                  : 'Catat dan posting jurnal pada periode ini agar muncul di buku besar.'}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
             <table className="w-full min-w-[760px]">
               <thead>
                 <tr className="border-b border-line bg-canvas text-left text-[11px] font-bold uppercase tracking-wider text-ink-faint">
@@ -235,9 +242,10 @@ export default function LedgerPage() {
                 </tr>
               </tbody>
             </table>
-          </div>
-        )}
-      </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <p className="text-xs text-ink-faint">
         Saldo berjalan dihitung dari saldo awal + transaksi terurut tanggal. Jurnal draft & pembalik tidak mempengaruhi

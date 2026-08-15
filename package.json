@@ -1,0 +1,16 @@
+{
+  "name": "appsheet-accounting-journal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Appsheet Accounting Journal — monorepo dokumen + mock API + prototipe. Skrip dev gabungan menjalankan mock API (port 4000) dan prototipe Vite (port 5173) bersamaan.",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:extra": "node scripts/dev.mjs --extra",
+    "dev:reset": "node scripts/dev.mjs --reset",
+    "dev:no-persist": "node scripts/dev.mjs --no-persist",
+    "test": "npm run test:mock-api && npm run test:prototype",
+    "test:mock-api": "npm --prefix mock-api test",
+    "test:prototype": "npm --prefix prototype-accounting test",
+    "test:e2e": "npm --prefix e2e test"
+  }
+}

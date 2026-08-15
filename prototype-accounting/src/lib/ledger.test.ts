@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { computeLedger, computeIncomeStatement, isEffectJournal } from './ledger'
+import { computeBalanceSheet, computeLedger, computeIncomeStatement, computeTrialBalance, isEffectJournal } from './ledger'
 import { mockAccounts, mockJournals } from '../data/mock'
 import type { JournalEntry } from '../types'
 
 // Baseline seed Maret 2026 (PT. Kreasi Inovasi Estetika):
-// Kas Besar base 50jt → 50 + 25 (JNL-001) − 10 (JNL-002) − 3 (JNL-003) + 15 (JNL-004) = 77jt
+// Kas Besar base 60jt → 60 + 25 (JNL-001) − 10 (JNL-002) − 3 (JNL-003) + 15 (JNL-004) = 87jt
 // Pendapatan Jasa base 130jt → 130 + 25 = 155jt
 const MARCH = { start: '2026-03-01', end: '2026-03-31' }
 const FEBRUARY = { start: '2026-02-01', end: '2026-02-28' }
@@ -68,17 +68,17 @@ describe('isEffectJournal — jurnal yang memengaruhi saldo', () => {
 })
 
 describe('computeLedger — saldo berjalan Buku Besar (BR-6/BR-7)', () => {
-  it('Kas Besar Maret: saldo awal 50jt, baris berjalan 75/65/62/77, saldo akhir 77jt', () => {
+  it('Kas Besar Maret: saldo awal 60jt, baris berjalan 85/75/72/84, saldo akhir 84jt', () => {
     const v = computeLedger(mockAccounts, mockJournals, '1-1100', MARCH)
-    expect(v.opening).toBe(50_000_000)
+    expect(v.opening).toBe(60_000_000)
     expect(v.rows.map((r) => r.reference)).toEqual([
-      'BKM-2026-03-0001', // 05/03 +25 → 75
-      'BKK-2026-03-0002', // 07/03 −10 → 65
-      'BKK-2026-03-0003', // 10/03 −3 → 62
-      'BKM-2026-03-0004', // 12/03 +15 → 77
+      'BKM-2026-03-0001', // 05/03 +25 → 85
+      'BKK-2026-03-0002', // 07/03 −10 → 75
+      'BKK-2026-03-0003', // 10/03 −3 → 72
+      'BKM-2026-03-0004', // 12/03 +12 (v2) → 84
     ])
-    expect(v.rows.map((r) => r.balance)).toEqual([75_000_000, 65_000_000, 62_000_000, 77_000_000])
-    expect(v.closing).toBe(77_000_000)
+    expect(v.rows.map((r) => r.balance)).toEqual([85_000_000, 75_000_000, 72_000_000, 84_000_000])
+    expect(v.closing).toBe(84_000_000)
   })
 
   it('akun kredit (Pendapatan): delta = kredit − debit, closing 155jt', () => {
@@ -99,9 +99,9 @@ describe('computeLedger — saldo berjalan Buku Besar (BR-6/BR-7)', () => {
 
   it('akun tanpa transaksi: saldo awal = saldo akhir = baseBalance, baris kosong', () => {
     const v = computeLedger(mockAccounts, mockJournals, '5-4000', MARCH) // Beban Penyusutan
-    expect(v.opening).toBe(1_500_000)
+    expect(v.opening).toBe(2_000_000)
     expect(v.rows).toHaveLength(0)
-    expect(v.closing).toBe(1_500_000)
+    expect(v.closing).toBe(2_000_000)
   })
 
   it('urutan baris: tanggal naik, tie-break nomor bukti', () => {
@@ -112,13 +112,13 @@ describe('computeLedger — saldo berjalan Buku Besar (BR-6/BR-7)', () => {
 })
 
 describe('computeLedger — skenario reverse (net 0)', () => {
-  it('reverse BKK-0002: original + pembalik diabaikan → Kas kembali 87jt (net 0)', () => {
-    const before = computeLedger(mockAccounts, mockJournals, '1-1100', MARCH).closing // 77 (termasuk −10)
+  it('reverse BKK-0002: original + pembalik diabaikan → Kas kembali 94jt (net 0)', () => {
+    const before = computeLedger(mockAccounts, mockJournals, '1-1100', MARCH).closing // 84 (termasuk −10)
     const after = computeLedger(mockAccounts, reverseJournal(mockJournals, 'JNL-2026-03-002'), '1-1100', MARCH)
-    expect(before).toBe(77_000_000)
+    expect(before).toBe(84_000_000)
     // BKK-0002 (kredit 10) dan pembaliknya (debit 10) keduanya tak dihitung:
-    // 50 + 25 − 3 + 15 = 87 — efek transaksi dihilangkan total
-    expect(after.closing).toBe(87_000_000)
+    // 60 + 25 − 3 + 12 = 94 — efek transaksi dihilangkan total
+    expect(after.closing).toBe(94_000_000)
     expect(after.rows.map((r) => r.reference)).not.toContain('BKK-2026-03-0002')
     expect(after.rows.map((r) => r.reference)).not.toContain('REV-BKK-2026-03-0002')
   })
@@ -132,42 +132,42 @@ describe('computeLedger — skenario reverse (net 0)', () => {
 describe('computeLedger — periode tertutup / berantai antar bulan', () => {
   it('periode Januari tertutup tanpa jurnal Jan: saldo awal = akhir = base', () => {
     const v = computeLedger(mockAccounts, mockJournals, '1-1100', JANUARY)
-    expect(v.opening).toBe(50_000_000)
+    expect(v.opening).toBe(60_000_000)
     expect(v.rows).toHaveLength(0)
-    expect(v.closing).toBe(50_000_000)
+    expect(v.closing).toBe(60_000_000)
   })
 
   it('jurnal Januari masuk SALDO AWAL Maret (bukan baris), saldo berantai', () => {
     const withJan = [janJournal, ...mockJournals]
     const jan = computeLedger(mockAccounts, withJan, '1-1100', JANUARY)
     expect(jan.rows).toHaveLength(1)
-    expect(jan.rows[0].balance).toBe(80_000_000) // 50 + 30
-    expect(jan.closing).toBe(80_000_000)
+    expect(jan.rows[0].balance).toBe(90_000_000) // 60 + 30
+    expect(jan.closing).toBe(90_000_000)
 
     const mar = computeLedger(mockAccounts, withJan, '1-1100', MARCH)
-    expect(mar.opening).toBe(80_000_000) // saldo awal Maret = saldo akhir Januari
+    expect(mar.opening).toBe(90_000_000) // saldo awal Maret = saldo akhir Januari
     expect(mar.rows.map((r) => r.reference)).not.toContain('BKM-2026-01-0001')
-    expect(mar.closing).toBe(107_000_000) // 80 + 25 − 10 − 3 + 15
+    expect(mar.closing).toBe(114_000_000) // 90 + 25 − 10 − 3 + 12
   })
 
   it('periode Februari: jurnal Maret tidak dihitung (di luar periode)', () => {
     const v = computeLedger(mockAccounts, mockJournals, '1-1100', FEBRUARY)
     expect(v.rows).toHaveLength(0)
-    expect(v.closing).toBe(50_000_000)
+    expect(v.closing).toBe(60_000_000)
   })
 })
 
 describe('computeIncomeStatement — formula Laba Rugi', () => {
-  it('Maret baseline: Pendapatan 155, Beban 110,5, Laba Bersih 44,5jt', () => {
+  it('Maret baseline: Pendapatan 155, Beban 111, Laba Bersih 44jt', () => {
     const v = computeIncomeStatement(mockAccounts, mockJournals, '2026-03-31')
     expect(v.revenueLines).toEqual([
       { accountId: '4-1000', code: '4-1000', name: 'Pendapatan Jasa', amount: 155_000_000 },
     ])
     expect(v.revenueTotal).toBe(155_000_000)
-    // Beban Gaji 85 (40+45), Sewa 18 (8+10), Operasional 6 (3+3), Penyusutan 1,5
-    expect(v.expenseLines.map((l) => l.amount)).toEqual([85_000_000, 18_000_000, 6_000_000, 1_500_000])
-    expect(v.expenseTotal).toBe(110_500_000)
-    expect(v.netIncome).toBe(44_500_000)
+    // Beban Gaji 85 (40+45), Sewa 18 (8+10), Operasional 6 (3+3), Penyusutan 2
+    expect(v.expenseLines.map((l) => l.amount)).toEqual([85_000_000, 18_000_000, 6_000_000, 2_000_000])
+    expect(v.expenseTotal).toBe(111_000_000)
+    expect(v.netIncome).toBe(44_000_000)
   })
 
   it('draft & reversed tidak dihitung (Beban Operasional 6jt, bukan 11,5jt)', () => {
@@ -188,16 +188,117 @@ describe('computeIncomeStatement — formula Laba Rugi', () => {
   it('reverse BKK-0002: Beban Sewa kembali ke base 8jt, net 0 di Laba Rugi', () => {
     const before = computeIncomeStatement(mockAccounts, mockJournals, '2026-03-31')
     const after = computeIncomeStatement(mockAccounts, reverseJournal(mockJournals, 'JNL-2026-03-002'), '2026-03-31')
-    expect(before.expenseTotal).toBe(110_500_000)
+    expect(before.expenseTotal).toBe(111_000_000)
     expect(after.expenseLines.find((l) => l.accountId === '5-2000')!.amount).toBe(8_000_000) // 18 − 10
-    expect(after.expenseTotal).toBe(100_500_000)
-    expect(after.netIncome).toBe(54_500_000) // 155 − 100,5
+    expect(after.expenseTotal).toBe(101_000_000)
+    expect(after.netIncome).toBe(54_000_000) // 155 − 101
   })
 
   it('jurnal Januari (periode tertutup) tetap masuk Laba Rugi s/d Maret', () => {
     const withJan = [janJournal, ...mockJournals]
     const mar = computeIncomeStatement(mockAccounts, withJan, '2026-03-31')
     expect(mar.revenueTotal).toBe(185_000_000) // 155 + 30
-    expect(mar.netIncome).toBe(74_500_000) // 185 − 110,5
+    expect(mar.netIncome).toBe(74_000_000) // 185 − 111
+  })
+})
+
+describe('computeBalanceSheet — identitas Aset = Kewajiban + Ekuitas', () => {
+  it('Maret baseline: Aset 557 = Utang 150 + Modal 363 + Laba 44, balanced', () => {
+    const v = computeBalanceSheet(mockAccounts, mockJournals, '2026-03-31')
+    expect(v.totalAssets).toBe(557_000_000)
+    expect(v.totalLiabilitiesEquity).toBe(557_000_000)
+    expect(v.balanced).toBe(true)
+    expect(v.difference).toBe(0)
+    expect(v.netIncome).toBe(44_000_000)
+
+    // Komposisi baris: aset 4 akun + laba ditahan di section K&E
+    expect(v.sections[0].title).toBe('ASET')
+    expect(v.sections[0].lines).toHaveLength(4) // Kas, Bank, Piutang, Perlengkapan
+    expect(v.sections[1].lines.at(-1)!.name).toBe('Laba Ditahan (berjalan)')
+    expect(v.sections[1].lines.at(-1)!.amount).toBe(44_000_000)
+    // Utang Usaha = 105 base + 45 (JNL-005) = 150
+    const utang = v.sections[1].lines.find((l) => l.code === '2-1000')!
+    expect(utang.amount).toBe(150_000_000)
+  })
+
+  it('reverse BKM-0001 (pendapatan 25): Laba turun ke 19jt, tetap seimbang', () => {
+    const v = computeBalanceSheet(mockAccounts, reverseJournal(mockJournals, 'JNL-2026-03-001'), '2026-03-31')
+    expect(v.netIncome).toBe(19_000_000) // 44 − 25
+    expect(v.totalAssets).toBe(532_000_000) // 557 − 25 (Kas turun)
+    expect(v.totalLiabilitiesEquity).toBe(532_000_000)
+    expect(v.balanced).toBe(true)
+  })
+
+  it('reverse BKK-0002 (beban sewa 10): Laba naik ke 54jt, tetap seimbang', () => {
+    const v = computeBalanceSheet(mockAccounts, reverseJournal(mockJournals, 'JNL-2026-03-002'), '2026-03-31')
+    expect(v.netIncome).toBe(54_000_000) // 44 + 10
+    expect(v.totalAssets).toBe(567_000_000) // 557 + 10 (Kas tidak berkurang)
+    expect(v.balanced).toBe(true)
+  })
+
+  it('draft & reversed TIDAK mengubah keseimbangan (identitas tetap)', () => {
+    const v = computeBalanceSheet(mockAccounts, mockJournals, '2026-03-31')
+    // Seed sudah berisi 2 draft (JNL-006/007) + 1 reversed (JNL-008) —
+    // identitas tetap 557=557 (hanya jurnal posted yang dihitung)
+    expect(v.totalAssets).toBe(557_000_000)
+    expect(v.balanced).toBe(true)
+  })
+
+  it('periode tertutup Januari (tanpa jurnal Jan): Aset = base 545, tetap seimbang', () => {
+    const v = computeBalanceSheet(mockAccounts, mockJournals, '2026-01-31')
+    expect(v.totalAssets).toBe(545_000_000) // 60+380+100+5
+    expect(v.netIncome).toBe(130_000_000 - 53_000_000) // Pendapatan base − Beban base
+    expect(v.balanced).toBe(true)
+  })
+
+  it('jurnal Januari (periode tertutup) masuk ke neraca Maret: Aset 587, tetap seimbang', () => {
+    const withJan = [janJournal, ...mockJournals]
+    const v = computeBalanceSheet(mockAccounts, withJan, '2026-03-31')
+    expect(v.totalAssets).toBe(587_000_000) // 557 + 30 (Kas +30)
+    expect(v.netIncome).toBe(74_000_000) // 44 + 30
+    expect(v.balanced).toBe(true)
+  })
+})
+
+describe('computeTrialBalance — Debit = Kredit', () => {
+  it('Maret baseline: debit = kredit = 668jt, balanced', () => {
+    const v = computeTrialBalance(mockAccounts, mockJournals, '2026-03-31')
+    expect(v.debit).toBe(668_000_000)
+    expect(v.credit).toBe(668_000_000)
+    expect(v.balanced).toBe(true)
+    // Akun tanpa saldo (semua seed bersaldo) → 11 baris akun
+    expect(v.lines).toHaveLength(11)
+    // Kas (debit 87) di sisi debit; Pendapatan (kredit 155) di sisi kredit
+    expect(v.lines.find((l) => l.accountCode === '1-1100')).toMatchObject({ debit: 84_000_000, credit: 0 })
+    expect(v.lines.find((l) => l.accountCode === '4-1000')).toMatchObject({ debit: 0, credit: 155_000_000 })
+  })
+
+  it('reverse BKM-0001: debit = kredit = 643jt, tetap balanced', () => {
+    const v = computeTrialBalance(mockAccounts, reverseJournal(mockJournals, 'JNL-2026-03-001'), '2026-03-31')
+    expect(v.balanced).toBe(true)
+    expect(v.debit).toBe(643_000_000) // 668 − 25
+    expect(v.credit).toBe(643_000_000)
+  })
+
+  it('draft & reversed diabaikan (TB tetap 668, bukan 675,5)', () => {
+    const v = computeTrialBalance(mockAccounts, mockJournals, '2026-03-31')
+    // JNL-006 (5jt) + JNL-007 (2,5jt) draft + JNL-008 (2jt) reversed TIDAK masuk
+    expect(v.debit).toBe(668_000_000)
+    expect(v.credit).toBe(668_000_000)
+  })
+
+  it('periode tertutup Januari: debit = kredit = 598jt (base saja)', () => {
+    const v = computeTrialBalance(mockAccounts, mockJournals, '2026-01-31')
+    expect(v.balanced).toBe(true)
+    expect(v.debit).toBe(598_000_000) // Aset 545 + Beban 53
+    expect(v.credit).toBe(598_000_000) // Utang 105 + Modal 363 + Pendapatan 130
+  })
+
+  it('jurnal Januari masuk TB Maret: 698 = 698, tetap balanced', () => {
+    const withJan = [janJournal, ...mockJournals]
+    const v = computeTrialBalance(mockAccounts, withJan, '2026-03-31')
+    expect(v.balanced).toBe(true)
+    expect(v.debit).toBe(698_000_000) // 668 + 30
+    expect(v.credit).toBe(698_000_000)
   })
 })

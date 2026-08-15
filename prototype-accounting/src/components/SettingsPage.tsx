@@ -1,29 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
-import { DatabaseBackup, RotateCcw, Trash2 } from 'lucide-react'
+import { useState } from 'react'
+import { DatabaseBackup, RotateCcw } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { SEED_JOURNAL_IDS } from '../data/mock'
+import ResetDataModal from './ResetDataModal'
 
 export default function SettingsPage() {
-  const resetDemoData = useStore((s) => s.resetDemoData)
   const journals = useStore((s) => s.journals)
   const apiStatus = useStore((s) => s.apiStatus)
 
-  // Konfirmasi 2 langkah: klik pertama menampilkan tombol "Yakin?", hilang setelah 5 detik
-  const [confirming, setConfirming] = useState(false)
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => () => clearTimeout(timer.current ?? undefined), [])
-
-  const handleClick = () => {
-    if (confirming) {
-      clearTimeout(timer.current ?? undefined)
-      setConfirming(false)
-      resetDemoData()
-      return
-    }
-    setConfirming(true)
-    timer.current = setTimeout(() => setConfirming(false), 5000)
-  }
+  // Konfirmasi reset memakai modal (bukan teks tombol berubah).
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   const userJournalCount = journals.filter((j) => !SEED_JOURNAL_IDS.includes(j.id)).length
 
@@ -44,32 +30,24 @@ export default function SettingsPage() {
             <p className="text-sm text-ink-soft">
               Reset menghapus semua jurnal yang tersimpan di localStorage (perangkat ini) dan mengembalikan data ke
               seed awal demo: <strong className="text-ink">8 jurnal</strong> Maret 2026, saldo Kas 87jt, Aset 557jt.
+              Saat mock API hidup, reset ini juga memanggil <code className="rounded bg-canvas px-1 py-0.5 font-mono text-primary">POST /admin/reset</code> di server.
             </p>
             <ul className="space-y-1 text-xs text-ink-faint">
               <li>· Data pengguna lokal: <strong className="text-ink-soft">{journals.length} jurnal</strong> (termasuk {userJournalCount} bukan seed)</li>
-              <li>· Koneksi mock API: <strong className="text-ink-soft">{apiStatus}</strong> — tidak diubah oleh reset ini</li>
+              <li>· Server mock: <strong className="text-ink-soft">{apiStatus === 'online' ? 'akan ikut di-reset' : 'tidak dijangkau (' + apiStatus + ')'}</strong></li>
             </ul>
             <button
               type="button"
-              onClick={handleClick}
-              className={`inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white shadow-card transition active:translate-y-px ${
-                confirming ? 'bg-bad hover:bg-bad/90' : 'border border-bad/30 bg-bad/10 text-bad hover:bg-bad/15'
-              }`}
+              onClick={() => setConfirmOpen(true)}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-bad/30 bg-bad/10 px-4 py-2.5 text-sm font-semibold text-bad shadow-card transition hover:bg-bad/15 active:translate-y-px"
             >
-              {confirming ? (
-                <>
-                  <Trash2 size={15} /> Yakin? Klik lagi untuk reset
-                </>
-              ) : (
-                <>
-                  <RotateCcw size={15} /> Reset ke data demo
-                </>
-              )}
+              <RotateCcw size={15} /> Reset ke data demo
             </button>
             <p className="text-[11px] leading-relaxed text-ink-faint">
-              Mock API menyimpan state di memori server. Untuk mengembalikan data server juga, jalankan{' '}
-              <code className="rounded bg-canvas px-1 py-0.5 font-mono text-primary">npm run reset</code> di folder{' '}
-              <code className="rounded bg-canvas px-1 py-0.5 font-mono text-primary">mock-api/</code>.
+              Data yang diposting lewat UI saat online disimpan di memori server mock (dan localStorage saat offline).
+              Reset di atas membersihkan keduanya sekaligus — atau jalankan{' '}
+              <code className="rounded bg-canvas px-1 py-0.5 font-mono text-primary">npm run reset</code> di{' '}
+              <code className="rounded bg-canvas px-1 py-0.5 font-mono text-primary">mock-api/</code> untuk reset server saja.
             </p>
           </div>
         </section>
@@ -98,6 +76,8 @@ export default function SettingsPage() {
           </div>
         </section>
       </div>
+
+      <ResetDataModal open={confirmOpen} onClose={() => setConfirmOpen(false)} />
     </div>
   )
 }

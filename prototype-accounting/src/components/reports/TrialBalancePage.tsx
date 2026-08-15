@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, Scale } from 'lucide-react'
-import { useStore, isEffectJournal } from '../../store/useStore'
+import { useStore } from '../../store/useStore'
 import { api } from '../../api'
+import { computeTrialBalance, type TrialBalanceView } from '../../lib/ledger'
 import { formatIDR } from '../../lib/format'
 
 const PERIODS = [
@@ -10,19 +11,7 @@ const PERIODS = [
   { key: '2026-03', label: 'Maret 2026', end: '2026-03-31' },
 ]
 
-interface TBLine {
-  accountCode: string
-  accountName: string
-  debit: number
-  credit: number
-}
-
-interface TBView {
-  lines: TBLine[]
-  debit: number
-  credit: number
-  balanced: boolean
-}
+type TBView = TrialBalanceView
 
 export default function TrialBalancePage() {
   const accounts = useStore((s) => s.accounts)
@@ -34,45 +23,11 @@ export default function TrialBalancePage() {
 
   const period = PERIODS[periodIdx]
 
-  // Fallback offline: hitung dari data lokal (saldo YTD per akhir periode)
-  const localView = useMemo<TBView>(() => {
-    const closing = new Map<string, number>()
-    for (const a of accounts) closing.set(a.id, a.baseBalance)
-    for (const j of journals) {
-      if (!isEffectJournal(j) || j.date > period.end) continue
-      for (const ln of j.lines) {
-        const account = accounts.find((a) => a.id === ln.accountId)
-        if (!account) continue
-        const delta = account.normalBalance === 'debit' ? ln.debit - ln.credit : ln.credit - ln.debit
-        closing.set(account.id, (closing.get(account.id) ?? 0) + delta)
-      }
-    }
-    const lines: TBLine[] = []
-    let debit = 0
-    let credit = 0
-    for (const a of accounts) {
-      const amount = closing.get(a.id) ?? 0
-      if (amount === 0) continue // akun tanpa saldo (termasuk header grup) tidak muncul
-      if (a.normalBalance === 'debit') {
-        if (amount >= 0) {
-          lines.push({ accountCode: a.code, accountName: a.name, debit: amount, credit: 0 })
-          debit += amount
-        } else {
-          lines.push({ accountCode: a.code, accountName: a.name, debit: 0, credit: Math.abs(amount) })
-          credit += Math.abs(amount)
-        }
-      } else {
-        if (amount >= 0) {
-          lines.push({ accountCode: a.code, accountName: a.name, debit: 0, credit: amount })
-          credit += amount
-        } else {
-          lines.push({ accountCode: a.code, accountName: a.name, debit: Math.abs(amount), credit: 0 })
-          debit += Math.abs(amount)
-        }
-      }
-    }
-    return { lines, debit, credit, balanced: debit === credit }
-  }, [accounts, journals, period])
+  // Fallback offline: saldo YTD per akhir periode, Debit harus = Kredit
+  const localView = useMemo<TBView>(
+    () => computeTrialBalance(accounts, journals, period.end),
+    [accounts, journals, period],
+  )
 
   // Data via API: GET /reports/trial-balance?period= (tunggu koneksi menetap)
   const ready = apiStatus === 'online' || apiStatus === 'offline'

@@ -1,5 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useStore } from './store/useStore'
+import { nextRetryDelay } from './lib/retry'
 import LoginPage from './components/LoginPage'
 import TopBar from './components/TopBar'
 import Sidebar from './components/Sidebar'
@@ -20,12 +21,44 @@ function App() {
   const page = useStore((s) => s.page)
   const modalOpen = useStore((s) => s.modalOpen)
   const accessToken = useStore((s) => s.accessToken)
+  const apiStatus = useStore((s) => s.apiStatus)
   const init = useStore((s) => s.init)
 
   // Reconnect sesi tersimpan saat aplikasi mulai (bukan auto-login demo)
   useEffect(() => {
     init()
   }, [init])
+
+  // Retry otomatis dengan backoff eksponensial: begitu apiStatus offline,
+  // coba `init()` ulang sendiri (2s → 4s → 8s → … → 30s) — user TIDAK perlu
+  // menekan "Coba lagi". Percobaan otomatis memakai `silent` agar toast error
+  // tidak spam; counter attempt disimpan di ref agar backoff tidak ter-reset
+  // oleh flicker offline→connecting→offline di setiap percobaan.
+  const retryAttempt = useRef(0)
+  useEffect(() => {
+    // Reset counter hanya saat benar-benar online/idle. Status 'connecting'
+    // (flicker di tiap percobaan) TIDAK boleh me-reset — kalau di-reset,
+    // backoff selalu mulai dari 2s lagi dan tidak pernah tumbuh.
+    if (apiStatus === 'online' || apiStatus === 'idle') {
+      retryAttempt.current = 0
+      return
+    }
+    if (apiStatus !== 'offline') return
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout>
+    const attempt = retryAttempt.current
+    retryAttempt.current += 1
+    timer = setTimeout(async () => {
+      if (cancelled) return
+      await init({ silent: true })
+      // Kalau masih offline, effect akan di-trigger ulang oleh perubahan
+      // apiStatus → menjadwalkan percobaan berikutnya dengan delay lebih besar.
+    }, nextRetryDelay(attempt))
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [apiStatus, init])
 
   // Belum login → halaman login
   if (!accessToken) return <LoginPage />

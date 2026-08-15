@@ -57,20 +57,22 @@ login bertahan saat `page.reload()` (RG-02/RG-04/RG-10).
 
 ## CI (GitHub Actions)
 
-Workflow terpadu `.github/workflows/ci.yml` menjalankan pipeline **berurutan**
+Workflow terpadu `.github/workflows/ci.yml` menjalankan **3 job paralel**
 di **setiap push / pull request** (ubuntu-latest, Node 22):
 
-1. **Unit test prototipe** (Vitest, `prototype-accounting`) — 84 test
-2. **Integration test mock API** (Vitest + Supertest, `mock-api`) — 73 test
-   (baseline angka §2.3, error envelope vs katalog §13, seed:extra,
+1. **`unit`** — unit test prototipe (Vitest, `prototype-accounting`) — 105 test
+2. **`integration`** — integration test mock API (Vitest + Supertest, `mock-api`)
+   — 73 test (baseline angka §2.3, error envelope vs katalog §13, seed:extra,
    persistence)
-3. **E2E Playwright RG-01..RG-12** (chromium + firefox) — 24 test
+3. **`e2e`** — E2E Playwright RG-01..RG-12 (chromium + firefox) — 24 test
 
-Jika salah satu tahap gagal, pipeline berhenti (tahap berikutnya tidak
-jalan). Playwright menyalakan mock API + Vite sendiri via `webServer` (CI →
-`reuseExistingServer` dimatikan). `MOCK_API_PERSIST=0` dipasang di env CI agar
-state in-memory murni dan deterministik. Artefak `playwright-report/`
-(selalu) dan `test-results/` (saat gagal) di-upload sebagai artifact.
+Ketiga job berjalan **sekaligus** (tidak berurutan) — unit & integration
+selesai dalam hitungan detik tanpa tertahan E2E (~3 menit), dan kegagalan
+satu job tidak menahan job lain. Playwright menyalakan mock API + Vite
+sendiri via `webServer` (CI → `reuseExistingServer` dimatikan).
+`MOCK_API_PERSIST=0` dipasang di env job `integration` & `e2e` agar state
+in-memory murni dan deterministik. Artefak `playwright-report/` (selalu)
+dan `test-results/` (saat gagal) di-upload sebagai artifact dari job `e2e`.
 
 Workflow `e2e.yml` kini **manual-only** (`workflow_dispatch`) — untuk
 menjalankan E2E saja tanpa pipeline penuh:

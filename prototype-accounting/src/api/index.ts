@@ -27,6 +27,7 @@ export interface ApiJournal {
   createdAt: string
   postedAt?: string
   reversalOf?: string
+  source?: 'manual' | 'import'
 }
 
 export interface AuthUser {
@@ -175,6 +176,15 @@ export const api = {
   getBalanceSheet(asOf: string) {
     return request<BalanceSheet>('/reports/balance-sheet', { query: { asOf } })
   },
+
+  // Admin (dev-only, tanpa auth) — reset state server ke seed awal (Maret 2026).
+  // Dipakai tombol "Reset ke data demo" agar satu klik mereset lokal + server.
+  resetServerData() {
+    return request<{ status: string; seed: string; journals: number; message: string }>('/admin/reset', {
+      method: 'POST',
+      body: {},
+    })
+  },
 }
 
 // Normalisasi jurnal server → tipe lokal (status pending-approval → draft di UI).
@@ -197,4 +207,5 @@ export const toJournalEntry = (j: ApiJournal): JournalEntry => ({
   createdAt: j.createdAt,
   postedAt: j.postedAt,
   reversalOf: j.reversalOf,
+  source: j.source,
 })

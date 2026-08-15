@@ -45,6 +45,9 @@ export interface JournalEntry {
   createdAt: string
   postedAt?: string
   reversalOf?: string
+  // Asal jurnal — field baru sejak format persist v2. Migrasi v1→v2
+  // menambahkan nilai default 'manual' ke jurnal lama (lihat persist.ts).
+  source?: 'manual' | 'import'
 }
 
 export interface NewJournalInput {
@@ -53,6 +56,24 @@ export interface NewJournalInput {
   description: string
   lines: { accountId: string; debit: number; credit: number; description?: string }[]
 }
+
+// Operasi jurnal offline yang belum tersinkron ke server (antrian).
+// Disimpan di localStorage (persist) agar tidak hilang saat reload, dan
+// di-flush ke API otomatis begitu koneksi pulih.
+//   create  → POST /journals (+ POST /post bila action='post')
+//   post/reverse/delete/submit/approve/reject → transisi status pada jurnal
+// `ref` merujuk id jurnal (localId saat masih lokal, atau id server).
+export type OfflineJournalOp =
+  | { id: string; kind: 'create'; localId: string; input: NewJournalInput; action: 'draft' | 'post' }
+  | { id: string; kind: 'post' | 'submit' | 'approve' | 'reverse' | 'delete'; ref: string }
+  | { id: string; kind: 'reject'; ref: string; reason?: string }
+
+// Input operasi tanpa id (untuk enqueue). Jangan pakai Omit langsung pada
+// union: Omit<Union, 'id'> collapse ke {} karena member hanya berbagi key 'id'.
+export type OfflineOpInput =
+  | Omit<Extract<OfflineJournalOp, { kind: 'create' }>, 'id'>
+  | Omit<Extract<OfflineJournalOp, { kind: 'post' | 'submit' | 'approve' | 'reverse' | 'delete' }>, 'id'>
+  | Omit<Extract<OfflineJournalOp, { kind: 'reject' }>, 'id'>
 
 export interface TrendPoint {
   period: string

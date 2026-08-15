@@ -1,10 +1,20 @@
-import { Bell, BookMarked, LogOut, Search } from 'lucide-react'
+import { useState } from 'react'
+import { Bell, BookMarked, LogOut, RotateCcw, Search, Settings } from 'lucide-react'
 import { useStore } from '../store/useStore'
+import ResetDataModal from './ResetDataModal'
 
 export default function TopBar() {
   const user = useStore((s) => s.user)
   const logout = useStore((s) => s.logout)
+  const setPage = useStore((s) => s.setPage)
   const initial = user?.name?.[0] ?? 'R'
+
+  // Dropdown avatar — akses cepat ke reset data demo & pengaturan dari halaman mana pun.
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [resetOpen, setResetOpen] = useState(false)
+
+  const closeMenu = () => setMenuOpen(false)
+
   return (
     <header className="flex h-16 shrink-0 items-center gap-4 border-b border-line bg-surface px-4 lg:px-6">
       <div className="flex items-center gap-2.5">
@@ -34,23 +44,71 @@ export default function TopBar() {
           <Bell size={18} />
           <span className="absolute right-2 top-2 size-2 rounded-full bg-bad ring-2 ring-surface" />
         </button>
-        <button
-          type="button"
-          title={user ? `${user.name} (${user.role})` : 'Belum masuk'}
-          className="flex size-9 items-center justify-center rounded-full bg-primary text-xs font-bold text-white"
-        >
-          {initial}
-        </button>
-        <button
-          type="button"
-          onClick={logout}
-          title="Keluar"
-          aria-label="Keluar"
-          className="flex size-9 items-center justify-center rounded-lg text-ink-soft transition hover:bg-surface-hover hover:text-bad"
-        >
-          <LogOut size={17} />
-        </button>
+
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setMenuOpen((v) => !v)}
+            title={user ? `${user.name} (${user.role})` : 'Belum masuk'}
+            aria-label="Menu akun"
+            aria-expanded={menuOpen}
+            className={`flex size-9 items-center justify-center rounded-full bg-primary text-xs font-bold text-white transition ${
+              menuOpen ? 'ring-2 ring-primary/40' : 'hover:opacity-90'
+            }`}
+          >
+            {initial}
+          </button>
+
+          {menuOpen && (
+            <>
+              <div className="fixed inset-0 z-30" onClick={closeMenu} aria-hidden="true" />
+              <div className="absolute right-0 top-full z-40 mt-2 w-64 overflow-hidden rounded-xl border border-line bg-surface shadow-modal animate-[fadein_0.15s_ease-out]">
+                <div className="border-b border-line bg-canvas px-4 py-3">
+                  <p className="truncate text-sm font-bold text-ink">{user?.name ?? 'Pengguna'}</p>
+                  <p className="truncate text-[11px] text-ink-soft">
+                    {user?.email ?? 'Belum masuk'} · {user?.role ?? '—'}
+                  </p>
+                </div>
+                <div className="p-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeMenu()
+                      setPage('pengaturan')
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-ink transition hover:bg-surface-hover"
+                  >
+                    <Settings size={15} className="text-ink-soft" /> Pengaturan
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeMenu()
+                      setResetOpen(true)
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-bad transition hover:bg-bad/10"
+                  >
+                    <RotateCcw size={15} /> Reset data demo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeMenu()
+                      logout()
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-ink transition hover:bg-surface-hover"
+                  >
+                    <LogOut size={15} className="text-ink-soft" /> Keluar
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
       </div>
+
+      <ResetDataModal open={resetOpen} onClose={() => setResetOpen(false)} />
     </header>
   )
 }

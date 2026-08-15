@@ -494,9 +494,11 @@ test.describe('RG-09 s/d RG-12 — performa, restart, lintas browser, error', ()
     await page.reload()
 
     // Banner offline (dengan petunjuk menjalankan) + toast error + footer
+    // (indikator cache: 'Offline · Data dari cache (sinkron X)' atau
+    //  'Offline · Data demo lokal' bila belum pernah sinkron)
     await expect(page.getByText(/Jalankan npm start/)).toBeVisible()
     await expect(page.getByRole('status')).toContainText('Mock API tidak terhubung')
-    await expect(page.locator('footer')).toContainText('Offline · Data lokal')
+    await expect(page.locator('footer')).toContainText('Offline · Data')
 
     // Dashboard tetap render dengan data lokal (bukan halaman putih)
     await expect(page.getByText('Total Aset', { exact: true })).toBeVisible()

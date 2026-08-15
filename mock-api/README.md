@@ -26,6 +26,12 @@ begitu kedua server hidup, jadi prototipe selalu dibuka terhadap baseline yang t
 npm install        # sekali saja di mock-api/ DAN prototype-accounting/
 node scripts/dev.mjs            # seed awal (Maret 2026)
 node scripts/dev.mjs --extra    # + jurnal lintas bulan (Jan–Feb 2026)
+
+# Dari root repo — sama, lewat npm (package.json root):
+npm run dev                     # = node scripts/dev.mjs
+npm run dev:extra               # = node scripts/dev.mjs --extra
+npm run dev:reset               # = node scripts/dev.mjs --reset
+npm run dev:no-persist          # = node scripts/dev.mjs --no-persist
 ```
 
 - Mock API (auto-restart saat edit file) → `http://localhost:4000`, prototipe → `http://localhost:5173`

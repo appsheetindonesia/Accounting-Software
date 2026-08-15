@@ -34,6 +34,7 @@ vi.mock('../api', () => {
       rejectJournal: vi.fn(),
       reverseJournal: vi.fn(),
       deleteJournal: vi.fn(),
+      resetServerData: vi.fn(),
     },
   }
 })
@@ -56,6 +57,7 @@ const resetStore = () =>
     refreshToken: null,
     authLoading: false,
     authError: null,
+    lastSyncedAt: null,
   })
 
 const bal = () => computeBalances(useStore.getState().accounts, useStore.getState().journals)
@@ -122,9 +124,9 @@ describe('isEffectJournal — jurnal yang memengaruhi saldo', () => {
 })
 
 describe('computeBalances — saldo live dari jurnal posted', () => {
-  it('menghitung saldo seed: Kas 77jt, Pendapatan 155jt (BR-6/BR-7)', () => {
+  it('menghitung saldo seed: Kas 84jt, Pendapatan 155jt (BR-6/BR-7)', () => {
     const b = bal()
-    expect(b.get('1-1100')).toBe(77_000_000) // 50 + 25 - 10 - 3 + 15
+    expect(b.get('1-1100')).toBe(84_000_000) // 60 + 25 - 10 - 3 + 12 (JNL-004 v2)
     expect(b.get('4-1000')).toBe(155_000_000) // 130 + 25
     expect(b.get('5-2000')).toBe(18_000_000) // 8 base + 10 (JNL-002 posted)
   })
@@ -155,6 +157,7 @@ describe('login — POST /auth/login (bukan auto-login demo)', () => {
     expect(s.accounts).toEqual(mockAccounts)
     expect(s.journals).toHaveLength(mockJournals.length)
     expect(s.authError).toBeNull()
+    expect(s.lastSyncedAt).toBeTruthy() // sinkron berhasil tercatat
   })
 
   it('kredensial salah (401) → authError, TIDAK masuk & TIDAK auto-login demo', async () => {
@@ -186,6 +189,7 @@ describe('loginOffline — masuk dengan data demo lokal (tanpa server)', () => {
     expect(s.accessToken).toBe('local.demo')
     expect(s.apiStatus).toBe('offline')
     expect(s.journals).toEqual(mockJournals)
+    expect(s.lastSyncedAt).toBeNull() // data demo — belum pernah tersinkron
   })
 })
 
@@ -203,6 +207,7 @@ describe('logout — kembali ke halaman login', () => {
     expect(s.user).toBeNull()
     expect(s.journals).toEqual(mockJournals)
     expect(s.apiStatus).toBe('idle')
+    expect(s.lastSyncedAt).toBeNull() // sesi dibersihkan
   })
 
   it('logout memanggil POST /auth/logout dengan refresh token (best-effort)', () => {
@@ -256,14 +261,14 @@ describe('saveJournal — simpan draft / posting (path lokal)', () => {
   it('jurnal posted langsung mengubah saldo (+10jt)', async () => {
     await useStore.getState().saveJournal(input, 'post')
     const b = bal()
-    expect(b.get('1-1100')).toBe(87_000_000) // 77 + 10
+    expect(b.get('1-1100')).toBe(94_000_000) // 84 + 10
     expect(b.get('4-1000')).toBe(165_000_000) // 155 + 10
   })
 
   it('jurnal draft TIDAK mengubah saldo', async () => {
     await useStore.getState().saveJournal(input, 'draft')
     const b = bal()
-    expect(b.get('1-1100')).toBe(77_000_000)
+    expect(b.get('1-1100')).toBe(84_000_000)
   })
 })
 
@@ -429,7 +434,7 @@ describe('reverseJournal — pembalikan otomatis', () => {
   it('pasangan asli + pembalik bernet 0 di saldo (tidak dobel-hitung)', async () => {
     await useStore.getState().reverseJournal('JNL-2026-03-001')
     const b = bal()
-    expect(b.get('1-1100')).toBe(52_000_000) // 77 - 25 (efek BKM-0001 dibatalkan)
+    expect(b.get('1-1100')).toBe(59_000_000) // 84 - 25 (efek BKM-0001 dibatalkan)
     expect(b.get('4-1000')).toBe(130_000_000) // 155 - 25
   })
 
@@ -456,6 +461,16 @@ describe('reverseJournal — pembalikan otomatis', () => {
 })
 
 describe('resetDemoData — kembali ke seed awal', () => {
+  beforeEach(() => {
+    mockedApi.resetServerData.mockReset()
+    mockedApi.resetServerData.mockResolvedValue({
+      status: 'reset',
+      seed: 'base',
+      journals: 8,
+      message: 'State di-reset ke seed awal (Maret 2026)',
+    })
+  })
+
   it('reset menghapus jurnal pengguna & kembali ke seed murni', async () => {
     // Tambah dulu 1 jurnal pengguna + ubah periode → lalu reset
     await useStore.getState().saveJournal(
@@ -484,9 +499,64 @@ describe('resetDemoData — kembali ke seed awal', () => {
     expect(s.toast?.message).toContain('di-reset')
   })
 
-  it('reset tidak crash di lingkungan tanpa localStorage (storage null)', () => {
-    expect(() => useStore.getState().resetDemoData()).not.toThrow()
+  it('reset tidak crash di lingkungan tanpa localStorage (storage null)', async () => {
+    await expect(useStore.getState().resetDemoData()).resolves.toBeUndefined()
     expect(useStore.getState().journals).toEqual(mockJournals)
+  })
+
+  it('saat online: memanggil POST /admin/reset di server mock + reset lokal, toast menyebut server', async () => {
+    useStore.setState({ apiStatus: 'online' })
+    // Jurnal pengguna sebelum reset
+    useStore.setState((s) => ({ journals: [...s.journals, { ...mockJournals[0], id: 'JNL-USER-1' }] }))
+
+    await useStore.getState().resetDemoData()
+
+    expect(mockedApi.resetServerData).toHaveBeenCalledTimes(1)
+    const s = useStore.getState()
+    expect(s.journals).toEqual(mockJournals)
+    expect(s.toast?.kind).toBe('success')
+    expect(s.toast?.message).toContain('server mock')
+    expect(s.apiStatus).toBe('online')
+  })
+
+  it('saat online tapi reset server gagal (network): tetap reset lokal, status offline', async () => {
+    useStore.setState({ apiStatus: 'online' })
+    mockedApi.resetServerData.mockRejectedValue(new TypeError('Failed to fetch'))
+
+    await useStore.getState().resetDemoData()
+
+    const s = useStore.getState()
+    expect(s.journals).toEqual(mockJournals)
+    expect(s.apiStatus).toBe('offline')
+    expect(s.toast?.kind).toBe('error')
+    expect(s.toast?.message).toContain('tidak dapat dijangkau')
+  })
+
+  it('saat online tapi reset server gagal (ApiError non-network): reset lokal tetap jalan, status tetap online', async () => {
+    useStore.setState({ apiStatus: 'online' })
+    mockedApi.resetServerData.mockRejectedValue(new ApiError(500, 'INTERNAL', 'Gagal reset server'))
+
+    await useStore.getState().resetDemoData()
+
+    const s = useStore.getState()
+    expect(s.journals).toEqual(mockJournals)
+    expect(s.apiStatus).toBe('online')
+    expect(s.toast?.kind).toBe('error')
+    expect(s.toast?.message).toContain('tidak ikut ter-reset')
+  })
+
+  it('saat offline: tidak memanggil server, reset lokal saja', async () => {
+    useStore.setState({ apiStatus: 'offline' })
+    useStore.setState((s) => ({ journals: [...s.journals, { ...mockJournals[0], id: 'JNL-USER-2' }] }))
+
+    await useStore.getState().resetDemoData()
+
+    expect(mockedApi.resetServerData).not.toHaveBeenCalled()
+    const s = useStore.getState()
+    expect(s.journals).toEqual(mockJournals)
+    expect(s.apiStatus).toBe('offline')
+    expect(s.toast?.kind).toBe('success')
+    expect(s.toast?.message).toContain('di-reset')
   })
 })
 

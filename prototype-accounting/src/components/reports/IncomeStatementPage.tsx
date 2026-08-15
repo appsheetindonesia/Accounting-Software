@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, Plus, TrendingUp } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import { api } from '../../api'
+import { useApiFetch } from '../../hooks/useApiFetch'
 import { computeIncomeStatement } from '../../lib/ledger'
 import { formatIDR } from '../../lib/format'
+import { SkeletonBar, SkeletonLines } from '../Skeleton'
 
 const PERIODS = [
   { key: '2026-01', label: 'Januari 2026', end: '2026-01-31' },
@@ -32,8 +34,6 @@ export default function IncomeStatementPage() {
   const openModal = useStore((s) => s.openModal)
   const apiStatus = useStore((s) => s.apiStatus)
   const [periodIdx, setPeriodIdx] = useState(2) // Maret 2026
-  const [apiView, setApiView] = useState<ReportView | null>(null)
-  const [offline, setOffline] = useState(false)
 
   const period = PERIODS[periodIdx]
 
@@ -45,14 +45,11 @@ export default function IncomeStatementPage() {
 
   // Data via API: GET /reports/income-statement?period= (tunggu koneksi menetap)
   const ready = apiStatus === 'online' || apiStatus === 'offline'
-  useEffect(() => {
-    if (!ready) return
-    let alive = true
-    setOffline(false)
-    api
-      .getIncomeStatement(period.key)
-      .then((d) => {
-        if (!alive) return
+  const { data: apiView, loading, offline } = useApiFetch<ReportView>(
+    `income-statement:${period.key}:${apiStatus}`,
+    ready,
+    () =>
+      api.getIncomeStatement(period.key).then((d) => {
         // Baris isTotal (mis. "Total Pendapatan") bukan baris akun → di-filter,
         // total memakai subtotal section dari API agar tidak dobel-hitung.
         const pick = (title: string): ReportLine[] => {
@@ -67,27 +64,16 @@ export default function IncomeStatementPage() {
             }))
         }
         const subtotalOf = (title: string): number => d.sections.find((s) => s.title === title)?.subtotal ?? 0
-        const revenueLines = pick('PENDAPATAN')
-        const expenseLines = pick('BEBAN')
-        setApiView({
-          revenueLines,
-          expenseLines,
+        return {
+          revenueLines: pick('PENDAPATAN'),
+          expenseLines: pick('BEBAN'),
           revenueTotal: subtotalOf('PENDAPATAN'),
           expenseTotal: subtotalOf('BEBAN'),
           netIncome: d.netIncome,
-        })
-      })
-      .catch(() => {
-        if (alive) {
-          setApiView(null)
-          setOffline(true)
         }
-      })
-    return () => {
-      alive = false
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [periodIdx, ready])
+      }),
+    () => localView,
+  )
 
   const view: ReportView = apiView ?? localView
   const empty = view.revenueLines.length === 0 && view.expenseLines.length === 0
@@ -149,7 +135,16 @@ export default function IncomeStatementPage() {
         </p>
       )}
 
-      {empty ? (
+      {loading ? (
+        <div className="space-y-5">
+          <SkeletonLines rows={4} />
+          <SkeletonLines rows={3} />
+          <div className="animate-pulse flex items-center justify-between gap-3 rounded-xl border border-line bg-ok/10 px-5 py-4 shadow-card">
+            <SkeletonBar className="h-4 w-28" />
+            <SkeletonBar className="h-5 w-24" />
+          </div>
+        </div>
+      ) : empty ? (
         <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-line-strong bg-surface px-6 py-16 text-center">
           <div className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
             <TrendingUp size={22} />

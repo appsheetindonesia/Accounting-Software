@@ -46,7 +46,7 @@ afterEach(() => {
 afterAll(() => server.close())
 
 describe('alur posting → reverse terhadap skema API (MSW)', () => {
-  it('login → buat + posting jurnal → saldo Kas 77 → 87jt (data dari API)', async () => {
+  it('login → buat + posting jurnal → saldo Kas 74 → 84jt (data dari API)', async () => {
     await useStore.getState().login('rina@bukuwarung.com', 'password123')
     expect(useStore.getState().apiStatus).toBe('online')
 
@@ -60,11 +60,11 @@ describe('alur posting → reverse terhadap skema API (MSW)', () => {
 
     // Saldo live dihitung dari jurnal posted (via API response yang masuk store)
     const b = computeBalances(s.accounts, s.journals)
-    expect(b.get('1-1100')).toBe(87_000_000) // 77 + 10
+    expect(b.get('1-1100')).toBe(94_000_000) // 84 + 10
     expect(b.get('4-1000')).toBe(165_000_000) // 155 + 10
   })
 
-  it('reverse: jurnal pembalik debit/kredit ditukar + saldo kembali 77jt (net 0)', async () => {
+  it('reverse: jurnal pembalik debit/kredit ditukar + saldo kembali 84jt (net 0)', async () => {
     await useStore.getState().login('rina@bukuwarung.com', 'password123')
     await useStore.getState().saveJournal(input, 'post')
     const id = useStore.getState().journals.find((j) => j.transactionNumber === 'BKM-2026-03-0009')!.id
@@ -84,7 +84,7 @@ describe('alur posting → reverse terhadap skema API (MSW)', () => {
 
     // Saldo kembali ke baseline (pasangan bernet 0)
     const b = computeBalances(s.accounts, s.journals)
-    expect(b.get('1-1100')).toBe(77_000_000)
+    expect(b.get('1-1100')).toBe(84_000_000)
     expect(b.get('4-1000')).toBe(155_000_000)
   })
 

@@ -87,14 +87,10 @@ export interface IncomeStatementView {
   netIncome: number
 }
 
-// Laba Rugi s/d periodEnd (inclusive): saldo tiap akun pendapatan/beban dari
-// baseBalance + efek jurnal posted yang tanggalnya tidak melewati akhir periode.
-// Laba bersih = total pendapatan − total beban.
-export const computeIncomeStatement = (
-  accounts: Account[],
-  journals: JournalEntry[],
-  periodEnd: string,
-): IncomeStatementView => {
+// Saldo YTD per akun s/d periodEnd (inclusive): baseBalance + efek jurnal
+// posted yang tanggalnya tidak melewati akhir periode. Dipakai Buku Besar,
+// Laba Rugi, Neraca, dan Neraca Lajur (identitas akuntansi sama).
+const closingBalances = (accounts: Account[], journals: JournalEntry[], periodEnd: string) => {
   const closing = new Map<string, number>()
   for (const a of accounts) closing.set(a.id, a.baseBalance)
   for (const j of journals) {
@@ -106,6 +102,18 @@ export const computeIncomeStatement = (
       closing.set(account.id, (closing.get(account.id) ?? 0) + d)
     }
   }
+  return closing
+}
+
+// Laba Rugi s/d periodEnd (inclusive): saldo tiap akun pendapatan/beban dari
+// baseBalance + efek jurnal posted yang tanggalnya tidak melewati akhir periode.
+// Laba bersih = total pendapatan − total beban.
+export const computeIncomeStatement = (
+  accounts: Account[],
+  journals: JournalEntry[],
+  periodEnd: string,
+): IncomeStatementView => {
+  const closing = closingBalances(accounts, journals, periodEnd)
   const toLines = (type: Account['type']): ReportLine[] =>
     accounts
       .filter((a) => a.type === type)
@@ -116,4 +124,113 @@ export const computeIncomeStatement = (
   const revenueTotal = revenueLines.reduce((s, l) => s + l.amount, 0)
   const expenseTotal = expenseLines.reduce((s, l) => s + l.amount, 0)
   return { revenueLines, expenseLines, revenueTotal, expenseTotal, netIncome: revenueTotal - expenseTotal }
+}
+
+// ------------------------------------------------------------
+// Neraca (Balance Sheet) & Neraca Lajur (Trial Balance)
+// ------------------------------------------------------------
+export interface BalanceSheetLine {
+  code: string
+  name: string
+  amount: number
+  isBold?: boolean
+}
+
+export interface BalanceSheetView {
+  sections: { title: string; lines: BalanceSheetLine[]; total: number }[]
+  totalAssets: number
+  totalLiabilitiesEquity: number
+  balanced: boolean
+  difference: number
+  netIncome: number
+}
+
+// Neraca s/d periodEnd: Aset = Kewajiban + Modal + Laba berjalan (identitas
+// akuntansi). Laba berjalan dihitung dari pendapatan − beban periode berjalan.
+export const computeBalanceSheet = (
+  accounts: Account[],
+  journals: JournalEntry[],
+  periodEnd: string,
+): BalanceSheetView => {
+  const closing = closingBalances(accounts, journals, periodEnd)
+  const sumOf = (type: Account['type']) =>
+    accounts.filter((a) => a.type === type).reduce((s, a) => s + (closing.get(a.id) ?? 0), 0)
+  const totalAssets = sumOf('asset')
+  const totalLiabilities = sumOf('liability')
+  const totalEquity = sumOf('equity')
+  const netIncome = sumOf('revenue') - sumOf('expense')
+  const totalLiabilitiesEquity = totalLiabilities + totalEquity + netIncome
+  const balanced = totalAssets === totalLiabilitiesEquity
+
+  const assetLines: BalanceSheetLine[] = accounts
+    .filter((a) => a.type === 'asset' && (closing.get(a.id) ?? 0) !== 0)
+    .map((a) => ({ code: a.code, name: a.name, amount: closing.get(a.id) ?? 0 }))
+  const liabEquityLines: BalanceSheetLine[] = accounts
+    .filter((a) => (a.type === 'liability' || a.type === 'equity') && (closing.get(a.id) ?? 0) !== 0)
+    .map((a) => ({ code: a.code, name: a.name, amount: closing.get(a.id) ?? 0 }))
+
+  return {
+    sections: [
+      { title: 'ASET', lines: assetLines, total: totalAssets },
+      {
+        title: 'KEWAJIBAN & EKUITAS',
+        lines: [...liabEquityLines, { code: '', name: 'Laba Ditahan (berjalan)', amount: netIncome, isBold: true }],
+        total: totalLiabilitiesEquity,
+      },
+    ],
+    totalAssets,
+    totalLiabilitiesEquity,
+    balanced,
+    difference: totalAssets - totalLiabilitiesEquity,
+    netIncome,
+  }
+}
+
+export interface TrialBalanceLine {
+  accountCode: string
+  accountName: string
+  debit: number
+  credit: number
+}
+
+export interface TrialBalanceView {
+  lines: TrialBalanceLine[]
+  debit: number
+  credit: number
+  balanced: boolean
+}
+
+// Neraca Lajur s/d periodEnd: saldo YTD tiap akun ditempatkan ke sisi saldo
+// normalnya; akun tanpa saldo dihilangkan. Debit harus = kredit.
+export const computeTrialBalance = (
+  accounts: Account[],
+  journals: JournalEntry[],
+  periodEnd: string,
+): TrialBalanceView => {
+  const closing = closingBalances(accounts, journals, periodEnd)
+  const lines: TrialBalanceLine[] = []
+  let debit = 0
+  let credit = 0
+  for (const a of accounts) {
+    const amount = closing.get(a.id) ?? 0
+    if (amount === 0) continue // akun tanpa saldo (termasuk header grup) tidak muncul
+    if (a.normalBalance === 'debit') {
+      if (amount >= 0) {
+        lines.push({ accountCode: a.code, accountName: a.name, debit: amount, credit: 0 })
+        debit += amount
+      } else {
+        lines.push({ accountCode: a.code, accountName: a.name, debit: 0, credit: Math.abs(amount) })
+        credit += Math.abs(amount)
+      }
+    } else {
+      if (amount >= 0) {
+        lines.push({ accountCode: a.code, accountName: a.name, debit: 0, credit: amount })
+        credit += amount
+      } else {
+        lines.push({ accountCode: a.code, accountName: a.name, debit: Math.abs(amount), credit: 0 })
+        debit += Math.abs(amount)
+      }
+    }
+  }
+  return { lines, debit, credit, balanced: debit === credit }
 }
