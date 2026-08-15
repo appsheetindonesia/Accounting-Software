@@ -185,7 +185,12 @@ Katalog error: `VALIDATION_ERROR`, `INVALID_CREDENTIALS`, `UNAUTHORIZED`, `SESSI
 
 Catatan: `SESSION_EXPIRED` (401) muncul saat refresh token kedaluwarsa (TTL
 refresh default 7 hari, override `MOCK_REFRESH_TTL_MS`); `RATE_LIMITED` (429)
-aktif per-IP dengan ambang `MOCK_RATE_MAX` (default 10.000/window 60s);
+aktif per-IP per-endpoint dengan ambang `MOCK_RATE_MAX` (default **30** req/menit
+per endpoint, API §1.5; window `MOCK_RATE_WINDOW_MS` default 60s). Suite unit
+(`NODE_ENV=test`) bebas limit kecuali `MOCK_RATE_MAX` di-set eksplisit; E2E
+Playwright & `scripts/dev.mjs` menaikkan ambang via env agar suite tidak
+kena throttle — untuk menguji `RATE_LIMITED` jalankan mock API langsung
+(`cd mock-api && npm start`) tanpa env tersebut;
 `FILE_TOO_LARGE`/`UNSUPPORTED_FILE_TYPE` (422) pada upload lampiran
 (≤ 5 MB, tipe jpg/png/pdf); `NO_APPROVAL_RIGHTS` (403) pada approve/reject
 oleh role tanpa izin; `INTERNAL_ERROR` (500) dari error handler global

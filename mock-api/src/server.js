@@ -100,17 +100,27 @@ const fail = (res, status, code, message, details) =>
   res.status(status).json({ error: { code, message, ...(details ? { details } : {}) } })
 
 // ------------------------------------------------------------
-// Rate limit (API §13 RATE_LIMITED) — window per IP.
-// Ambang dibaca PER-REQUEST dari env MOCK_RATE_MAX (default 10000) &
-// MOCK_RATE_WINDOW_MS (default 60s) agar test bisa menurunkan ambang
-// tanpa me-restart server. Default sengaja longgar (mock): cukup besar
-// agar suite E2E (banyak request per run) tidak terganggu.
+// Rate limit (API §1.5 RATE_LIMITED) — 30 req/menit per endpoint
+// per user (user di-approksimasi dengan IP di mock; login tidak
+// ter-autentikasi). Bucket per (ip + endpoint), window 60s.
+// Ambang dibaca PER-REQUEST dari env MOCK_RATE_MAX (default 30) &
+// MOCK_RATE_WINDOW_MS (default 60s) agar test bisa menaikkan/
+// menurunkan ambang tanpa me-restart server:
+//   - NODE_ENV=test (Vitest) → tanpa batas KECUALI MOCK_RATE_MAX
+//     di-set eksplisit (suite unit mengirim ratusan request).
+//   - E2E Playwright & scripts/dev.mjs menaikkan ambang via env
+//     agar suite regresi & klik manual tidak kena throttle.
 // ------------------------------------------------------------
-const rateBuckets = new Map() // ip -> { count, resetAt }
+const rateBuckets = new Map() // "ip|endpoint" -> { count, resetAt }
 const rateLimit = (req, res, next) => {
-  const max = Number(process.env.MOCK_RATE_MAX) || 10000
+  let max
+  if (process.env.MOCK_RATE_MAX !== undefined && process.env.MOCK_RATE_MAX !== '') {
+    max = Number(process.env.MOCK_RATE_MAX)
+  } else {
+    max = process.env.NODE_ENV === 'test' ? Infinity : 30 // API §1.5
+  }
   const windowMs = Number(process.env.MOCK_RATE_WINDOW_MS) || 60_000
-  const key = req.ip || 'unknown'
+  const key = `${req.ip || 'unknown'}|${req.baseUrl}${req.path}`
   const now = Date.now()
   const bucket = rateBuckets.get(key) ?? { count: 0, resetAt: now + windowMs }
   if (now >= bucket.resetAt) {

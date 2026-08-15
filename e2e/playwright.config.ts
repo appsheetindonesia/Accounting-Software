@@ -36,6 +36,10 @@ export default defineConfig({
       url: 'http://localhost:4000/health',
       reuseExistingServer: !CI,
       timeout: 30_000,
+      // API §1.5 default rate limit = 30 req/menit per endpoint; suite
+      // regresi mengirim ratusan request per run → naikkan ambang di sini
+      // (di CI Playwright menyalakan server sendiri dengan env ini).
+      env: { MOCK_RATE_MAX: '100000' },
     },
     {
       command: 'npm run dev',

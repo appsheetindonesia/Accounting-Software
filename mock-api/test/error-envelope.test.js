@@ -519,6 +519,32 @@ describe('Kode error katalog yang baru terimplementasi (API §13)', () => {
     }
   })
 
+  it('default 30 req/menit per endpoint (API §1.5) → RATE_LIMITED pada ~request ke-31', async () => {
+    // Non-test: default 30 aktif (NODE_ENV=test justru tanpa batas agar suite
+    // unit tidak kena throttle). Bucket /health bisa menyimpan sisa hitungan
+    // dari test threshold-3 di atas, jadi rentang 25–30 memvalidasi batas
+    // default ≈ 30/menit per endpoint secara deterministik (urutan aman).
+    const prevEnv = process.env.NODE_ENV
+    const prevMax = process.env.MOCK_RATE_MAX
+    process.env.NODE_ENV = 'development'
+    delete process.env.MOCK_RATE_MAX
+    try {
+      let last, okCount = 0
+      for (let i = 0; i < 40; i++) {
+        last = await request(app).get('/health')
+        if (last.status === 429) break
+        okCount += 1
+      }
+      expect(okCount).toBeGreaterThanOrEqual(25)
+      expect(okCount).toBeLessThanOrEqual(30)
+      expectError(last, 429, 'RATE_LIMITED')
+    } finally {
+      process.env.NODE_ENV = prevEnv
+      if (prevMax !== undefined) process.env.MOCK_RATE_MAX = prevMax
+      else delete process.env.MOCK_RATE_MAX
+    }
+  })
+
   it('approve tanpa izin approve → NO_APPROVAL_RIGHTS', async () => {
     const create = await request(app).post('/journals').set(auth()).send({
       date: '2026-03-15',

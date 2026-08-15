@@ -42,6 +42,12 @@ const noPersist = process.argv.includes('--no-persist')
 // --no-persist: nonaktifkan persistence (state in-memory, reset tiap boot)
 // dan teruskan ke child (mock API) via env.
 if (noPersist) process.env.MOCK_API_PERSIST = '0'
+// API §1.5: mock API default rate limit 30 req/menit per endpoint. Untuk
+// dev lokal & E2E (yang me-reuse server ini, lihat playwright.config.ts)
+// naikkan ambang agar klik manual & suite regresi tidak kena throttle.
+// Untuk menguji RATE_LIMITED, jalankan mock API langsung (cd mock-api && npm start)
+// tanpa env ini.
+if (process.env.MOCK_RATE_MAX === undefined) process.env.MOCK_RATE_MAX = '100000'
 // Sama dengan parsing di mock-api/src/persistence.js
 const persistOn = !['0', 'false', 'off', 'no', 'n', 'disabled'].includes(
   String(process.env.MOCK_API_PERSIST ?? '1').trim().toLowerCase(),
