@@ -56,7 +56,7 @@
 | 201 | Created | POST sukses |
 | 204 | No Content | DELETE sukses |
 | 400 | Bad Request | Parameter/body tidak valid secara format |
-| 401 | Unauthorized | Token invalid/expired → client redirect login |
+| 401 | Unauthorized | Token invalid/expired. Kode `UNAUTHORIZED` (tanpa token/user tak dikenal) atau `TOKEN_EXPIRED` (access token basi → client refresh otomatis lalu retry, tanpa redirect) |
 | 403 | Forbidden | Role tidak punya akses → toast "Tidak memiliki akses" |
 | 404 | Not Found | Resource tidak ditemukan |
 | 409 | Conflict | Data konflik (versi lama, duplikat nomor bukti) → refresh halaman |
@@ -67,6 +67,8 @@
 ---
 
 ## 2. Auth & Pengguna
+
+> **Kedaluwarsa access token terjadwal** (mock): token `mock.<userId>.<issuedAt>` hanya valid selama **TTL** — default 3600 detik, diubah lewat env `MOCK_ACCESS_TTL=<detik>` (mis. `10` = 10 detik untuk demo). Request dengan token basi → **401 `TOKEN_EXPIRED`**; klien otomatis `POST /auth/refresh` → retry request asli (tanpa reload). `POST /admin/expire-tokens` (dev-only) memaksa semua token lama basi seketika (untuk uji deterministik); `POST /admin/reset` mengembalikan ke normal.
 
 ### 2.1 POST `/auth/login`
 Login dengan email & password.
@@ -112,11 +114,30 @@ Profile + izin role.
 }
 ```
 
-### 2.5 POST `/auth/change-password`
+### 2.5 POST `/auth/forgot-password`
+Lupa password (tanpa auth). Di produksi mengirim tautan reset ke email; di **mock** info akun dikembalikan langsung (mode demo) + arahan hubungi admin.
+**Request:** `{ "email": "rina@bukuwarung.com" }`
+**Response 200:**
+```json
+{
+  "data": {
+    "email": "rina@bukuwarung.com",
+    "name": "Rina",
+    "role": "admin",
+    "expiresIn": 900,
+    "message": "Permintaan reset diterima (mode demo).",
+    "hint": "Demo mock: password akun ini adalah \"password123\"",
+    "note": "Di lingkungan produksi, tautan reset dikirim ke email Anda. Untuk prototipe, hubungi admin untuk reset manual."
+  }
+}
+```
+**Error:** 404 `USER_NOT_FOUND` (email tidak terdaftar) · 422 `VALIDATION_ERROR` (email kosong)
+
+### 2.6 POST `/auth/change-password`
 **Request:** `{ "currentPassword": "...", "newPassword": "..." }` · **Response 204**
 **Error:** 422 `WEAK_PASSWORD` · 401 `INVALID_PASSWORD`
 
-### 2.6 Users & Role (P2)
+### 2.7 Users & Role (P2)
 | Method | Endpoint | Deskripsi | Response |
 |--------|----------|-----------|----------|
 | GET | `/users?entityId=&role=&page=` | Daftar user entitas | 200 `{ data: AppUser[], meta }` |

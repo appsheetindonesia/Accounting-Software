@@ -95,6 +95,48 @@ describe('401 — Unauthorized / autentikasi gagal (API §13)', () => {
       .send({ currentPassword: 'salah', newPassword: 'password123' })
     expectError(res, 401, 'INVALID_PASSWORD')
   })
+
+  it('forgot-password email kosong → VALIDATION_ERROR', async () => {
+    const res = await request(app).post('/auth/forgot-password').send({})
+    expectError(res, 422, 'VALIDATION_ERROR')
+  })
+
+  it('forgot-password email tidak terdaftar → USER_NOT_FOUND', async () => {
+    const res = await request(app).post('/auth/forgot-password').send({ email: 'tidak.ada@example.com' })
+    expectError(res, 404, 'USER_NOT_FOUND')
+  })
+})
+
+// ------------------------------------------------------------
+describe('401 TOKEN_EXPIRED — access token kedaluwarsa terjadwal', () => {
+  it('token basi → TOKEN_EXPIRED; POST /auth/refresh memberi token baru yang valid', async () => {
+    // Login → token valid + refresh token
+    const login = await request(app).post('/auth/login').send(USERS.admin)
+    expect(login.status).toBe(200)
+    const oldAccess = login.body.data.accessToken
+    const refreshToken = login.body.data.refreshToken
+
+    // Paksa semua token lama basi (deterministik — tidak menunggu TTL)
+    const exp = await request(app).post('/admin/expire-tokens').send({})
+    expect(exp.status).toBe(200)
+    expect(exp.body.data.status).toBe('expired')
+
+    // Request dengan token lama → 401 TOKEN_EXPIRED
+    const denied = await request(app).get('/journals').set({ Authorization: `Bearer ${oldAccess}` })
+    expectError(denied, 401, 'TOKEN_EXPIRED')
+
+    // Refresh → token baru → request sukses (alur auto-refresh klien)
+    const refreshed = await request(app).post('/auth/refresh').send({ refreshToken })
+    expect(refreshed.status).toBe(200)
+    expect(refreshed.body.data.accessToken).toMatch(/^mock\.user-001\./)
+    const okRes = await request(app).get('/journals').set({ Authorization: `Bearer ${refreshed.body.data.accessToken}` })
+    expect(okRes.status).toBe(200)
+  })
+
+  it('login & refresh mengembalikan expiresIn sesuai TTL default (3600 detik)', async () => {
+    const login = await request(app).post('/auth/login').send(USERS.admin)
+    expect(login.body.data.expiresIn).toBe(3600)
+  })
 })
 
 // ------------------------------------------------------------

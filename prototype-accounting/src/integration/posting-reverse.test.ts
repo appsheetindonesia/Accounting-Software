@@ -133,6 +133,8 @@ describe('alur posting → reverse terhadap skema API (MSW)', () => {
     // Token di client sudah diganti (refresh sukses) — buktikan request berikutnya jalan tanpa 401
     const again = await api.getJournals()
     expect(again.journals).toHaveLength(mockJournals.length)
+    // Store mencatat waktu refresh (indikator footer "Sesi diperbarui otomatis")
+    expect(useStore.getState().lastRefreshedAt).toBeTruthy()
   })
 
   it('refresh token invalid → sesi berakhir (request menolak, tanpa retry)', async () => {

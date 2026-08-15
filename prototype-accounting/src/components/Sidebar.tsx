@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import type { PageKey } from '../types'
 import { useStore } from '../store/useStore'
+import { canWriteJournal } from '../lib/permissions'
 
 const NAV: { key: PageKey; label: string; icon: typeof LayoutDashboard }[] = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -39,19 +40,23 @@ export default function Sidebar() {
   const activePeriod = useStore((s) => s.activePeriod)
   const setActivePeriod = useStore((s) => s.setActivePeriod)
   const openModal = useStore((s) => s.openModal)
+  const user = useStore((s) => s.user)
+  const canWrite = canWriteJournal(user?.role)
 
   return (
     <aside className="flex w-16 shrink-0 flex-col border-r border-line bg-surface lg:w-64">
-      <div className="px-2 pt-4 lg:px-4">
-        <button
-          type="button"
-          onClick={openModal}
-          className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-semibold text-white shadow-card transition hover:bg-primary-light active:translate-y-px lg:justify-start"
-        >
-          <Plus size={16} />
-          <span className="hidden lg:inline">Buat Jurnal</span>
-        </button>
-      </div>
+      {canWrite && (
+        <div className="px-2 pt-4 lg:px-4">
+          <button
+            type="button"
+            onClick={openModal}
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-semibold text-white shadow-card transition hover:bg-primary-light active:translate-y-px lg:justify-start"
+          >
+            <Plus size={16} />
+            <span className="hidden lg:inline">Buat Jurnal</span>
+          </button>
+        </div>
+      )}
 
       <nav className="mt-4 flex-1 space-y-0.5 overflow-y-auto px-2 lg:px-3">
         {NAV.map(({ key, label, icon: Icon }) => {

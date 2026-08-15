@@ -17,12 +17,29 @@ interface DbUser {
 }
 
 // Server mengizinkan status 'pending-approval' (tidak ada di tipe lokal)
-type JournalRecord = Omit<JournalEntry, 'status'> & { status: JournalEntry['status'] | 'pending-approval' }
+type JournalRecord = Omit<JournalEntry, 'status'> & {
+  status: JournalEntry['status'] | 'pending-approval'
+  approvedBy?: string
+  approvedAt?: string
+  rejectionReason?: string
+}
+
+interface Period {
+  id: string
+  name: string
+  month: number
+  year: number
+  startDate: string
+  endDate: string
+  isOpen: boolean
+  isActive: boolean
+}
 
 interface Db {
   users: DbUser[]
   accounts: Account[]
   journals: JournalRecord[]
+  periods: Period[]
   seqJournal: number
   sessions: Map<string, string> // refreshToken → userId
 }
@@ -34,7 +51,15 @@ const createDb = (): Db => ({
   ],
   accounts: structuredClone(mockAccounts),
   journals: structuredClone(mockJournals),
-  seqJournal: mockJournals.length + 1,
+  // Periode fiskal — mirror mock-api/src/data.js: Januari & Februari 2026 DITUTUP, Maret terbuka
+  periods: [
+    { id: 'fp-2026-01', name: 'Januari 2026', month: 1, year: 2026, startDate: '2026-01-01', endDate: '2026-01-31', isOpen: false, isActive: false },
+    { id: 'fp-2026-02', name: 'Februari 2026', month: 2, year: 2026, startDate: '2026-02-01', endDate: '2026-02-28', isOpen: false, isActive: false },
+    { id: 'fp-2026-03', name: 'Maret 2026', month: 3, year: 2026, startDate: '2026-03-01', endDate: '2026-03-31', isOpen: true, isActive: true },
+  ],
+  // Mulai dari 100 (mirror mock-api seq.journal) — seed v2 punya id JNL-2026-03-010
+  // (009 dilewati), jadi mulai dari length+1 (=10) akan BENTROK dengan seed.
+  seqJournal: 100,
   sessions: new Map(),
 })
 
@@ -55,6 +80,15 @@ const currentUser = (request: Request): DbUser | null => {
   const userId = token.split('.')[1]
   return db.users.find((u) => u.id === userId && u.isActive !== false) ?? null
 }
+
+// ---- permission (mock-api/src/data.js: rolePermissions + requirePermission) ----
+const rolePermissions: Record<string, string[]> = {
+  admin: ['account.write', 'journal.write', 'journal.approve', 'report.read', 'period.manage', 'user.manage', 'entity.manage', 'export.read'],
+  accountant: ['account.write', 'journal.write', 'report.read', 'export.read'],
+  viewer: ['report.read', 'export.read'],
+}
+const hasPermission = (user: DbUser, ...perms: string[]) =>
+  (rolePermissions[user.role] ?? []).some((p) => perms.includes(p))
 
 // ---- saldo akun: base + efek jurnal posted (bukan reversal) ----
 const computeBalances = (): Map<string, number> => {
@@ -89,6 +123,17 @@ const validateLines = (lines: { accountId?: string; debit?: number; credit?: num
     return { code: 'JOURNAL_UNBALANCED', message: `Total debit dan kredit harus sama. Debit ${debit}, Kredit ${credit}` }
   return null
 }
+
+// ---- periode fiskal (mock-api/server.js: findPeriodByDate, BR-6) ----
+const findPeriodByDate = (dateStr: string) => {
+  const d = new Date(dateStr)
+  return db.periods.find((p) => {
+    const s = new Date(p.startDate)
+    const e = new Date(p.endDate)
+    return d >= s && d <= e
+  })
+}
+const closedPeriodErr = (period: Period) => fail(422, 'PERIOD_CLOSED', `Periode ${period.name} sudah ditutup`)
 
 const pad = (n: number, len = 4) => String(n).padStart(len, '0')
 const pad3 = (n: number) => String(n).padStart(3, '0')
@@ -160,6 +205,11 @@ export const handlers = [
     }
     const err = validateLines(body.lines ?? [])
     if (err) return fail(422, err.code, err.message)
+    // Periode tertutup → 422 PERIOD_CLOSED (BR-6, mock-api validateJournal)
+    if (body.date) {
+      const period = findPeriodByDate(body.date)
+      if (period && !period.isOpen) return closedPeriodErr(period)
+    }
     const seq = db.seqJournal++
     const id = `JNL-${(body.date ?? '').slice(0, 7)}-${pad3(seq)}`
     const journal: JournalRecord = {
@@ -201,10 +251,14 @@ export const handlers = [
   http.post('*/journals/:id/post', ({ request, params }) => {
     const user = currentUser(request)
     if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
+    if (!hasPermission(user, 'journal.write')) return fail(403, 'FORBIDDEN', 'Tidak memiliki akses')
     const journal = db.journals.find((j) => j.id === params.id)
     if (!journal) return fail(404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
     if (journal.status === 'posted') return fail(409, 'ALREADY_POSTED', 'Jurnal sudah diposting')
     if (journal.status === 'reversed') return fail(409, 'ALREADY_REVERSED', 'Jurnal sudah dibatalkan')
+    // Periode tertutup → 422 PERIOD_CLOSED (mock-api: validateJournal saat post)
+    const period = findPeriodByDate(journal.date)
+    if (period && !period.isOpen) return closedPeriodErr(period)
     journal.status = 'posted'
     journal.postedAt = nowIso()
     const balances = computeBalances()
@@ -218,10 +272,14 @@ export const handlers = [
   http.post('*/journals/:id/reverse', ({ request, params }) => {
     const user = currentUser(request)
     if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
+    if (!hasPermission(user, 'journal.write')) return fail(403, 'FORBIDDEN', 'Tidak memiliki akses')
     const journal = db.journals.find((j) => j.id === params.id)
     if (!journal) return fail(404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
     if (journal.status === 'reversed') return fail(409, 'ALREADY_REVERSED', 'Jurnal sudah dibatalkan')
     if (journal.status !== 'posted') return fail(409, 'INVALID_STATUS_TRANSITION', 'Hanya jurnal posted yang dapat dibalik')
+    // Periode tertutup → 422 PERIOD_CLOSED (mock-api: reverse)
+    const period = findPeriodByDate(journal.date)
+    if (period && !period.isOpen) return closedPeriodErr(period)
     const seq = db.seqJournal++
     const reversal: JournalRecord = {
       id: `JNL-${journal.date.slice(0, 7)}-${pad3(seq)}`,
@@ -239,5 +297,65 @@ export const handlers = [
     journal.reversalOf = reversal.transactionNumber
     db.journals.unshift(reversal)
     return ok({ reversedJournalId: journal.id, status: 'reversed', reversalJournal: reversal })
+  }),
+
+  // Approval workflow (P1) — mirror mock-api/server.js (submit/approve/reject)
+  http.post('*/journals/:id/submit', async ({ request, params }) => {
+    const user = currentUser(request)
+    if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
+    if (!hasPermission(user, 'journal.write')) return fail(403, 'FORBIDDEN', 'Tidak memiliki akses')
+    const journal = db.journals.find((j) => j.id === params.id)
+    if (!journal) return fail(404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
+    if (journal.status !== 'draft') return fail(409, 'INVALID_STATUS_TRANSITION', 'Hanya jurnal draft yang dapat disubmit')
+    journal.status = 'pending-approval'
+    return ok({ id: journal.id, status: 'pending-approval' })
+  }),
+
+  http.post('*/journals/:id/approve', async ({ request, params }) => {
+    const user = currentUser(request)
+    if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
+    if (!hasPermission(user, 'journal.approve')) return fail(403, 'FORBIDDEN', 'Tidak memiliki akses')
+    const journal = db.journals.find((j) => j.id === params.id)
+    if (!journal) return fail(404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
+    if (journal.status !== 'pending-approval')
+      return fail(409, 'INVALID_STATUS_TRANSITION', 'Hanya jurnal pending-approval yang dapat di-approve')
+    journal.status = 'posted'
+    journal.postedAt = nowIso()
+    return ok({ status: 'posted', approvedBy: user.id, approvedAt: journal.postedAt })
+  }),
+
+  http.post('*/journals/:id/reject', async ({ request, params }) => {
+    const user = currentUser(request)
+    if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
+    if (!hasPermission(user, 'journal.approve')) return fail(403, 'FORBIDDEN', 'Tidak memiliki akses')
+    const journal = db.journals.find((j) => j.id === params.id)
+    if (!journal) return fail(404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
+    if (journal.status !== 'pending-approval')
+      return fail(409, 'INVALID_STATUS_TRANSITION', 'Hanya jurnal pending-approval yang dapat di-reject')
+    const { reason } = (await request.json()) as { reason?: string }
+    journal.status = 'draft'
+    journal.rejectionReason = reason ?? 'Tidak disetujui'
+    return ok({ id: journal.id, status: 'draft', rejectionReason: journal.rejectionReason })
+  }),
+
+  // 9. Periode fiskal — buka/tutup periode (test double mock-api PATCH /periods/:id/close;
+  // penanganan draft DRAFT_ACTION_REQUIRED disederhanakan di sini).
+  http.patch('*/periods/:id/close', ({ request, params }) => {
+    const user = currentUser(request)
+    if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
+    const period = db.periods.find((p) => p.id === params.id)
+    if (!period) return fail(404, 'PERIOD_NOT_FOUND', 'Periode tidak ditemukan')
+    if (!period.isOpen) return fail(409, 'PERIOD_ALREADY_CLOSED', 'Periode sudah ditutup')
+    period.isOpen = false
+    return ok({ id: period.id, isOpen: false })
+  }),
+
+  http.patch('*/periods/:id/open', ({ request, params }) => {
+    const user = currentUser(request)
+    if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
+    const period = db.periods.find((p) => p.id === params.id)
+    if (!period) return fail(404, 'PERIOD_NOT_FOUND', 'Periode tidak ditemukan')
+    period.isOpen = true // idempotent — membuka periode yang sudah terbuka tidak error
+    return ok({ id: period.id, isOpen: true })
   }),
 ]

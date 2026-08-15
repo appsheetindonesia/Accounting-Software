@@ -44,7 +44,7 @@ Uji endpoint terhadap **baseline angka** QA Test Plan §2.3 (seed Maret 2026).
 Supertest memanggil app Express langsung — **tanpa perlu server berjalan**.
 
 ```bash
-npm test          # vitest run — 73 test
+npm test          # vitest run — 83 test
 npm run test:watch
 ```
 
@@ -64,6 +64,11 @@ Cakupan (`test/`):
   (3 Jan + 4 Feb + 8 Mar), **saldo berantai Kas 60→40→64→91jt** lintas periode
   (akhir bulan N = awal bulan N+1), dan blokade periode tertutup Jan/Feb
   (POST jurnal, reverse, PUT pindah tanggal → 422 PERIOD_CLOSED).
+- `token-ttl.test.js` (4) — **kedaluwarsa token terjadwal**: TTL diubah saat
+  runtime (`POST /admin/set-token-ttl`), token basi sesuai WAKTU NYATA
+  (tunggu > TTL → 401 TOKEN_EXPIRED), refresh → token baru valid; token lama
+  tetap basi walau TTL dinaikkan (check berbasis issuedAt); reset → TTL
+  kembali ke default 3600.
 - `persistence.test.js` (10) — persistence JSON opsional.
 
 ## Persistence opsional (jurnal tidak hilang saat restart)
@@ -102,8 +107,20 @@ Contoh pemakaian: setelah pengujian QA lewat API, `npm run reset` membersihkan j
 agar angka kembali ke baseline yang terverifikasi, tanpa mematikan server.
 
 Endpoint dev lain: `POST /admin/seed-bulk {count}` (maks 50.000) — seed massal jurnal
-seimbang untuk uji performa (RG-09). Reset memakai `structuredClone` agar mutasi runtime
-(tutup periode, reverse, edit akun) tidak mencemari seed.
+seimbang untuk uji performa (RG-09); `POST /admin/expire-tokens` — paksa semua access
+token yang diterbitkan sebelumnya kedaluwarsa (uji deterministik tanpa menunggu TTL;
+di-reset oleh `POST /admin/reset`); `POST /admin/set-token-ttl {ttlSeconds}` — ubah
+TTL access token SAAT RUNTIME (tanpa restart) untuk simulasi **kedaluwarsa terjadwal**:
+token yang diterbitkan sebelumnya basi N detik setelah issuedAt-nya (dipakai E2E
+RG-19; di-reset oleh `POST /admin/reset`). Reset memakai `structuredClone` agar
+mutasi runtime (tutup periode, reverse, edit akun) tidak mencemari seed.
+
+**Kedaluwarsa access token terjadwal**: token `mock.<userId>.<issuedAt>` hanya valid
+`MOCK_ACCESS_TTL` detik (default 3600). Demo cepat: `MOCK_ACCESS_TTL=10 npm run dev` →
+token basi dalam 10 detik → klien prototipe otomatis `POST /auth/refresh` → retry request
+(tanpa reload; lihat `prototype-accounting/src/api/client.ts`). Untuk simulasi tanpa
+restart, `POST /admin/set-token-ttl {ttlSeconds: N}` mengubah TTL runtime — token
+yang diterbitkan sebelum panggilan ikut basi N detik setelah issuedAt-nya.
 
 Multi-tenant: jurnal kini membawa `entityId` (dari `X-Entity-Id`, default entitas user);
 `GET /journals` memfilter berdasarkan entitas aktif — dipakai RG-05 di suite E2E.
@@ -135,7 +152,7 @@ curl http://localhost:4000/journals?status=posted \
 
 | Modul | Endpoint | Logika nyata |
 |-------|----------|--------------|
-| **Auth & Users** | login, refresh, logout, me, change-password, CRUD user (P2) | Role → permissions (`/auth/me`), soft-delete user |
+| **Auth & Users** | login, refresh, logout, me, change-password, **forgot-password** (mock: hint + arahan admin), CRUD user (P2) | Role → permissions (`/auth/me`), soft-delete user |
 | **Entitas** | CRUD + activate | Multi-tenant via `X-Entity-Id` |
 | **COA** | CRUD, tree view, template PSAK, import/export, activate/deactivate | Validasi format kode `GOL-NOMOR`, duplikat 409, header akun, saldo turunan |
 | **Jurnal** | CRUD, post, reverse, submit/approve/reject, attachments, next-number | **Validasi balance (422)**, periode tertutup (422), nomor duplikat (409), optimistic lock If-Match (409), **posting update saldo**, **reverse membuat jurnal pembalik (net 0)** |

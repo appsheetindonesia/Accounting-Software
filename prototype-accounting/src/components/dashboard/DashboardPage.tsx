@@ -3,10 +3,13 @@ import TrendChart from './TrendChart'
 import RecentJournals from './RecentJournals'
 import AlertsPanel from './AlertsPanel'
 import { useStore } from '../../store/useStore'
+import { canWriteJournal } from '../../lib/permissions'
 
 export default function DashboardPage() {
   const setPage = useStore((s) => s.setPage)
   const openModal = useStore((s) => s.openModal)
+  const user = useStore((s) => s.user)
+  const canWrite = canWriteJournal(user?.role)
 
   return (
     <div className="space-y-5 p-5 lg:p-7">
@@ -23,13 +26,15 @@ export default function DashboardPage() {
           >
             Lihat Laporan
           </button>
-          <button
-            type="button"
-            onClick={openModal}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-primary-light active:translate-y-px"
-          >
-            + Buat Jurnal
-          </button>
+          {canWrite && (
+            <button
+              type="button"
+              onClick={openModal}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-primary-light active:translate-y-px"
+            >
+              + Buat Jurnal
+            </button>
+          )}
         </div>
       </div>
 

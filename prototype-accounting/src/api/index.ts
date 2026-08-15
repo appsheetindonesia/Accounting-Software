@@ -27,6 +27,7 @@ export interface ApiJournal {
   createdAt: string
   postedAt?: string
   reversalOf?: string
+  rejectionReason?: string
   source?: 'manual' | 'import'
 }
 
@@ -93,6 +94,11 @@ export interface BalanceSheet {
 }
 
 export const api = {
+  // 0. Health (tanpa auth) — dipakai polling koneksi (cek server hidup tiap 10 detik)
+  health() {
+    return request<{ status: string; time: string; journals: number; accounts: number }>('/health', { auth: false })
+  },
+
   // 2. Auth
   login(credentials: { email: string; password: string }) {
     return request<{ accessToken: string; refreshToken: string; expiresIn: number; user: AuthUser; activePeriod?: { id: string; name: string; isOpen: boolean } | null }>('/auth/login', {
@@ -107,6 +113,18 @@ export const api = {
   },
   logout(refreshToken: string) {
     return request<void>('/auth/logout', { method: 'POST', body: { refreshToken }, auth: false })
+  },
+  forgotPassword(email: string) {
+    // Tanpa auth. Mock API mengembalikan hint akun (mode demo) + arahan admin.
+    return request<{
+      email: string
+      name: string
+      role: string
+      expiresIn: number
+      message: string
+      hint: string
+      note: string
+    }>('/auth/forgot-password', { method: 'POST', body: { email }, auth: false })
   },
 
   // 4. Chart of Accounts
@@ -147,6 +165,14 @@ export const api = {
   },
   deleteJournal(id: string) {
     return request<void>(`/journals/${id}`, { method: 'DELETE' })
+  },
+
+  // 9. Periode fiskal
+  closePeriod(id: string) {
+    return request<{ id: string; isOpen: false }>(`/periods/${id}/close`, { method: 'PATCH' })
+  },
+  openPeriod(id: string) {
+    return request<{ id: string; isOpen: true }>(`/periods/${id}/open`, { method: 'PATCH' })
   },
 
   // 10. Dashboard

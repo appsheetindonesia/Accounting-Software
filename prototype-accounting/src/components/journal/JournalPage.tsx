@@ -3,12 +3,15 @@ import { Search, Plus } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import JournalTable from './JournalTable'
 import { formatIDR } from '../../lib/format'
+import { canWriteJournal } from '../../lib/permissions'
 
 type StatusFilter = 'all' | 'draft' | 'pending-approval' | 'posted' | 'reversed'
 
 export default function JournalPage() {
   const journals = useStore((s) => s.journals)
   const openModal = useStore((s) => s.openModal)
+  const user = useStore((s) => s.user)
+  const canWrite = canWriteJournal(user?.role)
   const [keyword, setKeyword] = useState('')
   const [status, setStatus] = useState<StatusFilter>('all')
 
@@ -50,13 +53,15 @@ export default function JournalPage() {
             Maret 2026 · {filtered.length} entri jurnal ({journals.filter((j) => j.status === 'draft').length} draft)
           </p>
         </div>
-        <button
-          type="button"
-          onClick={openModal}
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-primary-light active:translate-y-px"
-        >
-          <Plus size={16} /> Buat Jurnal
-        </button>
+        {canWrite && (
+          <button
+            type="button"
+            onClick={openModal}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-primary-light active:translate-y-px"
+          >
+            <Plus size={16} /> Buat Jurnal
+          </button>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-line bg-surface p-3 shadow-card">

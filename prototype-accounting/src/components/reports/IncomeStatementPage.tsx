@@ -5,6 +5,7 @@ import { api } from '../../api'
 import { useApiFetch } from '../../hooks/useApiFetch'
 import { computeIncomeStatement } from '../../lib/ledger'
 import { formatIDR } from '../../lib/format'
+import { canWriteJournal } from '../../lib/permissions'
 import { SkeletonBar, SkeletonLines } from '../Skeleton'
 
 const PERIODS = [
@@ -33,6 +34,8 @@ export default function IncomeStatementPage() {
   const journals = useStore((s) => s.journals)
   const openModal = useStore((s) => s.openModal)
   const apiStatus = useStore((s) => s.apiStatus)
+  const user = useStore((s) => s.user)
+  const canWrite = canWriteJournal(user?.role)
   const [periodIdx, setPeriodIdx] = useState(2) // Maret 2026
 
   const period = PERIODS[periodIdx]
@@ -153,13 +156,15 @@ export default function IncomeStatementPage() {
           <p className="max-w-sm text-sm text-ink-soft">
             Posting jurnal pendapatan atau beban pada {period.label} untuk melihat laba rugi.
           </p>
-          <button
-            type="button"
-            onClick={openModal}
-            className="mt-1 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-primary-light"
-          >
-            <Plus size={15} /> Buat Jurnal
-          </button>
+          {canWrite && (
+            <button
+              type="button"
+              onClick={openModal}
+              className="mt-1 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-primary-light"
+            >
+              <Plus size={15} /> Buat Jurnal
+            </button>
+          )}
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-card">

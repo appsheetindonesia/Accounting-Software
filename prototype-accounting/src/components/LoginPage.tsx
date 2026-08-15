@@ -10,7 +10,7 @@ const DEMO_ACCOUNTS = [
 ]
 const DEMO_PASSWORD = 'password123'
 
-export default function LoginPage() {
+export default function LoginPage({ onForgotPassword }: { onForgotPassword?: () => void }) {
   const login = useStore((s) => s.login)
   const loginOffline = useStore((s) => s.loginOffline)
   const authLoading = useStore((s) => s.authLoading)
@@ -102,6 +102,16 @@ export default function LoginPage() {
               </>
             )}
           </button>
+
+          {onForgotPassword && (
+            <button
+              type="button"
+              onClick={onForgotPassword}
+              className="block w-full text-center text-xs text-ink-soft underline-offset-2 transition hover:text-primary hover:underline"
+            >
+              Lupa password?
+            </button>
+          )}
 
           <div className="rounded-lg bg-canvas px-3 py-2.5 text-xs leading-relaxed text-ink-soft">
             <p className="font-bold uppercase tracking-wider text-ink-faint">Akun demo (mock API)</p>

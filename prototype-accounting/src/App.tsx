@@ -1,7 +1,7 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useStore } from './store/useStore'
-import { nextRetryDelay } from './lib/retry'
 import LoginPage from './components/LoginPage'
+import ForgotPasswordPage from './components/ForgotPasswordPage'
 import TopBar from './components/TopBar'
 import Sidebar from './components/Sidebar'
 import BottomBar from './components/BottomBar'
@@ -21,78 +21,70 @@ function App() {
   const page = useStore((s) => s.page)
   const modalOpen = useStore((s) => s.modalOpen)
   const accessToken = useStore((s) => s.accessToken)
-  const apiStatus = useStore((s) => s.apiStatus)
   const init = useStore((s) => s.init)
+  const pollConnection = useStore((s) => s.pollConnection)
 
   // Reconnect sesi tersimpan saat aplikasi mulai (bukan auto-login demo)
   useEffect(() => {
     init()
   }, [init])
 
-  // Retry otomatis dengan backoff eksponensial: begitu apiStatus offline,
-  // coba `init()` ulang sendiri (2s → 4s → 8s → … → 30s) — user TIDAK perlu
-  // menekan "Coba lagi". Percobaan otomatis memakai `silent` agar toast error
-  // tidak spam; counter attempt disimpan di ref agar backoff tidak ter-reset
-  // oleh flicker offline→connecting→offline di setiap percobaan.
-  const retryAttempt = useRef(0)
+  // Polling koneksi berkala: selama sesi offline, cek GET /health tiap 10 detik
+  // (ringan, tanpa auth). Begitu server kembali → pollConnection memanggil
+  // `init({ silent: true })` otomatis → banner offline hilang TANPA klik
+  // "Coba lagi" (auto-login demo bila token 'local.demo'). No-op saat online.
+  const HEALTH_POLL_MS = 10_000
   useEffect(() => {
-    // Reset counter hanya saat benar-benar online/idle. Status 'connecting'
-    // (flicker di tiap percobaan) TIDAK boleh me-reset — kalau di-reset,
-    // backoff selalu mulai dari 2s lagi dan tidak pernah tumbuh.
-    if (apiStatus === 'online' || apiStatus === 'idle') {
-      retryAttempt.current = 0
-      return
-    }
-    if (apiStatus !== 'offline') return
-    let cancelled = false
-    let timer: ReturnType<typeof setTimeout>
-    const attempt = retryAttempt.current
-    retryAttempt.current += 1
-    timer = setTimeout(async () => {
-      if (cancelled) return
-      await init({ silent: true })
-      // Kalau masih offline, effect akan di-trigger ulang oleh perubahan
-      // apiStatus → menjadwalkan percobaan berikutnya dengan delay lebih besar.
-    }, nextRetryDelay(attempt))
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
-  }, [apiStatus, init])
+    const timer = setInterval(() => pollConnection(), HEALTH_POLL_MS)
+    return () => clearInterval(timer)
+  }, [pollConnection])
 
-  // Belum login → halaman login
-  if (!accessToken) return <LoginPage />
+  // Halaman auth (belum login): login ↔ lupa password. State lokal saja
+  // (tidak dipersist — reload kembali ke halaman login).
+  const [authView, setAuthView] = useState<'login' | 'forgot'>('login')
 
   return (
-    <div className="flex h-dvh flex-col bg-canvas font-sans text-ink">
-      <TopBar />
-      <OfflineBanner />
-      <div className="flex min-h-0 flex-1">
-        <Sidebar />
-        <main className="min-w-0 flex-1 overflow-y-auto">
-          {page === 'dashboard' ? (
-            <DashboardPage />
-          ) : page === 'journal' ? (
-            <JournalPage />
-          ) : page === 'buku-besar' ? (
-            <LedgerPage />
-          ) : page === 'laba-rugi' ? (
-            <IncomeStatementPage />
-          ) : page === 'neraca-lajur' ? (
-            <TrialBalancePage />
-          ) : page === 'neraca' ? (
-            <BalanceSheetPage />
-          ) : page === 'pengaturan' ? (
-            <SettingsPage />
-          ) : (
-            <ComingSoon />
-          )}
-        </main>
-      </div>
-      <BottomBar />
-      {modalOpen && <JournalEntryModal />}
+    <>
+      {!accessToken ? (
+        authView === 'forgot' ? (
+          <ForgotPasswordPage onBack={() => setAuthView('login')} />
+        ) : (
+          <LoginPage onForgotPassword={() => setAuthView('forgot')} />
+        )
+      ) : (
+        <div className="flex h-dvh flex-col bg-canvas font-sans text-ink">
+          <TopBar />
+          <OfflineBanner />
+          <div className="flex min-h-0 flex-1">
+            <Sidebar />
+            <main className="min-w-0 flex-1 overflow-y-auto">
+              {page === 'dashboard' ? (
+                <DashboardPage />
+              ) : page === 'journal' ? (
+                <JournalPage />
+              ) : page === 'buku-besar' ? (
+                <LedgerPage />
+              ) : page === 'laba-rugi' ? (
+                <IncomeStatementPage />
+              ) : page === 'neraca-lajur' ? (
+                <TrialBalancePage />
+              ) : page === 'neraca' ? (
+                <BalanceSheetPage />
+              ) : page === 'pengaturan' ? (
+                <SettingsPage />
+              ) : (
+                <ComingSoon />
+              )}
+            </main>
+          </div>
+          <BottomBar />
+          {modalOpen && <JournalEntryModal />}
+        </div>
+      )}
+      {/* Toast di level PALING LUAR agar muncul juga di halaman login
+          (mis. toast "Anda telah keluar" setelah logout). */}
       <Toast />
-    </div>
+    </>
   )
 }
 

@@ -348,6 +348,9 @@ describe('flush otomatis via init() — koneksi pulih', () => {
       createdAt: '2026-03-25T08:00:00Z',
       postedAt: '2026-03-25T08:01:00Z',
     }
+    // Sesi offline ('local.demo') reconnect via init() → auto-login demo dulu
+    // (fix: alih-alih menunggu 401), baru muat data + flush antrian.
+    mockedApi.login.mockResolvedValue({ accessToken: 'mock.user-001.1', refreshToken: 'rt-1', expiresIn: 86400, user: demoUser, activePeriod: { id: '2026-03', name: 'Maret 2026', isOpen: true } } as any)
     mockedApi.getAccounts.mockResolvedValue({ accounts: mockAccounts })
     mockedApi.getJournals.mockResolvedValue({ journals: [serverJournal, ...mockJournals], totals: { debit: 0, credit: 0, difference: 0 } })
     mockedApi.createJournal.mockResolvedValue({ ...serverJournal, status: 'draft' })

@@ -20,7 +20,7 @@ Rilis pertama — prototipe fungsional aplikasi akuntansi *double-entry* lengkap
 - **Buku Besar**: saldo berjalan per akun (Saldo Awal → transaksi → Saldo Akhir), navigasi periode
 - **Laba Rugi**: Pendapatan − Beban = Laba/Rugi Bersih, live dari jurnal posted, navigasi periode
 - **Neraca Lajur** & **Neraca**: indikator keseimbangan **✓ Seimbang (Debit = Kredit)** dan **✓ Seimbang (Aset = Kewajiban + Ekuitas)**, live dari API dengan fallback offline
-- **Mode offline penuh**: banner + indikator *"Data dari cache · sinkron terakhir X"*, **antrian sinkronisasi localStorage** (operasi dibuat saat offline otomatis di-push begitu koneksi pulih), **retry backoff eksponensial** (2s → 30s) tanpa perlu klik
+- **Mode offline penuh**: banner + indikator *"Data dari cache · sinkron terakhir X"*, **antrian sinkronisasi localStorage** (operasi dibuat saat offline otomatis di-push begitu koneksi pulih), **polling koneksi berkala** (cek `GET /health` tiap 10 detik → banner offline hilang otomatis saat server kembali, tanpa klik)
 - **Persistensi & migrasi per-version**: state tersimpan di localStorage, format di-upgrade via `MIGRATIONS[v]` (jurnal pengguna **tidak pernah hilang** saat seed di-refresh), toast pemberitahuan migrasi
 - **Reset data demo**: modal konfirmasi (rincian yang dihapus) — saat online memanggil `POST /admin/reset` di server mock **dan** membersihkan localStorage sekaligus; akses cepat dari dropdown avatar user
 - **Branding**: tema biru `#2596BE`, nama *Appsheet Accounting Journal*, entitas *PT. Kreasi Inovasi Estetika*
@@ -39,10 +39,10 @@ Rilis pertama — prototipe fungsional aplikasi akuntansi *double-entry* lengkap
 
 | Suite | Lokasi | Jumlah | Cakupan |
 |-------|--------|--------|---------|
-| **Unit + integration prototipe** | `prototype-accounting/` | **151 test** | Logika akuntansi (auto-balance, posting, reverse), Buku Besar (saldo berjalan), Laba Rugi, Neraca & Neraca Lajur (identitas A = K+E, debit = kredit), migrasi persist per-version, refresh token, antrian offline, rehidrasi localStorage penuh, indikator sinkronisasi, retry backoff |
+| **Unit + integration prototipe** | `prototype-accounting/` | **168 test** | Logika akuntansi (auto-balance, posting, reverse), Buku Besar (saldo berjalan), Laba Rugi, Neraca & Neraca Lajur (identitas A = K+E, debit = kredit), migrasi persist per-version, refresh token, polling koneksi, antrian offline, rehidrasi localStorage penuh, indikator sinkronisasi |
 | **Property-based (fast-check)** | `prototype-accounting/src/lib/ledger.property.test.ts` | 6 property | Invarian akuntansi untuk jurnal acak: total debit = kredit selalu, reverse pasangan **net-0 per akun** (bukan hanya total) |
-| **Integration mock API** | `mock-api/` | **73 test** | Baseline angka QA §2.3, error envelope semua endpoint (409/422/401/403), seed:extra lintas bulan, periode tertutup |
-| **E2E Playwright** | `e2e/` | **24 test** | RG-01..RG-12: posting → reverse, approval workflow, Buku Besar/Laba Rugi/Neraca/Neraca Lajur dari API, offline → fallback, performa 10.000 jurnal, restart & persistensi, mobile 320px, lintas browser (chromium + firefox) |
+| **Integration mock API** | `mock-api/` | **83 test** | Baseline angka QA §2.3, error envelope semua endpoint (409/422/401/403), seed:extra lintas bulan, periode tertutup, **kedaluwarsa token terjadwal (TTL runtime)** |
+| **E2E Playwright** | `e2e/` | **38 test** | RG-01..RG-19: posting → reverse, approval workflow, Buku Besar/Laba Rugi/Neraca/Neraca Lajur dari API, offline → fallback & reconnect (RG-12, RG-17) + **auto-reconnect polling tanpa klik (RG-18)** + **TTL terjadwal → auto-refresh sesi aktif tanpa reload (RG-19)**, performa 10.000 jurnal, restart & persistensi, mobile 320px, alur auth (RG-13..16), lintas browser (chromium + firefox) |
 
 Semua suite hijau dan berjalan otomatis di CI setelah setiap push.
 
@@ -66,9 +66,12 @@ npm run dev
 # 3) Buka prototipe
 #    http://localhost:5173  → login demo: rina@bukuwarung.com / password123
 
-# Test
-npm test                      # unit prototipe (151) + integration mock API (73)
-npm run test:e2e              # E2E Playwright RG-01..RG-12 (24 test)
+# Test — satu perintah menjalankan KETIGA suite sekaligus (paralel)
+npm test                      # mock-api Supertest (83) + prototype unit/MSW (168) + E2E RG-01..RG-19 (38)
+# Per-suite:
+npm run test:mock-api         # integration test Vitest + Supertest
+npm run test:prototype        # unit + integration MSW (Vitest)
+npm run test:e2e              # E2E Playwright RG-01..RG-19
 ```
 
 **Cara login demo** (mock API): akun admin tersedia di seed — email `rina@bukuwarung.com`, password `password123` (lihat `mock-api/src/data.js`).
@@ -80,8 +83,9 @@ npm run test:e2e              # E2E Playwright RG-01..RG-12 (24 test)
 ├── docs/                      # PRD, API contract, OpenAPI, skema DB, QA, slide (dokumen)
 ├── mock-api/                  # Express mock API (port 4000) + integration test
 ├── prototype-accounting/      # Prototipe React (Vite + Tailwind, port 5173) + unit test
-├── e2e/                       # Playwright RG-01..RG-12 + konfigurasi webServer
+├── e2e/                       # Playwright RG-01..RG-19 + konfigurasi webServer
 ├── scripts/dev.mjs            # Dev terpadu: mock API + Vite bersamaan
+├── scripts/test-all.mjs       # Test terpadu: 3 suite sekaligus (npm test)
 └── .github/workflows/ci.yml   # CI paralel (unit / integration / e2e)
 ```
 

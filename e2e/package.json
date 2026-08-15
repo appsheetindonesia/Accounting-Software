@@ -2,7 +2,7 @@
   "name": "accounting-e2e",
   "version": "1.0.0",
   "private": true,
-  "description": "Playwright E2E — skenario regresi RG-01..RG-12 (QA Test Plan - Accounting.md) terhadap mock API + prototipe",
+  "description": "Playwright E2E — skenario regresi RG-01..RG-19 (QA Test Plan - Accounting.md + alur auth) terhadap mock API + prototipe",
   "scripts": {
     "test": "playwright test",
     "test:headed": "playwright test --headed",

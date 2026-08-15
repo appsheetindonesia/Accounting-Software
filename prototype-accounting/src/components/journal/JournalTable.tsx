@@ -4,6 +4,7 @@ import type { JournalEntry } from '../../types'
 import { useStore } from '../../store/useStore'
 import StatusBadge from '../StatusBadge'
 import { formatDateShort, formatIDRPlain } from '../../lib/format'
+import { canApproveJournal, canWriteJournal } from '../../lib/permissions'
 
 const TONE_CLASS = { debit: 'text-debit', credit: 'text-credit' } as const
 
@@ -24,6 +25,13 @@ export default function JournalTable({ journals }: { journals: JournalEntry[] })
   const rejectJournal = useStore((s) => s.rejectJournal)
   const reverseJournal = useStore((s) => s.reverseJournal)
   const deleteJournal = useStore((s) => s.deleteJournal)
+  const user = useStore((s) => s.user)
+  const role = user?.role ?? null
+  // Aksi mutasi disembunyikan sesuai permission mock API (API - Accounting.md §2.4):
+  //   journal.write  → submit / posting / reverse / hapus (Admin, Akuntan)
+  //   journal.approve → approve / reject (hanya Admin)
+  const canWrite = canWriteJournal(role)
+  const canApprove = canApproveJournal(role)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
@@ -132,7 +140,7 @@ export default function JournalTable({ journals }: { journals: JournalEntry[] })
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
-                            {journal.status === 'draft' && (
+                            {journal.status === 'draft' && canWrite && (
                               <>
                                 <button
                                   type="button"
@@ -170,7 +178,7 @@ export default function JournalTable({ journals }: { journals: JournalEntry[] })
                                 )}
                               </>
                             )}
-                            {journal.status === 'pending-approval' && (
+                            {journal.status === 'pending-approval' && canApprove && (
                               <>
                                 <button
                                   type="button"
@@ -188,7 +196,7 @@ export default function JournalTable({ journals }: { journals: JournalEntry[] })
                                 </button>
                               </>
                             )}
-                            {journal.status === 'posted' && (
+                            {journal.status === 'posted' && canWrite && (
                               <button
                                 type="button"
                                 onClick={() => reverseJournal(journal.id)}
@@ -199,6 +207,9 @@ export default function JournalTable({ journals }: { journals: JournalEntry[] })
                             )}
                             {journal.status === 'reversed' && (
                               <span className="text-xs text-ink-faint">Status final</span>
+                            )}
+                            {!canWrite && journal.status !== 'reversed' && (
+                              <span className="text-xs text-ink-faint">Mode baca saja</span>
                             )}
                           </div>
                         </div>

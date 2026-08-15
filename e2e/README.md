@@ -1,7 +1,9 @@
 # E2E Regression — Appsheet Accounting Journal
 
-Suite **Playwright** untuk skenario regresi **RG-01 s/d RG-12** dari
-`QA Test Plan - Accounting.md` §4, dijalankan terhadap **mock API**
+Suite **Playwright** untuk skenario regresi **RG-01 s/d RG-19** dari
+`QA Test Plan - Accounting.md` §4 (RG-13..19 = alur login, refresh token,
+reconnect offline, auto-reconnect polling & kedaluwarsa TTL terjadwal),
+dijalankan terhadap **mock API**
 (`mock-api/`, port 4000) dan **prototipe** (`prototype-accounting/`, Vite :5173).
 
 [![CI (Unit + Integration + E2E)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/ci.yml/badge.svg)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/ci.yml)
@@ -22,7 +24,7 @@ npx playwright install chromium firefox   # sekali saja (browser)
 ## Menjalankan
 
 ```bash
-npm test            # semua: RG-01..RG-12 di chromium + firefox (24 test, ±2,5 mnt)
+npm test            # semua: RG-01..RG-19 di chromium + firefox (38 test, ±4 mnt)
 npm run test:rg9    # cepat: hanya RG-09 di chromium
 npm run test:headed # dengan browser terlihat
 npm run test:ui     # Playwright UI mode
@@ -54,17 +56,24 @@ login bertahan saat `page.reload()` (RG-02/RG-04/RG-10).
 | RG-10 | Restart & persistensi | reset server (≡ restart in-memory) → kembali seed; UI tanpa error |
 | RG-11 | Lintas browser + mobile | suite penuh di chromium & firefox; layout 320px tanpa overflow |
 | RG-12 | Error handling | server mati → banner offline + fallback lokal, tanpa crash |
+| RG-13 | Login gagal | password salah → error `INVALID_CREDENTIALS` di UI, tetap di halaman login |
+| RG-14 | Login benar | kredensial valid → masuk ke Dashboard, footer Online |
+| RG-15 | Token korup | access token basi → 401 → auto-refresh → sesi pulih **tanpa login ulang** (indikator "Sesi diperbarui otomatis" tampil) |
+| RG-16 | Refresh gagal | access + refresh token basi → sesi berakhir → kembali ke halaman login dengan pesan "Sesi berakhir" |
+| RG-17 | Reconnect offline | server mati → masuk offline (banner + data lokal, token `local.demo`) → server hidup → "Coba lagi" → **auto-login demo** → online dengan token server asli |
+| RG-18 | Auto-reconnect polling | server mati → banner offline → server hidup → banner hilang **SENDIRI dalam ~10 detik** (polling `GET /health` tiap 10s) **tanpa klik "Coba lagi"**, token server asli tersimpan |
+| RG-19 | TTL terjadwal | access token basi setelah **N detik** (`POST /admin/set-token-ttl`) → **auto-refresh di sesi AKTIF tanpa reload**: 401 → refresh → retry 200, token baru tersimpan, indikator "Sesi diperbarui otomatis" tampil |
 
 ## CI (GitHub Actions)
 
 Workflow terpadu `.github/workflows/ci.yml` menjalankan **3 job paralel**
 di **setiap push / pull request** (ubuntu-latest, Node 22):
 
-1. **`unit`** — unit test prototipe (Vitest, `prototype-accounting`) — 105 test
+1. **`unit`** — unit test prototipe (Vitest, `prototype-accounting`) — 157 test
 2. **`integration`** — integration test mock API (Vitest + Supertest, `mock-api`)
-   — 73 test (baseline angka §2.3, error envelope vs katalog §13, seed:extra,
-   persistence)
-3. **`e2e`** — E2E Playwright RG-01..RG-12 (chromium + firefox) — 24 test
+   — 83 test (baseline angka §2.3, error envelope vs katalog §13, seed:extra,
+   persistence, TOKEN_EXPIRED, kedaluwarsa TTL terjadwal)
+3. **`e2e`** — E2E Playwright RG-01..RG-19 (chromium + firefox) — 38 test
 
 Ketiga job berjalan **sekaligus** (tidak berurutan) — unit & integration
 selesai dalam hitungan detik tanpa tertahan E2E (~3 menit), dan kegagalan

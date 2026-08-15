@@ -4,6 +4,7 @@ import { useStore } from '../../store/useStore'
 import { api } from '../../api'
 import { computeBalanceSheet, type BalanceSheetLine, type BalanceSheetView } from '../../lib/ledger'
 import { formatIDR } from '../../lib/format'
+import { canWriteJournal } from '../../lib/permissions'
 
 const PERIODS = [
   { key: '2026-01', label: 'Januari 2026', end: '2026-01-31' },
@@ -28,6 +29,8 @@ export default function BalanceSheetPage() {
   const journals = useStore((s) => s.journals)
   const apiStatus = useStore((s) => s.apiStatus)
   const openModal = useStore((s) => s.openModal)
+  const user = useStore((s) => s.user)
+  const canWrite = canWriteJournal(user?.role)
   const [periodIdx, setPeriodIdx] = useState(2) // Maret 2026
   const [apiView, setApiView] = useState<BSView | null>(null)
   const [offline, setOffline] = useState(false)
@@ -198,13 +201,15 @@ export default function BalanceSheetPage() {
           <p className="max-w-sm text-sm text-ink-soft">
             Posting jurnal pada {period.label} untuk melihat posisi keuangan.
           </p>
-          <button
-            type="button"
-            onClick={openModal}
-            className="mt-1 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-primary-light"
-          >
-            <Plus size={15} /> Buat Jurnal
-          </button>
+          {canWrite && (
+            <button
+              type="button"
+              onClick={openModal}
+              className="mt-1 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-primary-light"
+            >
+              <Plus size={15} /> Buat Jurnal
+            </button>
+          )}
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-card">

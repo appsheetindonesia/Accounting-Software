@@ -1,9 +1,10 @@
 # ============================================================
 # CI — Appsheet Accounting Journal
 # Tiga job PARALEL (berjalan sekaligus, tidak saling menunggu):
-#   1. unit        — unit test prototipe (Vitest, prototype-accounting)
-#   2. integration — integration test mock API (Vitest + Supertest, mock-api)
-#   3. e2e         — E2E Playwright RG-01..RG-12 (chromium + firefox)
+#   1. unit        — unit + integration test PROTOTIPE (Vitest, prototype-accounting;
+#                    `npm test` = unit test + integration MSW di src/integration)
+#   2. integration — integration test MOCK API (Vitest + Supertest, mock-api)
+#   3. e2e         — E2E Playwright RG-01..RG-19 (chromium + firefox)
 #
 # Keuntungan paralel: unit & integration selesai dalam hitungan detik
 # (tidak tertahan oleh E2E ~3 menit); kegagalan satu job TIDAK menahan
@@ -25,7 +26,7 @@ on:
 
 jobs:
   unit:
-    name: Unit test prototipe (Vitest)
+    name: Unit + Integration test prototipe (Vitest + MSW)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -43,7 +44,7 @@ jobs:
         working-directory: prototype-accounting
         run: npm ci
 
-      - name: Unit test prototipe (Vitest)
+      - name: 'Unit + Integration test prototipe (Vitest: unit + MSW)'
         working-directory: prototype-accounting
         run: npm test
 
@@ -75,7 +76,7 @@ jobs:
         run: npm test
 
   e2e:
-    name: E2E Playwright RG-01..RG-12 (chromium + firefox)
+    name: E2E Playwright RG-01..RG-19 (chromium + firefox)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -106,7 +107,7 @@ jobs:
         working-directory: e2e
         run: npx playwright install --with-deps chromium firefox
 
-      - name: Run E2E (RG-01..RG-12)
+      - name: Run E2E (RG-01..RG-19)
         working-directory: e2e
         run: npx playwright test
 

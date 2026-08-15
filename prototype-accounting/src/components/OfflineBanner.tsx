@@ -50,7 +50,7 @@ export default function OfflineBanner() {
           <> — Mock API tidak terhubung. Jalankan <code className="rounded bg-warn/10 px-1">npm start</code> di folder{' '}
             <code className="rounded bg-warn/10 px-1">mock-api/</code> (port 4000).</>
         )}{' '}
-        <span className="font-medium">Mencoba ulang otomatis…</span>
+        <span className="font-medium">Mencoba ulang otomatis tiap 10 detik…</span>
       </p>
       <button
         type="button"

@@ -35,6 +35,7 @@ vi.mock('../api', () => {
       reverseJournal: vi.fn(),
       deleteJournal: vi.fn(),
       resetServerData: vi.fn(),
+      health: vi.fn(),
     },
   }
 })
@@ -91,6 +92,8 @@ beforeEach(() => {
   mockedApi.rejectJournal.mockReset()
   mockedApi.reverseJournal.mockReset()
   mockedApi.deleteJournal.mockReset()
+  mockedApi.health.mockReset()
+  mockedApi.health.mockRejectedValue(new TypeError('fetch failed'))
   // Default: gagal jaringan agar path lokal (fallback) yang teruji
   mockedApi.login.mockRejectedValue(new TypeError('fetch failed'))
   mockedApi.logout.mockResolvedValue(undefined)
@@ -193,6 +196,103 @@ describe('loginOffline — masuk dengan data demo lokal (tanpa server)', () => {
   })
 })
 
+describe('pollConnection — polling koneksi berkala (GET /health tiap 10 detik)', () => {
+  it('saat offline + server hidup → init({ silent: true }) otomatis, banner hilang tanpa klik', async () => {
+    useStore.getState().loginOffline() // apiStatus offline, token local.demo
+    mockedApi.health.mockResolvedValue({ status: 'ok', time: new Date().toISOString(), journals: 8, accounts: 30 })
+    // init → auto-login demo + fetch akun/jurnal
+    mockedApi.login.mockResolvedValue({ accessToken: 'mock.user-001.9', refreshToken: 'rt-9', expiresIn: 86400, user: demoUser, activePeriod: { id: '2026-03', name: 'Maret 2026', isOpen: true } } as any)
+    mockedApi.getAccounts.mockResolvedValue({ accounts: mockAccounts })
+    mockedApi.getJournals.mockResolvedValue({ journals: mockJournals, totals: { debit: 0, credit: 0, difference: 0 } })
+
+    await useStore.getState().pollConnection()
+
+    expect(mockedApi.health).toHaveBeenCalledTimes(1)
+    // Reconnect otomatis TANPA klik "Coba lagi"
+    expect(useStore.getState().apiStatus).toBe('online')
+    expect(useStore.getState().accessToken).toBe('mock.user-001.9')
+    // silent → tanpa toast sukses reconnect (poll otomatis, bukan aksi user)
+    expect(useStore.getState().toast?.message).not.toContain('tersambung')
+  })
+
+  it('saat offline + server masih mati → tetap offline, init TIDAK dipanggil', async () => {
+    useStore.getState().loginOffline()
+    // Default: health reject TypeError (server mati)
+
+    await useStore.getState().pollConnection()
+
+    expect(useStore.getState().apiStatus).toBe('offline')
+    expect(useStore.getState().accessToken).toBe('local.demo')
+    expect(mockedApi.login).not.toHaveBeenCalled() // tidak ada percobaan reconnect sia-sia
+    // Polling senyap — TANPA toast error baru; toast yang ada berasal dari
+    // loginOffline() sebelumnya ("Masuk offline …"), bukan dari poll.
+    expect(useStore.getState().toast?.kind).toBe('error')
+    expect(useStore.getState().toast?.message).toContain('Masuk offline')
+  })
+
+  it('saat online → no-op (health TIDAK dipanggil, tidak mengganggu sesi)', async () => {
+    useStore.setState({ apiStatus: 'online', accessToken: 'mock.user-001.1' })
+
+    await useStore.getState().pollConnection()
+
+    expect(mockedApi.health).not.toHaveBeenCalled()
+    expect(useStore.getState().apiStatus).toBe('online')
+    expect(useStore.getState().accessToken).toBe('mock.user-001.1')
+  })
+})
+
+describe('init — reconnect sesi offline (accessToken local.demo) via "Coba lagi"', () => {
+  it('auto-login demo dulu (bukan menunggu 401) → online + token/user baru', async () => {
+    useStore.getState().loginOffline() // sesi offline tanpa sesi server
+    expect(useStore.getState().accessToken).toBe('local.demo')
+
+    mockedApi.login.mockResolvedValue({ accessToken: 'mock.user-001.2', refreshToken: 'rt-2', expiresIn: 86400, user: demoUser, activePeriod: { id: '2026-03', name: 'Maret 2026', isOpen: true } } as any)
+    mockedApi.getAccounts.mockResolvedValue({ accounts: mockAccounts })
+    mockedApi.getJournals.mockResolvedValue({ journals: mockJournals, totals: { debit: 0, credit: 0, difference: 0 } })
+
+    await useStore.getState().init()
+
+    const s = useStore.getState()
+    // Login demo dijalankan otomatis saat reconnect, bukan menunggu 401
+    expect(mockedApi.login).toHaveBeenCalledWith({ email: 'rina@bukuwarung.com', password: 'password123' })
+    expect(s.apiStatus).toBe('online')
+    expect(s.accessToken).toBe('mock.user-001.2')
+    expect(s.refreshToken).toBe('rt-2')
+    expect(s.user?.name).toBe('Rina')
+    expect(s.journals).toHaveLength(mockJournals.length)
+    expect(s.lastSyncedAt).toBeTruthy()
+    // Toast sukses reconnect (non-silent — aksi user via tombol "Coba lagi")
+    expect(s.toast?.kind).toBe('success')
+    expect(s.toast?.message).toContain('tersambung')
+  })
+
+  it('server masih mati → tetap offline, sesi local.demo tidak terganggu', async () => {
+    useStore.getState().loginOffline()
+    // Default beforeEach: api.login & getAccounts/getJournals reject TypeError
+
+    await useStore.getState().init()
+
+    const s = useStore.getState()
+    expect(s.apiStatus).toBe('offline')
+    expect(s.accessToken).toBe('local.demo')
+    expect(s.toast?.kind).toBe('error')
+  })
+
+  it('percobaan otomatis (silent) berhasil tanpa toast sukses', async () => {
+    useStore.getState().loginOffline()
+    mockedApi.login.mockResolvedValue({ accessToken: 'mock.user-001.3', refreshToken: 'rt-3', expiresIn: 86400, user: demoUser, activePeriod: { id: '2026-03', name: 'Maret 2026', isOpen: true } } as any)
+    mockedApi.getAccounts.mockResolvedValue({ accounts: mockAccounts })
+    mockedApi.getJournals.mockResolvedValue({ journals: mockJournals, totals: { debit: 0, credit: 0, difference: 0 } })
+
+    await useStore.getState().init({ silent: true })
+
+    expect(useStore.getState().apiStatus).toBe('online')
+    // silent → TANPA toast sukses reconnect (toast "Masuk offline" dari
+    // loginOffline boleh tetap ada, tapi tidak ada toast sukses baru)
+    expect(useStore.getState().toast?.message).not.toContain('tersambung')
+  })
+})
+
 describe('logout — kembali ke halaman login', () => {
   it('menghapus token & user, reset ke seed', async () => {
     // Masuk dulu (offline), lalu keluar
@@ -208,6 +308,11 @@ describe('logout — kembali ke halaman login', () => {
     expect(s.journals).toEqual(mockJournals)
     expect(s.apiStatus).toBe('idle')
     expect(s.lastSyncedAt).toBeNull() // sesi dibersihkan
+    expect(s.lastRefreshedAt).toBeNull() // riwayat refresh sesi lama dibersihkan
+    // Toast logout di-set di store — tampil di halaman login karena <Toast />
+    // dirender di level paling luar App (bukan di dalam branch utama).
+    expect(s.toast?.kind).toBe('success')
+    expect(s.toast?.message).toContain('keluar')
   })
 
   it('logout memanggil POST /auth/logout dengan refresh token (best-effort)', () => {

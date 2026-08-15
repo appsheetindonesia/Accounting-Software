@@ -4,6 +4,7 @@ import { useStore } from '../../store/useStore'
 import { journalPrefixes } from '../../data/mock'
 import { formatIDR } from '../../lib/format'
 import { computeLineTotals, toNumber } from '../../lib/accounting'
+import { canWriteJournal } from '../../lib/permissions'
 
 interface LineDraft {
   key: number
@@ -24,6 +25,8 @@ export default function JournalEntryModal() {
   const activePeriod = useStore((s) => s.activePeriod)
   const closeModal = useStore((s) => s.closeModal)
   const saveJournal = useStore((s) => s.saveJournal)
+  const user = useStore((s) => s.user)
+  const canWrite = canWriteJournal(user?.role)
 
   const activeAccounts = useMemo(() => accounts.filter((a) => a.isActive), [accounts])
 
@@ -245,22 +248,26 @@ export default function JournalEntryModal() {
           >
             Batal
           </button>
-          <button
-            type="button"
-            onClick={() => submit('draft')}
-            disabled={!canSave}
-            className="rounded-lg border border-line bg-surface px-4 py-2.5 text-sm font-medium text-ink transition hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Simpan Draft
-          </button>
-          <button
-            type="button"
-            onClick={() => submit('post')}
-            disabled={!canSave}
-            className="rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white shadow-card transition hover:bg-primary-light active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Posting
-          </button>
+          {canWrite && (
+            <>
+              <button
+                type="button"
+                onClick={() => submit('draft')}
+                disabled={!canSave}
+                className="rounded-lg border border-line bg-surface px-4 py-2.5 text-sm font-medium text-ink transition hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Simpan Draft
+              </button>
+              <button
+                type="button"
+                onClick={() => submit('post')}
+                disabled={!canSave}
+                className="rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white shadow-card transition hover:bg-primary-light active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Posting
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

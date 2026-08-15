@@ -1,4 +1,4 @@
-// Helper bersama untuk suite regresi RG-01..RG-12.
+// Helper bersama untuk suite regresi RG-01..RG-19.
 import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test'
 
 export const API_BASE = 'http://localhost:4000'

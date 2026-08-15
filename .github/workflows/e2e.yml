@@ -1,6 +1,6 @@
 # ============================================================
 # E2E Regression (manual) — Appsheet Accounting Journal
-# Menjalankan suite Playwright RG-01..RG-12 (chromium + firefox)
+# Menjalankan suite Playwright RG-01..RG-19 (chromium + firefox)
 # terhadap mock API (localhost:4000) + prototipe Vite (:5173).
 #
 # CATATAN: E2E juga dijalankan OTOMATIS di setiap push/PR oleh
@@ -19,7 +19,7 @@ on:
 
 jobs:
   e2e:
-    name: RG-01..RG-12 (chromium + firefox)
+    name: RG-01..RG-19 (chromium + firefox)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -50,7 +50,7 @@ jobs:
         working-directory: e2e
         run: npx playwright install --with-deps chromium firefox
 
-      - name: Run E2E (RG-01..RG-12)
+      - name: Run E2E (RG-01..RG-19)
         working-directory: e2e
         run: npx playwright test
 

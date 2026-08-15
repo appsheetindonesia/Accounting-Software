@@ -154,6 +154,52 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Lupa password (mock: kembalikan hint akun + arahan admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "200":
+          description: Permintaan reset diterima (mode demo — berisi hint password)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      email: { type: string, format: email }
+                      name: { type: string }
+                      role: { type: string }
+                      expiresIn: { type: integer }
+                      message: { type: string }
+                      hint: { type: string, description: "Demo mock: password akun ini" }
+                      note: { type: string, description: "Arahan hubungi admin (produksi)" }
+        "404":
+          description: Email tidak terdaftar
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, example: USER_NOT_FOUND }
+                      message: { type: string }
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
   /auth/change-password:
     post:
       tags: [Auth]

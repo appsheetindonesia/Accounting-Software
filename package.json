@@ -8,7 +8,8 @@
     "dev:extra": "node scripts/dev.mjs --extra",
     "dev:reset": "node scripts/dev.mjs --reset",
     "dev:no-persist": "node scripts/dev.mjs --no-persist",
-    "test": "npm run test:mock-api && npm run test:prototype",
+    "test": "node scripts/test-all.mjs",
+    "test:all": "node scripts/test-all.mjs",
     "test:mock-api": "npm --prefix mock-api test",
     "test:prototype": "npm --prefix prototype-accounting test",
     "test:e2e": "npm --prefix e2e test"

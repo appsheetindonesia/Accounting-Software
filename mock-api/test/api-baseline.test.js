@@ -31,6 +31,24 @@ beforeEach(async () => {
 })
 
 // ------------------------------------------------------------------
+describe('2.5 Lupa password — hint akun demo', () => {
+  it('forgot-password email terdaftar → 200 dengan hint + arahan admin', async () => {
+    const res = await request(app).post('/auth/forgot-password').send({ email: DEMO.email })
+    expect(res.status).toBe(200)
+    expect(res.body.data.email).toBe('rina@bukuwarung.com')
+    expect(res.body.data.role).toBe('admin')
+    expect(res.body.data.hint).toContain('password123')
+    expect(res.body.data.note).toContain('admin')
+  })
+
+  it('forgot-password case-insensitive & trim whitespace', async () => {
+    const res = await request(app).post('/auth/forgot-password').send({ email: '  RINA@BUKUWARUNG.COM  ' })
+    expect(res.status).toBe(200)
+    expect(res.body.data.email).toBe('rina@bukuwarung.com')
+  })
+})
+
+// ------------------------------------------------------------------
 describe('2.3 Baseline — Jurnal & Saldo Akun', () => {
   it('5 jurnal posted dengan total debit = kredit = 98.000.000', async () => {
     const res = await get('/journals', { status: 'posted', pageSize: 200 })

@@ -224,15 +224,32 @@ const validateJournal = (body, excludeJournalId) => {
 }
 
 // ------------------------------------------------------------
-// Auth middleware (token mock: "mock.<userId>")
+// Auth middleware (token mock: "mock.<userId>.<issuedAt>")
+// Access token KEDALUWARSA TERJADWAL — format token menyimpan waktu
+// diterbitkan (ms); dianggap basi bila sudah lewat TTL.
+//   - Default TTL 1 jam; demo cepat: MOCK_ACCESS_TTL=10 (10 detik)
+//   - POST /admin/set-token-ttl mengubah TTL SAAT RUNTIME (tanpa restart)
+//     → uji "access token hanya valid N detik" di sesi aktif
+//   - POST /admin/expire-tokens memaksa SEMUA token lama basi (epoch),
+//     supaya uji kedaluwarsa deterministik tanpa menunggu waktu nyata.
+//   - POST /admin/reset mengembalikan TTL ke nilai default.
+// Klien wajib refresh (401 → POST /auth/refresh → retry) — lihat
+// prototype-accounting/src/api/client.ts.
 // ------------------------------------------------------------
+const DEFAULT_ACCESS_TTL_MS = (Number(process.env.MOCK_ACCESS_TTL) || 3600) * 1000
+let accessTtlMs = DEFAULT_ACCESS_TTL_MS
+let tokenEpoch = 0
+
 const requireAuth = (req, res, next) => {
   const header = req.headers.authorization || ''
   const token = header.startsWith('Bearer ') ? header.slice(7) : null
   if (!token || !token.startsWith('mock.')) return fail(res, 401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
   const userId = token.split('.')[1]
+  const issuedAt = Number(token.split('.')[2] || 0)
   const user = db.users.find((u) => u.id === userId && u.isActive)
   if (!user) return fail(res, 401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
+  if (!issuedAt || issuedAt < tokenEpoch || Date.now() - issuedAt > accessTtlMs)
+    return fail(res, 401, 'TOKEN_EXPIRED', 'Access token kedaluwarsa. Silakan refresh.')
   req.user = user
   // Multi-tenant: X-Entity-Id, default dari profil user
   req.entityId = req.headers['x-entity-id'] || user.entityId
@@ -266,6 +283,10 @@ const paginate = (arr, page = 1, pageSize = 50) => {
 app.post('/admin/reset', (req, res) => {
   const withExtra = !!req.body?.withExtra
   db = createDb({ withExtra })
+  // Reset penuh: kembalikan epoch kedaluwarsa token ke 0 (token lama valid lagi)
+  tokenEpoch = 0
+  // Kembalikan TTL ke nilai default (env MOCK_ACCESS_TTL atau 3600 detik)
+  accessTtlMs = DEFAULT_ACCESS_TTL_MS
   ok(res, {
     status: 'reset',
     seed: withExtra ? 'extra' : 'base',
@@ -274,6 +295,25 @@ app.post('/admin/reset', (req, res) => {
     periods: db.periods.length,
     message: withExtra ? 'Seed + jurnal lintas bulan (Jan–Feb 2026) dimuat' : 'State di-reset ke seed awal (Maret 2026)',
   })
+})
+
+// Paksa semua access token yang diterbitkan sebelumnya kedaluwarsa
+// (alat development; uji kedaluwarsa jadi deterministik tanpa menunggu TTL).
+app.post('/admin/expire-tokens', (req, res) => {
+  tokenEpoch = Date.now()
+  ok(res, { status: 'expired', message: 'Semua access token yang diterbitkan sebelumnya kini kedaluwarsa' })
+})
+
+// Ubah TTL access token SAAT RUNTIME (tanpa restart) — uji "token valid
+// hanya N detik": token yang diterbitkan SEBELUMNYA ikut basi setelah N
+// detik dari issuedAt-nya (karena check pakai Date.now() - issuedAt).
+// Dipakai simulasi kedaluwarsa terjadwal di sesi aktif (E2E RG-19).
+app.post('/admin/set-token-ttl', (req, res) => {
+  const ttlSeconds = Number(req.body?.ttlSeconds)
+  if (!Number.isFinite(ttlSeconds) || ttlSeconds < 1)
+    return fail(res, 422, 'VALIDATION_ERROR', 'ttlSeconds wajib angka >= 1', [{ field: 'ttlSeconds', message: 'Angka >= 1' }])
+  accessTtlMs = ttlSeconds * 1000
+  ok(res, { ttlSeconds, expiresIn: ttlSeconds, message: `Access token kini hanya valid ${ttlSeconds} detik (token lama ikut basi sesuai issuedAt)` })
 })
 
 // Seed massal jurnal seimbang (alat development) — dipakai uji performa
@@ -319,7 +359,7 @@ app.post('/auth/login', (req, res) => {
   ok(res, {
     accessToken: `mock.${user.id}.${Date.now()}`,
     refreshToken,
-    expiresIn: 86400,
+    expiresIn: Math.round(accessTtlMs / 1000),
     user: safeUser,
   })
 })
@@ -331,13 +371,33 @@ app.post('/auth/refresh', (req, res) => {
   const newRefresh = randomUUID()
   db.sessions.delete(refreshToken)
   db.sessions.set(newRefresh, userId)
-  ok(res, { accessToken: `mock.${userId}.${Date.now()}`, refreshToken: newRefresh, expiresIn: 86400 })
+  ok(res, { accessToken: `mock.${userId}.${Date.now()}`, refreshToken: newRefresh, expiresIn: Math.round(accessTtlMs / 1000) })
 })
 
 app.post('/auth/logout', (req, res) => {
   const { refreshToken } = req.body ?? {}
   if (refreshToken) db.sessions.delete(refreshToken)
   res.status(204).end()
+})
+
+// Lupa password (tanpa auth). Di produksi endpoint ini mengirim tautan reset
+// ke email user; di MOCK, info akun dikembalikan langsung agar alur UI bisa
+// diuji — plus arahan "hubungi admin" untuk lingkungan nyata.
+app.post('/auth/forgot-password', (req, res) => {
+  const { email } = req.body ?? {}
+  if (!email) return fail(res, 422, 'VALIDATION_ERROR', 'Email wajib diisi', [{ field: 'email', message: 'Wajib diisi' }])
+  const user = db.users.find((u) => u.email.toLowerCase() === String(email).trim().toLowerCase())
+  if (!user || !user.isActive) return fail(res, 404, 'USER_NOT_FOUND', 'Email tidak terdaftar di sistem ini')
+  const { password, ...safeUser } = user
+  ok(res, {
+    email: safeUser.email,
+    name: safeUser.name,
+    role: safeUser.role,
+    expiresIn: 900,
+    message: 'Permintaan reset diterima (mode demo).',
+    hint: `Demo mock: password akun ini adalah "${password}"`,
+    note: 'Di lingkungan produksi, tautan reset dikirim ke email Anda. Untuk prototipe, hubungi admin untuk reset manual.',
+  })
 })
 
 app.get('/auth/me', requireAuth, (req, res) => {

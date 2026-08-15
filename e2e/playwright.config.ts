@@ -1,6 +1,6 @@
 // ============================================================
 // Playwright E2E — Appsheet Accounting Journal
-// Menjalankan skenario regresi RG-01..RG-12 (QA Test Plan)
+// Menjalankan skenario regresi RG-01..RG-19 (QA Test Plan §4 + alur auth)
 // terhadap MOCK API (localhost:4000) + prototipe Vite (:5173).
 //
 //   npm test            → jalankan semua (chromium + firefox)

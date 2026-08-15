@@ -19,6 +19,11 @@ export interface Toast {
 
 export type ApiStatus = 'idle' | 'connecting' | 'online' | 'offline'
 
+// Kredensial akun demo (mirror mock-api/src/data.js) — dipakai AUTO-LOGIN saat
+// sesi offline ('local.demo') reconnect lewat init() / tombol "Coba lagi".
+const DEMO_EMAIL = 'rina@bukuwarung.com'
+const DEMO_PASSWORD = 'password123'
+
 interface AccountingState {
   page: PageKey
   setPage: (page: PageKey) => void
@@ -38,12 +43,18 @@ interface AccountingState {
   // berasal dari cache (localStorage) — dipakai untuk indikator "Data dari
   // cache · sinkron terakhir X". null = belum pernah tersinkron (data demo).
   lastSyncedAt: string | null
+  // Waktu access token terakhir berhasil di-refresh otomatis (401 → refresh).
+  // In-memory saja (tidak dipersist) — indikator transparansi di footer,
+  // hilang saat sesi baru (login/logout/reset). null = belum pernah refresh.
+  lastRefreshedAt: string | null
   user: Pick<AuthUser, 'id' | 'name' | 'email' | 'role'> | null
   accessToken: string | null
   refreshToken: string | null
   authLoading: boolean
   authError: string | null
   init: (opts?: { silent?: boolean }) => Promise<void>
+  // Polling koneksi: cek GET /health saat offline; server hidup → init() otomatis
+  pollConnection: () => Promise<void>
   login: (email: string, password: string) => Promise<void>
   loginOffline: () => void
   logout: () => void
@@ -267,8 +278,9 @@ export const useStore = create<AccountingState>()(
         authError: null,
         // Reconnect sesi tersimpan (reload) — TANPA auto-login demo.
         // Dipanggil App saat mount, tombol "Coba lagi" (OfflineBanner), dan
-        // retry otomatis backoff (App.tsx). `silent` menekan toast error saat
-        // percobaan otomatis — toast hanya untuk aksi user (mount/manual).
+        // polling koneksi berkala (App.tsx, GET /health tiap 10 detik).
+        // `silent` menekan toast error saat percobaan otomatis — toast hanya
+        // untuk aksi user (mount/manual).
         init: async (opts) => {
           const token = get().accessToken
           if (!token) return
@@ -277,14 +289,29 @@ export const useStore = create<AccountingState>()(
           if (status === 'connecting' || status === 'online') return
           set({ apiStatus: 'connecting' })
           try {
+            // Sesi offline ('local.demo') TIDAK punya sesi server — request
+            // langsung cuma dapat 401 tanpa refresh token untuk menebusnya.
+            // Reconnect = AUTO-LOGIN demo dulu (api.login juga setAuth token
+            // baru di client), alih-alih menunggu 401 yang tak akan pernah pulih.
+            const auth = token === 'local.demo' ? await api.login({ email: DEMO_EMAIL, password: DEMO_PASSWORD }) : null
             const [accRes, jrnRes] = await Promise.all([api.getAccounts(), api.getJournals()])
-            const journals = jrnRes.journals.map((j) => enrichCreatedBy(toJournalEntry(j), get().user))
+            const journals = jrnRes.journals.map((j) => enrichCreatedBy(toJournalEntry(j), auth?.user ?? get().user))
             set({
               apiStatus: 'online',
+              ...(auth
+                ? {
+                    accessToken: auth.accessToken,
+                    refreshToken: auth.refreshToken ?? null,
+                    user: { id: auth.user.id, name: auth.user.name, email: auth.user.email, role: auth.user.role },
+                  }
+                : {}),
               accounts: accRes.accounts,
               journals,
               activePeriod: get().activePeriod,
               lastSyncedAt: nowIso(),
+              ...(auth && !opts?.silent
+                ? { toast: { message: 'Sesi offline tersambung — login demo otomatis', kind: 'success' as const } }
+                : {}),
             })
           } catch {
             set({
@@ -295,6 +322,20 @@ export const useStore = create<AccountingState>()(
           }
           // Koneksi pulih → kirim operasi offline yang tertunda ke server.
           await get().flushOfflineQueue()
+        },
+
+        // Polling koneksi berkala (dipanggil App tiap 10 detik): selama OFFLINE,
+        // cek GET /health (ringan, tanpa auth). Begitu server hidup → init()
+        // otomatis (auto-login demo bila token 'local.demo') → banner offline
+        // hilang TANPA klik "Coba lagi". No-op saat online/connecting.
+        pollConnection: async () => {
+          if (get().apiStatus !== 'offline') return
+          try {
+            const h = await api.health()
+            if (h?.status === 'ok') await get().init({ silent: true })
+          } catch {
+            // Server masih mati — poll berikutnya (10 detik) akan mencoba lagi.
+          }
         },
 
         // Login sungguhan: POST /auth/login dengan email/password dari form.
@@ -336,6 +377,7 @@ export const useStore = create<AccountingState>()(
             accounts: mockAccounts,
             journals: mockJournals,
             lastSyncedAt: null, // data demo — belum pernah tersinkron
+            lastRefreshedAt: null,
             authLoading: false,
             authError: null,
             toast: { message: 'Masuk offline — menampilkan data demo lokal', kind: 'error' },
@@ -363,6 +405,7 @@ export const useStore = create<AccountingState>()(
             offlineQueue: [],
             isSyncing: false,
             lastSyncedAt: null,
+            lastRefreshedAt: null,
             toast: { message: 'Anda telah keluar', kind: 'success' },
           })
         },
@@ -376,6 +419,7 @@ export const useStore = create<AccountingState>()(
             accessToken: null,
             refreshToken: null,
             user: null,
+            lastRefreshedAt: null,
             authError: 'Sesi berakhir. Silakan login kembali.',
           })
         },
@@ -602,6 +646,7 @@ export const useStore = create<AccountingState>()(
             offlineQueue: [],
             isSyncing: false,
             lastSyncedAt: null,
+            lastRefreshedAt: null,
             toast: {
               message: serverReset
                 ? 'Data demo di-reset ke seed awal (lokal + server mock)'
@@ -621,6 +666,7 @@ export const useStore = create<AccountingState>()(
         offlineQueue: [],
         isSyncing: false,
         lastSyncedAt: null,
+        lastRefreshedAt: null,
 
         enqueueOffline: (op) => {
           set((s) => ({ offlineQueue: [...s.offlineQueue, op] }))
@@ -745,7 +791,9 @@ export const useStore = create<AccountingState>()(
 // - token berhasil di-refresh (401) → store ikut update + persist
 // - refresh gagal (sesi habis) → kembali ke halaman login
 setTokensRefreshedHandler(({ accessToken, refreshToken }) => {
-  useStore.setState({ accessToken, refreshToken })
+  // Token berhasil di-refresh otomatis (401) — catat waktu untuk indikator
+  // transparansi di footer ("Sesi diperbarui otomatis · baru saja").
+  useStore.setState({ accessToken, refreshToken, lastRefreshedAt: nowIso() })
 })
 setSessionExpiredHandler(() => useStore.getState().handleSessionExpired())
 
