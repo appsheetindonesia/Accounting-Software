@@ -451,3 +451,39 @@ dan salin-tempel curl yang dicetaknya.
 Status yang dikirim: `Passed`=1, `Blocked`=2, `Retest`=4, `Failed`=5,
 `Skipped`=6. Baris kosong / `Not Run` dilewati (status `Untested`=3 tidak bisa
 dikirim sebagai hasil).
+
+---
+
+### 8.1 Contoh run dengan `--sample` (referensi format import)
+
+Untuk melihat bentuk CSV/XLSX/JSON dengan Status terisi (acak-deterministik,
+seed tetap — bisa direproduksi), tanpa menyentuh file asli:
+
+```bash
+python scripts/generate-qa-test-cases.py --sample
+```
+
+Menghasilkan 4 file contoh di root repo:
+
+| File | Isi |
+|------|-----|
+| `qa-test-cases-sample-tracker.csv` | Tracker dengan Status terisi (contoh) |
+| `qa-test-cases-sample.xlsx` | Workbook berformat (CF status, ringkasan) |
+| `qa-test-results-sample-testrail.csv` | CSV hasil contoh — siap di-import TestRail |
+| `qa-test-results-sample.json` | Payload `add_results_for_cases` contoh |
+
+Contoh payload (`qa-test-results-sample.json`):
+
+```json
+{
+  "results": [
+    { "case_id": 1, "status_id": 5 },
+    { "case_id": 2, "status_id": 1 }
+  ]
+}
+```
+
+Format JSON ini identik dengan yang dihasilkan konverter
+(`scripts/convert-results-to-testrail.py`) untuk run sungguhan — jadi contoh
+`--sample` sekaligus jadi referensi format payload yang siap dikirim via curl
+pada §8.
