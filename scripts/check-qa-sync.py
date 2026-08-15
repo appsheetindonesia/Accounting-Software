@@ -9,7 +9,10 @@ Alur:
      dipin dari file yang ter-commit (env QA_RUN_DATE) — jadi pergantian hari
      TIDAK dianggap sebagai perubahan.
   3. Bandingkan KONTEN:
-       - CSV        → byte identik (deterministik).
+       - CSV        → identik SETELAH normalisasi line ending (CRLF/LF dianggap
+                      sama — checkout Windows dengan core.autocrlf menulis
+                      CRLF di disk, generator kini menulis LF; ini bukan
+                      perubahan konten).
        - XLSX       → nilai sel per sheet + formula conditional formatting
                       (byte XLSX TIDAK dibandingkan: openpyxl menulis timestamp
                       zip non-deterministik, jadi dua save konten-identik
@@ -103,7 +106,12 @@ def main() -> None:
                 diffs.append(f"{name}: tidak ada di state sebelumnya")
                 continue
             if name.endswith(".csv"):
-                if orig.read_bytes() != new.read_bytes():
+                # Normalisasi CRLF → LF: checkout Windows (core.autocrlf)
+                # memberi CRLF di disk, generator menulis LF — byte mentah
+                # berbeda tapi konten sama.
+                def norm(b: bytes) -> bytes:
+                    return b.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+                if norm(orig.read_bytes()) != norm(new.read_bytes()):
                     diffs.append(f"{name}: isi CSV berbeda — QA Test Plan berubah "
                                  f"tanpa regenerasi")
             else:  # XLSX — bandingkan nilai + CF, bukan byte

@@ -415,7 +415,10 @@ def add_status_cf(ws, col: str, first_row: int, last_row: int) -> None:
 def write_testrail_csv(records: list[dict]) -> Path:
     path = ROOT / "qa-test-cases-testrail.csv"
     with path.open("w", encoding="utf-8-sig", newline="") as f:
-        w = csv.writer(f)
+        # lineterminator='\n': output LF deterministik lintas platform
+        # (default csv module '\r\n' membuat byte berbeda di CI Linux vs
+        # checkout Windows — lihat check-qa-sync.py).
+        w = csv.writer(f, lineterminator="\n")
         w.writerow(["Case ID", "Title", "Section", "Type", "Priority", "Estimate",
                     "References", "Preconditions", "Steps", "Expected"])
         for r in records:
@@ -427,7 +430,8 @@ def write_testrail_csv(records: list[dict]) -> Path:
 def write_tracker_csv(records: list[dict], path: Path | None = None) -> Path:
     path = path or ROOT / "qa-test-cases-tracker.csv"
     with path.open("w", encoding="utf-8-sig", newline="") as f:
-        w = csv.writer(f)
+        # lineterminator='\n' — output LF deterministik (lihat di atas).
+        w = csv.writer(f, lineterminator="\n")
         w.writerow(["ID", "Modul", "Test Case", "Tipe", "Prioritas", "Severity",
                     "Story (AC)", "Sprint", "Status", "Tanggal Run", "Environment",
                     "Pembuat Test", "Link Bug",
@@ -609,7 +613,8 @@ def write_results_csv(records: list[dict], path: Path | None = None) -> Path:
     """
     path = path or ROOT / "qa-test-results-testrail.csv"
     with path.open("w", encoding="utf-8-sig", newline="") as f:
-        w = csv.writer(f)
+        # lineterminator='\n' — output LF deterministik (lihat di atas).
+        w = csv.writer(f, lineterminator="\n")
         w.writerow(["Test Case ID", "Title", "Status", "Comment", "Elapsed",
                     "Version", "Defects", "Assignee"])
         for r in records:
