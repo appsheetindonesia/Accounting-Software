@@ -524,8 +524,12 @@ def write_xlsx(records: list[dict], path: Path | None = None) -> Path:
     ws2.append([f"Total S1: {len(s1_all)} · Masih Not Run/Fail: {len(s1_open)}", ""])
     if s1_open:
         ws2.append(["ID", "Status"])
+        s1_first_row = ws2.max_row + 1
         for r in s1_open:
             ws2.append([r["id"], r["status"]])
+        # Warna otomatis kolom Status di daftar S1 — konsisten dengan sheet
+        # Test Cases (Passed hijau / Fail-Failed merah / Not Run abu-abu / …)
+        add_status_cf(ws2, "B", s1_first_row, ws2.max_row)
         ws2.append([])
         ws2.append(["Blokir rilis (release gate)", "YA — selesaikan semua S1 dulu"])
     else:
