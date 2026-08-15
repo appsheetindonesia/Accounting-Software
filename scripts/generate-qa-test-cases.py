@@ -9,6 +9,8 @@ Output:
                                 Type, Priority, Estimate, References,
                                 Preconditions, Steps, Expected)
   qa-test-cases-tracker.csv   → spreadsheet pelacakan (UTF-8 BOM, Excel-friendly)
+                              (kolom Status/Tanggal Run/Environment + Pembuat
+                              Test + Link Bug)
   qa-test-cases.xlsx          → workbook berformat (filter, freeze, ringkasan)
   qa-test-results-testrail.csv      → template HASIL eksekusi per run, siap
                                       di-import balik ke TestRail sebagai
@@ -48,10 +50,14 @@ ROOT = Path(__file__).resolve().parent.parent
 PLAN = ROOT / "QA Test Plan - Accounting.md"
 
 # Nilai default kolom otomatis run (bisa diedit per baris di Excel).
-# Override via env QA_RUN_DATE (YYYY-MM-DD) dipakai oleh scripts/check-qa-sync.py
-# agar regenerasi di CI tidak dianggap berubah hanya karena ganti tanggal.
-RUN_DATE_DEFAULT = os.environ.get("QA_RUN_DATE", date.today().isoformat())
-ENVIRONMENT_DEFAULT = "QA Local (mock API)"
+# Prioritas override: argumen CLI (--run-date / --environment) > env
+# (QA_RUN_DATE / QA_ENVIRONMENT) > default. Env QA_RUN_DATE dipakai oleh
+# scripts/check-qa-sync.py agar regenerasi di CI tidak dianggap berubah hanya
+# karena ganti tanggal.
+RUN_DATE_DEFAULT = os.environ.get("QA_RUN_DATE") or date.today().isoformat()
+ENVIRONMENT_DEFAULT = os.environ.get("QA_ENVIRONMENT") or "QA Local (mock API)"
+# Nilai default kolom "Pembuat Test" (bisa diedit per baris di Excel).
+TEST_AUTHOR_DEFAULT = "Tim QA"
 
 # Status yang memicu peringatan S1
 OPEN_STATUSES = {"Not Run", "Fail"}
@@ -296,6 +302,11 @@ def enrich(records: list[dict], existing_statuses: dict[str, str] | None = None)
         r["status"] = existing.get(r["id"], "Not Run")
         r["run_date"] = RUN_DATE_DEFAULT
         r["environment"] = ENVIRONMENT_DEFAULT
+        # Pembuat test — default tim QA, bisa diedit per baris di Excel
+        r["author"] = TEST_AUTHOR_DEFAULT
+        # Link bug/defect — diisi QA saat ada kegagalan (bisa disinkronkan ke
+        # kolom Defects di import TestRail). Kosong = belum ada defect.
+        r["bug_link"] = ""
     return records
 
 
@@ -394,11 +405,12 @@ def write_tracker_csv(records: list[dict], path: Path | None = None) -> Path:
         w = csv.writer(f)
         w.writerow(["ID", "Modul", "Test Case", "Tipe", "Prioritas", "Severity",
                     "Story (AC)", "Sprint", "Status", "Tanggal Run", "Environment",
+                    "Pembuat Test", "Link Bug",
                     "Langkah", "Hasil Diharapkan", "Preconditions"])
         for r in records:
             w.writerow([r["id"], r["module"], r["title"], r["type"], r["priority"],
                         r["sev"], r["story"], r["sprint"], r["status"],
-                        r["run_date"], r["environment"],
+                        r["run_date"], r["environment"], r["author"], r["bug_link"],
                         r["steps"], r["expected"], r["preconditions"]])
     return path
 
@@ -414,6 +426,7 @@ def write_xlsx(records: list[dict], path: Path | None = None) -> Path:
 
     headers = ["ID", "Modul", "Test Case", "Tipe", "Prioritas", "Severity",
                "Story (AC)", "Sprint", "Status", "Tanggal Run", "Environment",
+               "Pembuat Test", "Link Bug",
                "Langkah", "Hasil Diharapkan", "Preconditions"]
     ws.append(headers)
 
@@ -433,7 +446,7 @@ def write_xlsx(records: list[dict], path: Path | None = None) -> Path:
     for r in records:
         ws.append([r["id"], r["module"], r["title"], r["type"], r["priority"],
                    r["sev"], r["story"], r["sprint"], r["status"],
-                   r["run_date"], r["environment"],
+                   r["run_date"], r["environment"], r["author"], r["bug_link"],
                    r["steps"], r["expected"], r["preconditions"]])
         row = ws.max_row
         if r["sev"] in sev_fill:
@@ -445,12 +458,12 @@ def write_xlsx(records: list[dict], path: Path | None = None) -> Path:
             c.font = Font(bold=True, color="9B1C1C")
         for col in range(1, len(headers) + 1):
             ws.cell(row=row, column=col).alignment = Alignment(
-                vertical="top", wrap_text=(col in (12, 13, 14)))
+                vertical="top", wrap_text=(col in (14, 15, 16)))
 
     # Warna otomatis kolom Status (Passed/Failed/Not Run, dll.)
     add_status_cf(ws, "I", 2, ws.max_row)
 
-    widths = [14, 20, 38, 12, 14, 9, 12, 9, 11, 12, 20, 60, 60, 38]
+    widths = [14, 20, 38, 12, 14, 9, 12, 9, 11, 12, 20, 12, 14, 60, 60, 38]
     for col, w in enumerate(widths, 1):
         ws.column_dimensions[get_column_letter(col)].width = w
     ws.freeze_panes = "A2"
@@ -675,7 +688,21 @@ def main() -> None:
                     help="hasilkan CONTOH run: status acak-deterministik ke file "
                          "*-sample.* sebagai referensi format import "
                          "(file asli TIDAK disentuh)")
+    ap.add_argument("--run-date", metavar="YYYY-MM-DD",
+                    help="override tanggal run (default: env QA_RUN_DATE, lalu hari "
+                         "ini). Dipakai juga oleh check-qa-sync di CI.")
+    ap.add_argument("--environment",
+                    help="override environment run (default: env QA_ENVIRONMENT, "
+                         "lalu 'QA Local (mock API)')")
     args = ap.parse_args()
+
+    # Terapkan override CLI ke nilai default (berlaku untuk seluruh output;
+    # disimpan di module global agar dibaca enrich()/write_* saat dipanggil).
+    global RUN_DATE_DEFAULT, ENVIRONMENT_DEFAULT
+    if args.run_date:
+        RUN_DATE_DEFAULT = args.run_date
+    if args.environment:
+        ENVIRONMENT_DEFAULT = args.environment
 
     records = parse_tables()
     tc = [r for r in records if r["id"].startswith("TC-")]
