@@ -9,9 +9,9 @@
 #                dengan QA Test Plan (scripts/check-qa-sync.py).
 #
 # CATATAN: semua ini juga dijalankan OTOMATIS di setiap push/PR oleh
-# workflow terpadu `.github/workflows/ci.yml` (unit → integration
-# → e2e). Workflow ini untuk menjalankan verifikasi penuh secara
-# manual tanpa harus menunggu pipeline push.
+# workflow terpadu `.github/workflows/ci.yml` (test matrix
+# unit/integration → e2e). Workflow ini untuk menjalankan verifikasi
+# penuh secara manual tanpa harus menunggu pipeline push.
 #
 # Playwright otomatis menyalakan kedua server lewat konfigurasi
 # `webServer` di e2e/playwright.config.ts (CI=true → reuseExistingServer

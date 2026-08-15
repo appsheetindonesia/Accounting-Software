@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { DatabaseBackup, RotateCcw } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { SEED_JOURNAL_IDS } from '../data/mock'
+import PeriodSettings from './PeriodSettings'
 import ResetDataModal from './ResetDataModal'
 
 export default function SettingsPage() {
@@ -78,6 +79,8 @@ export default function SettingsPage() {
       </div>
 
       <ResetDataModal open={confirmOpen} onClose={() => setConfirmOpen(false)} />
+
+      <PeriodSettings />
     </div>
   )
 }

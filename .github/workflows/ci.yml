@@ -1,10 +1,13 @@
 # ============================================================
 # CI — Appsheet Accounting Journal
-# Tiga job PARALEL (berjalan sekaligus, tidak saling menunggu):
-#   1. unit        — unit + integration test PROTOTIPE (Vitest, prototype-accounting;
-#                    `npm test` = unit test + integration MSW di src/integration)
-#   2. integration — integration test MOCK API (Vitest + Supertest, mock-api)
-#   3. e2e         — E2E Playwright RG-01..RG-19 (chromium + firefox)
+# Dua job PARALEL (berjalan sekaligus, tidak saling menunggu):
+#   1. test — MATRIX per-tahap:
+#        • prototipe  (unit + integration, Vitest + MSW)
+#        • mock API   (integration, Vitest + Supertest)
+#      Setiap tahap menulis laporan JUnit (test-results/junit.xml)
+#      dan meng-upload-nya sebagai artifact saat GAGAL — debug CI
+#      lebih mudah (nama artifact per tahap, mis. junit-unit-prototipe).
+#   2. e2e   — E2E Playwright RG-01..RG-19 (chromium + firefox)
 #
 # Keuntungan paralel: unit & integration selesai dalam hitungan detik
 # (tidak tertahan oleh E2E ~3 menit); kegagalan satu job TIDAK menahan
@@ -25,33 +28,22 @@ on:
   workflow_dispatch:
 
 jobs:
-  unit:
-    name: Unit + Integration test prototipe (Vitest + MSW)
+  test:
+    name: 'Unit & Integration test — ${{ matrix.tahap }}'
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node 22 (Vite 8 butuh ^20.19 || >=22.12)
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: prototype-accounting/package-lock.json
-
-      - name: Install dependencies
-        working-directory: prototype-accounting
-        run: npm ci
-
-      - name: 'Unit + Integration test prototipe (Vitest: unit + MSW)'
-        working-directory: prototype-accounting
-        run: npm test
-
-  integration:
-    name: Integration test mock API (Vitest + Supertest)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tahap: prototipe (Vitest + MSW)
+            dir: prototype-accounting
+            lock: prototype-accounting/package-lock.json
+            artifact: junit-unit-prototipe
+          - tahap: mock API (Vitest + Supertest)
+            dir: mock-api
+            lock: mock-api/package-lock.json
+            artifact: junit-integration-mock-api
     env:
       # CI deterministik: persistence mock API dimatikan — state
       # in-memory, reset ke seed di setiap test (beforeEach).
@@ -65,15 +57,27 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: mock-api/package-lock.json
+          cache-dependency-path: ${{ matrix.lock }}
 
-      - name: Install dependencies
-        working-directory: mock-api
+      - name: Install dependencies (${{ matrix.dir }})
+        working-directory: ${{ matrix.dir }}
         run: npm ci
 
-      - name: Integration test mock API (Vitest + Supertest)
-        working-directory: mock-api
-        run: npm test
+      # JUnit reporter bawaan Vitest: output dipakai artifact debug saat gagal
+      # (default reporter tetap tampil di log). Lokasi stabil per paket:
+      # <dir>/test-results/junit.xml (di-ignore, tidak pernah di-commit).
+      - name: 'Test + laporan JUnit (${{ matrix.dir }})'
+        working-directory: ${{ matrix.dir }}
+        run: npx vitest run --reporter=default --reporter=junit --outputFile=test-results/junit.xml
+
+      - name: Upload hasil test JUnit (saat gagal)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.dir }}/test-results/
+          if-no-files-found: warn
+          retention-days: 7
 
   e2e:
     name: E2E Playwright RG-01..RG-19 (chromium + firefox)

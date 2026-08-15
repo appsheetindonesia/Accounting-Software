@@ -436,6 +436,50 @@ describe('Export laporan — auth via query token (unduhan navigasi browser)', (
 })
 
 // ------------------------------------------------------------
+describe('Export Buku Besar per akun — GET /exports/ledger/:accountId', () => {
+  it('export PDF dengan ?token= → 200 + filename Buku-Besar-<code>-<period>.pdf', async () => {
+    const res = await request(app)
+      .get('/exports/ledger/1-1100')
+      .query({ format: 'pdf', period: '2026-03', token: tokens.admin })
+    expect(res.status).toBe(200)
+    expect(res.headers['content-disposition']).toContain('attachment')
+    expect(res.headers['content-disposition']).toContain('Buku-Besar-1-1100-2026-03.pdf')
+    // Body binary (Buffer) — payload placeholder memuat metadata akun & periode
+    expect(res.body.toString('utf8')).toContain('account=1-1100 Kas Besar')
+  })
+
+  it('export XLSX → Content-Type spreadsheet + filename .xlsx', async () => {
+    const res = await request(app)
+      .get('/exports/ledger/1-1100')
+      .query({ format: 'xlsx', period: '2026-02', token: tokens.admin })
+    expect(res.status).toBe(200)
+    expect(res.headers['content-type']).toContain('spreadsheetml.sheet')
+    expect(res.headers['content-disposition']).toContain('Buku-Besar-1-1100-2026-02.xlsx')
+  })
+
+  it('akun tidak dikenal → ACCOUNT_NOT_FOUND', async () => {
+    const res = await request(app)
+      .get('/exports/ledger/9-9999')
+      .query({ format: 'pdf', token: tokens.admin })
+    expectError(res, 404, 'ACCOUNT_NOT_FOUND')
+  })
+
+  it('periode tidak dikenal → INVALID_PERIOD', async () => {
+    const res = await request(app)
+      .get('/exports/ledger/1-1100')
+      .query({ format: 'pdf', period: '2026-99', token: tokens.admin })
+    expectError(res, 422, 'INVALID_PERIOD')
+  })
+
+  it('format tidak didukung → UNSUPPORTED_FORMAT', async () => {
+    const res = await request(app)
+      .get('/exports/ledger/1-1100')
+      .query({ format: 'docx', token: tokens.admin })
+    expectError(res, 422, 'UNSUPPORTED_FORMAT')
+  })
+})
+
+// ------------------------------------------------------------
 describe('404 — Not Found (API §13)', () => {
   it('jurnal tidak ada → JOURNAL_NOT_FOUND', async () => {
     const res = await request(app).get('/journals/JNL-2026-03-999').set(auth())

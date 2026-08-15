@@ -5,18 +5,19 @@ import { api } from '../../api'
 
 type ExportFormat = 'pdf' | 'xlsx'
 
+type ExportButtonsProps =
+  | { reportType: 'trial-balance' | 'income-statement' | 'balance-sheet'; period: string }
+  | { accountId: string; accountCode: string; accountName: string; period: string }
+
 /**
- * Tombol Export PDF / XLSX untuk halaman laporan. Memanggil GET /exports/reports/:type
- * dengan auth (Bearer + X-Entity-Id) lalu memicu unduhan file di browser.
- * Nonaktif saat offline; feedback via toast (sukses/error).
+ * Tombol Export PDF / XLSX untuk halaman laporan & Buku Besar per akun.
+ * - reportType → GET /exports/reports/:type (laporan)
+ * - accountId   → GET /exports/ledger/:accountId (Buku Besar per akun)
+ * Auth via navigasi (Bearer + X-Entity-Id di query) lalu memicu unduhan file
+ * di browser. Nonaktif saat offline; feedback via toast (sukses/error).
  */
-export default function ExportButtons({
-  reportType,
-  period,
-}: {
-  reportType: 'trial-balance' | 'income-statement' | 'balance-sheet'
-  period: string
-}) {
+export default function ExportButtons(props: ExportButtonsProps) {
+  const period = props.period
   const apiStatus = useStore((s) => s.apiStatus)
   const showToast = useStore((s) => s.showToast)
   const [busy, setBusy] = useState<ExportFormat | null>(null)
@@ -26,7 +27,10 @@ export default function ExportButtons({
     if (busy) return
     setBusy(format)
     try {
-      const filename = await api.exportReport(reportType, format, period)
+      const filename =
+        'reportType' in props
+          ? await api.exportReport(props.reportType, format, period)
+          : await api.exportLedger(props.accountId, props.accountCode, format, period)
       showToast(`Laporan berhasil diekspor — ${filename}`)
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Export gagal — coba lagi', 'error')

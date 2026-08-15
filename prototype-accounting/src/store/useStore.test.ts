@@ -35,12 +35,14 @@ vi.mock('../api', () => {
       reverseJournal: vi.fn(),
       deleteJournal: vi.fn(),
       resetServerData: vi.fn(),
+      closePeriod: vi.fn(),
       health: vi.fn(),
     },
   }
 })
 
 import { api, ApiError } from '../api'
+import * as clientApi from '../api/client'
 
 const mockedApi = vi.mocked(api)
 
@@ -59,6 +61,8 @@ const resetStore = () =>
     authLoading: false,
     authError: null,
     lastSyncedAt: null,
+    focusJournalId: null,
+    focusAccountId: null,
   })
 
 const bal = () => computeBalances(useStore.getState().accounts, useStore.getState().journals)
@@ -92,6 +96,7 @@ beforeEach(() => {
   mockedApi.rejectJournal.mockReset()
   mockedApi.reverseJournal.mockReset()
   mockedApi.deleteJournal.mockReset()
+  mockedApi.closePeriod.mockReset()
   mockedApi.health.mockReset()
   mockedApi.health.mockRejectedValue(new TypeError('fetch failed'))
   // Default: gagal jaringan agar path lokal (fallback) yang teruji
@@ -106,6 +111,7 @@ beforeEach(() => {
   mockedApi.rejectJournal.mockRejectedValue(new TypeError('fetch failed'))
   mockedApi.reverseJournal.mockRejectedValue(new TypeError('fetch failed'))
   mockedApi.deleteJournal.mockRejectedValue(new TypeError('fetch failed'))
+  mockedApi.closePeriod.mockRejectedValue(new TypeError('fetch failed'))
 })
 
 describe('isEffectJournal — jurnal yang memengaruhi saldo', () => {
@@ -319,6 +325,189 @@ describe('logout — kembali ke halaman login', () => {
     useStore.setState({ accessToken: 'mock.t', refreshToken: 'r1' })
     useStore.getState().logout()
     expect(mockedApi.logout).toHaveBeenCalledWith('r1')
+  })
+
+  it('memanggil POST /auth/logout DAN membersihkan state sesi lengkap (accessToken, refreshToken, user, apiStatus)', () => {
+    // Sesi penuh: user terautentikasi, terhubung online, pernah sinkron & refresh
+    useStore.setState({
+      accessToken: 'mock.user-001.1',
+      refreshToken: 'r1',
+      user: demoUser,
+      apiStatus: 'online',
+      lastSyncedAt: '2026-03-25T08:00:00Z',
+      lastRefreshedAt: '2026-03-25T08:05:00Z',
+    })
+
+    useStore.getState().logout()
+
+    // 1) Lapisan API: refresh token dikirim → api.logout = POST /auth/logout
+    expect(mockedApi.logout).toHaveBeenCalledTimes(1)
+    expect(mockedApi.logout).toHaveBeenCalledWith('r1')
+
+    // 2) State sesi dibersihkan lengkap — tidak ada sisa sesi yang bocor
+    const s = useStore.getState()
+    expect(s.accessToken).toBeNull()
+    expect(s.refreshToken).toBeNull()
+    expect(s.user).toBeNull()
+    expect(s.apiStatus).toBe('idle')
+    expect(s.lastSyncedAt).toBeNull()
+    expect(s.lastRefreshedAt).toBeNull()
+  })
+})
+
+describe('closePeriod — tutup periode fiskal', () => {
+  it('sukses: closePeriod dipanggil, jurnal di-refetch (draft ter-post dari server), toast handledDrafts', async () => {
+    useStore.setState({ apiStatus: 'online', user: demoUser })
+    mockedApi.closePeriod.mockResolvedValue({ id: 'fp-2026-03', isOpen: false, handledDrafts: { posted: 2, deleted: 0, kept: 0 } })
+    // Server kini mengembalikan kedua draft seed sebagai posted
+    const postedJournals = mockJournals.map((j) =>
+      j.id === 'JNL-2026-03-006' || j.id === 'JNL-2026-03-007' ? { ...j, status: 'posted' } : j,
+    )
+    mockedApi.getJournals.mockResolvedValue({ journals: postedJournals, totals: { debit: 0, credit: 0, difference: 0 } })
+
+    await useStore.getState().closePeriod('fp-2026-03')
+
+    expect(mockedApi.closePeriod).toHaveBeenCalledWith('fp-2026-03', undefined)
+    const s = useStore.getState()
+    expect(s.journals.find((j) => j.id === 'JNL-2026-03-006')?.status).toBe('posted')
+    expect(s.toast?.kind).toBe('success')
+    expect(s.toast?.message).toContain('2 draft diposting')
+    expect(s.lastSyncedAt).toBeTruthy()
+  })
+
+  it('dengan draftAction → confirmDraftAction ikut dikirim ke server', async () => {
+    useStore.setState({ apiStatus: 'online' })
+    mockedApi.closePeriod.mockResolvedValue({ id: 'fp-2026-03', isOpen: false, handledDrafts: { posted: 0, deleted: 0, kept: 2 } })
+    mockedApi.getJournals.mockResolvedValue({ journals: mockJournals, totals: { debit: 0, credit: 0, difference: 0 } })
+
+    await useStore.getState().closePeriod('fp-2026-03', 'keep')
+
+    expect(mockedApi.closePeriod).toHaveBeenCalledWith('fp-2026-03', 'keep')
+  })
+
+  it('DRAFT_ACTION_REQUIRED (ada draft, tanpa aksi) → error dilempar ke UI, state tidak berubah', async () => {
+    useStore.setState({ apiStatus: 'online' })
+    mockedApi.closePeriod.mockRejectedValue(new ApiError(422, 'DRAFT_ACTION_REQUIRED', 'Masih ada jurnal draft; pilih aksi terlebih dahulu'))
+
+    await expect(useStore.getState().closePeriod('fp-2026-03')).rejects.toMatchObject({ code: 'DRAFT_ACTION_REQUIRED' })
+    const s = useStore.getState()
+    expect(s.apiStatus).toBe('online')
+    expect(s.toast?.kind).not.toBe('success')
+  })
+
+  it('jaringan putus → status offline + toast error (tanpa throw)', async () => {
+    useStore.setState({ apiStatus: 'online' })
+    // beforeEach: closePeriod reject TypeError (network)
+
+    await useStore.getState().closePeriod('fp-2026-03', 'post-all')
+
+    const s = useStore.getState()
+    expect(s.apiStatus).toBe('offline')
+    expect(s.toast?.kind).toBe('error')
+    expect(s.toast?.message).toContain('tidak terhubung')
+  })
+})
+
+describe('setActiveEntity — ganti entitas aktif (multi-tenant)', () => {
+  it('online: ganti entitas → refetch akun+jurnal, data entitas BARU menggantikan (tidak tercampur)', async () => {
+    useStore.setState({ apiStatus: 'online', user: demoUser, accessToken: 'mock.user-001.1', refreshToken: 'r1', activeEntityId: 'ent-001' })
+    // Server mengembalikan data entitas 2 yang jelas berbeda (nama akun + deskripsi jurnal)
+    const ent2Journals = mockJournals.map((j) => ({ ...j, description: `${j.description} [ent-002]` }))
+    mockedApi.getAccounts.mockResolvedValue({ accounts: mockAccounts.map((a) => ({ ...a, name: `${a.name} E2` })) })
+    mockedApi.getJournals.mockResolvedValue({ journals: ent2Journals, totals: { debit: 0, credit: 0, difference: 0 } })
+
+    await useStore.getState().setActiveEntity('ent-002')
+
+    const s = useStore.getState()
+    expect(s.activeEntityId).toBe('ent-002')
+    expect(mockedApi.getAccounts).toHaveBeenCalledTimes(1)
+    expect(mockedApi.getJournals).toHaveBeenCalledTimes(1)
+    // Isolasi: seluruh data store kini milik entitas 2 — jurnal entitas 1 tidak bocor
+    expect(s.journals).toHaveLength(ent2Journals.length)
+    expect(s.journals[0].description).toContain('[ent-002]')
+    expect(s.accounts[0].name).toContain('E2')
+  })
+
+  it('setAuth dipanggil dengan entity baru → header X-Entity-Id berubah untuk request berikutnya', async () => {
+    const setAuthSpy = vi.spyOn(clientApi, 'setAuth')
+    useStore.setState({ apiStatus: 'online', accessToken: 'mock.user-001.1', refreshToken: 'r1', activeEntityId: 'ent-001' })
+    mockedApi.getAccounts.mockResolvedValue({ accounts: mockAccounts })
+    mockedApi.getJournals.mockResolvedValue({ journals: mockJournals, totals: { debit: 0, credit: 0, difference: 0 } })
+
+    await useStore.getState().setActiveEntity('ent-002')
+
+    expect(setAuthSpy).toHaveBeenCalledWith('mock.user-001.1', 'ent-002', 'r1')
+    setAuthSpy.mockRestore()
+  })
+
+  it('entitas yang sama → no-op (tidak refetch, tidak setAuth)', async () => {
+    const setAuthSpy = vi.spyOn(clientApi, 'setAuth')
+    useStore.setState({ apiStatus: 'online', activeEntityId: 'ent-001' })
+
+    await useStore.getState().setActiveEntity('ent-001')
+
+    expect(mockedApi.getAccounts).not.toHaveBeenCalled()
+    expect(mockedApi.getJournals).not.toHaveBeenCalled()
+    expect(setAuthSpy).not.toHaveBeenCalled()
+    setAuthSpy.mockRestore()
+  })
+
+  it('offline: hanya ganti penanda entitas — TIDAK refetch, data demo lokal tetap', async () => {
+    useStore.setState({ apiStatus: 'offline', accessToken: 'local.demo', activeEntityId: 'ent-001' })
+
+    await useStore.getState().setActiveEntity('ent-002')
+
+    const s = useStore.getState()
+    expect(s.activeEntityId).toBe('ent-002')
+    expect(mockedApi.getAccounts).not.toHaveBeenCalled()
+    expect(mockedApi.getJournals).not.toHaveBeenCalled()
+    expect(s.journals).toEqual(mockJournals)
+  })
+
+  it('fetch gagal saat online → entitas tetap terganti, status offline', async () => {
+    useStore.setState({ apiStatus: 'online', activeEntityId: 'ent-001' })
+    // beforeEach: getAccounts/getJournals reject TypeError (network)
+
+    await useStore.getState().setActiveEntity('ent-002')
+
+    const s = useStore.getState()
+    expect(s.activeEntityId).toBe('ent-002')
+    expect(s.apiStatus).toBe('offline')
+  })
+})
+
+describe('openSearchResult — fokus hasil global search', () => {
+  it('hasil jurnal → pindah ke halaman Jurnal + focusJournalId di-set', () => {
+    useStore.getState().openSearchResult('journal', 'JNL-2026-03-005')
+    const s = useStore.getState()
+    expect(s.page).toBe('journal')
+    expect(s.focusJournalId).toBe('JNL-2026-03-005')
+    expect(s.focusAccountId).toBeNull()
+  })
+
+  it('hasil akun → pindah ke Buku Besar + focusAccountId di-set', () => {
+    useStore.getState().openSearchResult('account', '4-1000')
+    const s = useStore.getState()
+    expect(s.page).toBe('buku-besar')
+    expect(s.focusAccountId).toBe('4-1000')
+    expect(s.focusJournalId).toBeNull()
+  })
+
+  it('clearSearchFocus mengosongkan kedua fokus (transient — tidak persist)', () => {
+    useStore.getState().openSearchResult('journal', 'JNL-2026-03-005')
+    useStore.getState().clearSearchFocus()
+    const s = useStore.getState()
+    expect(s.focusJournalId).toBeNull()
+    expect(s.focusAccountId).toBeNull()
+  })
+
+  it('logout membersihkan fokus search', () => {
+    useStore.setState({ accessToken: 'mock.t', refreshToken: 'r1' })
+    useStore.getState().openSearchResult('account', '4-1000')
+    useStore.getState().logout()
+    const s = useStore.getState()
+    expect(s.focusJournalId).toBeNull()
+    expect(s.focusAccountId).toBeNull()
   })
 })
 

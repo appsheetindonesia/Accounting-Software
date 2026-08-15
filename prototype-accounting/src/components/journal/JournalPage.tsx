@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Search, Plus } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import JournalTable from './JournalTable'
@@ -17,6 +17,16 @@ export default function JournalPage() {
   const canWrite = canWriteJournal(user?.role)
   const [keyword, setKeyword] = useState('')
   const [status, setStatus] = useState<StatusFilter>('all')
+
+  // Hasil global search diklik → reset filter agar jurnal target tidak tersaring
+  // (JournalTable membuka baris detailnya lewat focusJournalId).
+  const focusJournalId = useStore((s) => s.focusJournalId)
+  useEffect(() => {
+    if (focusJournalId) {
+      setKeyword('')
+      setStatus('all')
+    }
+  }, [focusJournalId])
 
   // Skeleton saat data jurnal sedang di-fetch pertama kali oleh init()
   // (apiStatus 'connecting' sebelum sinkronisasi pertama berhasil —

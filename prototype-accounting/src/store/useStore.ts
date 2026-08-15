@@ -48,6 +48,14 @@ interface AccountingState {
   openModal: () => void
   closeModal: () => void
 
+  // Fokus dari global search (TopBar): saat hasil diklik, halaman tujuan
+  // membaca field ini pada mount lalu membersihkannya (clearSearchFocus).
+  // Transient — tidak dipersist (tidak ada di partialize).
+  focusJournalId: string | null
+  focusAccountId: string | null
+  openSearchResult: (type: 'journal' | 'account', id: string) => void
+  clearSearchFocus: () => void
+
   // Lapisan API (API - Accounting.md)
   apiStatus: ApiStatus
   // Waktu sinkronisasi terakhir dengan server. Saat offline, data yang tampil
@@ -72,6 +80,7 @@ interface AccountingState {
   handleSessionExpired: () => void
 
   saveJournal: (input: NewJournalInput, action: 'draft' | 'submit' | 'post') => Promise<void>
+  closePeriod: (id: string, draftAction?: 'post-all' | 'delete-all' | 'keep') => Promise<void>
   postJournal: (id: string) => Promise<void>
   submitJournal: (id: string) => Promise<void>
   approveJournal: (id: string) => Promise<void>
@@ -277,6 +286,32 @@ export const useStore = create<AccountingState>()(
         })
       }
 
+      // Tutup periode fiskal (period.manage — admin). Tanpa draftAction saat
+      // masih ada draft → server 422 DRAFT_ACTION_REQUIRED; error dilempar agar
+      // UI menampilkan dialog pilihan aksi. Sukses → refetch jurnal (draft
+      // ter-post/terhapus) + toast ringkasan handledDrafts.
+      const closePeriod = async (id, draftAction) => {
+        try {
+          const res = await api.closePeriod(id, draftAction)
+          const jrn = await api.getJournals()
+          const { posted, deleted, kept } = res.handledDrafts
+          set({
+            journals: jrn.journals.map((j) => enrichCreatedBy(toJournalEntry(j), get().user)),
+            lastSyncedAt: nowIso(),
+            toast: {
+              message: `Periode ditutup — ${posted} draft diposting, ${kept} dipertahankan, ${deleted} dihapus`,
+              kind: 'success',
+            },
+          })
+        } catch (e) {
+          if (isNetworkError(e)) {
+            set({ apiStatus: 'offline', toast: { message: 'Mock API tidak terhubung — periode tidak ditutup', kind: 'error' } })
+            return
+          }
+          throw e // ApiError (DRAFT_ACTION_REQUIRED dll) — ditangani UI
+        }
+      }
+
       const localDelete = (id: string) => {
         set((state) => ({
           journals: state.journals.filter((j) => j.id !== id),
@@ -288,6 +323,20 @@ export const useStore = create<AccountingState>()(
       return {
         page: 'dashboard',
         setPage: (page) => set({ page }),
+
+        // Hasil global search diklik → navigasi + tandai target untuk fokus.
+        // JournalTable membuka baris detail; LedgerPage memilih akun tsb.
+        openSearchResult: (type, id) =>
+          set(
+            type === 'journal'
+              ? { page: 'journal', focusJournalId: id }
+              : { page: 'buku-besar', focusAccountId: id },
+          ),
+        clearSearchFocus: () => set({ focusJournalId: null, focusAccountId: null }),
+        focusJournalId: null,
+        focusAccountId: null,
+        modalOpen: false,
+        closePeriod,
 
         accounts: mockAccounts,
         journals: mockJournals,
@@ -458,6 +507,8 @@ export const useStore = create<AccountingState>()(
             activeEntityId: 'ent-001',
             page: 'dashboard',
             modalOpen: false,
+            focusJournalId: null,
+            focusAccountId: null,
             offlineQueue: [],
             isSyncing: false,
             lastSyncedAt: null,
@@ -706,6 +757,8 @@ export const useStore = create<AccountingState>()(
             activePeriod: '2026-03',
             page: 'dashboard',
             modalOpen: false,
+            focusJournalId: null,
+            focusAccountId: null,
             offlineQueue: [],
             isSyncing: false,
             lastSyncedAt: null,

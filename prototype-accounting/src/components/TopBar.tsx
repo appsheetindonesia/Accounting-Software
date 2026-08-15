@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Bell, BookMarked, LogOut, RotateCcw, Search, Settings } from 'lucide-react'
+import { Bell, BookMarked, LogOut, RotateCcw, Settings } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { ROLE_BADGE, ROLE_LABELS } from '../lib/permissions'
+import GlobalSearch from './GlobalSearch'
 import ResetDataModal from './ResetDataModal'
 
 export default function TopBar() {
@@ -33,14 +34,7 @@ export default function TopBar() {
       </div>
 
       <div className="ml-auto flex items-center gap-2">
-        <div className="relative hidden md:block">
-          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" />
-          <input
-            type="search"
-            placeholder="Cari transaksi atau akun..."
-            className="h-9 w-64 rounded-lg border border-line bg-canvas pl-9 pr-3 text-sm text-ink placeholder:text-ink-faint focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-          />
-        </div>
+        <GlobalSearch />
         <button
           type="button"
           aria-label="Notifikasi"

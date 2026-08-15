@@ -225,22 +225,41 @@ test.describe('RG-01 s/d RG-04 — siklus jurnal, reverse, laporan, periode', ()
     await gotoNav(page, 'Neraca Lajur')
     await expect(page.getByRole('button', { name: 'Export PDF' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Export XLSX' })).toBeVisible()
+
+    // 6. Buku Besar: export per akun (default Kas Besar 1-1100, Maret) via tombol UI
+    await gotoNav(page, 'Buku Besar')
+    await expect(page.getByRole('button', { name: 'Export PDF' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Export XLSX' })).toBeVisible()
+    for (const [label, fmt] of [
+      ['Export PDF', 'pdf'],
+      ['Export XLSX', 'xlsx'],
+    ] as const) {
+      const reqPromise = page.waitForRequest(
+        (r) =>
+          r.method() === 'GET' &&
+          r.url().includes('/exports/ledger/1-1100') &&
+          r.url().includes(`format=${fmt}`) &&
+          r.url().includes('period=2026-03') &&
+          r.url().includes('token='),
+      )
+      const dlPromise = isFirefox ? null : page.waitForEvent('download')
+      await page.getByRole('button', { name: label }).click()
+      const req = await reqPromise
+      expect(req.url()).toContain('token=mock.')
+      if (dlPromise) expect((await dlPromise).suggestedFilename()).toBe(`Buku-Besar-1-1100-2026-03.${fmt}`)
+    }
   })
 
-  test('RG-04 Tutup periode: posting diblokir, laporan tetap terbaca, draft ter-post', async ({ page, request }) => {
-    // 1. Tutup Maret 2026 via API dengan aksi post-all (UI tutup periode belum ada)
-    test.info().annotations.push({
-      type: 'Gap',
-      description: 'UI tutup periode belum ada di prototipe — ditutup via API (PATCH /periods/:id/close).',
-    })
-    const token = await loginToken(request)
-    const close = await request.patch(`${API_BASE}/periods/fp-2026-03/close`, {
-      headers: authHeaders(token),
-      data: { confirmDraftAction: 'post-all' },
-    })
-    expect(close.status()).toBe(200)
-    const handled = (await close.json()).data.handledDrafts
-    expect(handled.posted).toBe(2) // BKK-0006 + JV-0007
+  test('RG-04 Tutup periode: posting diblokir, laporan tetap terbaca, draft ter-post', async ({ page }) => {
+    // 1. Tutup Maret 2026 via UI (Pengaturan): tombol Tutup → dialog pilihan
+    //    aksi draft muncul (2 draft seed) → pilih 'Posting semua draft'
+    await gotoNav(page, 'Pengaturan')
+    await page.getByRole('button', { name: 'Tutup periode Maret 2026' }).click()
+    await expect(page.getByRole('dialog', { name: 'Tutup periode' })).toBeVisible()
+    await page.getByLabel('Posting semua draft').check()
+    await page.getByRole('button', { name: 'Tutup Periode', exact: true }).click()
+    // Toast ringkasan handledDrafts: 2 draft diposting (BKK-0006 + JV-0007)
+    await expect(page.getByRole('status')).toContainText('2 draft diposting')
 
     // 2. UI: entri/posting di periode tertutup → error toast PERIOD_CLOSED
     const dialog = await openJournalModal(page)
@@ -378,7 +397,7 @@ test.describe('RG-05 s/d RG-08 — entitas, approval, search, periode', () => {
     for (const expected of ['create', 'submit', 'approve']) expect(actions).toContain(expected)
   })
 
-  test('RG-07 Filter & search: filter jurnal + pencarian global konsisten', async ({ page, request }) => {
+  test('RG-07 Filter & search: filter jurnal + pencarian global konsisten', async ({ page }) => {
     // 1. Filter teks di halaman Jurnal (UI)
     await gotoNav(page, 'Jurnal')
     const search = page.getByPlaceholder('Cari no. bukti, keterangan, atau akun...')
@@ -398,14 +417,23 @@ test.describe('RG-05 s/d RG-08 — entitas, approval, search, periode', () => {
     await row.getByRole('button', { name: 'Buka detail' }).click()
     await expect(page.getByText('Koreksi beban listrik dan air Maret')).toBeVisible()
 
-    // 4. Search global via API (UI global search belum ada)
-    test.info().annotations.push({
-      type: 'Gap',
-      description: 'Global search & filter di URL belum ada di prototipe — endpoint /search diverifikasi via API.',
-    })
-    const token = await loginToken(request)
-    const sres = await (await request.get(`${API_BASE}/search?q=gaji`, { headers: authHeaders(token) })).json()
-    expect(sres.data.results.some((r: { type: string; title: string }) => r.type === 'journal' && r.title === 'JV-2026-03-0005')).toBe(true)
+    // 4. Search global via UI (TopBar): cari 'gaji' → hasil jurnal JV-0005 →
+    //    klik → detail jurnal otomatis terbuka (tanpa filter manual)
+    const globalSearch = page.getByLabel('Pencarian global')
+    await globalSearch.fill('gaji')
+    await expect(page.getByRole('button', { name: /JV-2026-03-0005/ })).toBeVisible()
+    await page.getByRole('button', { name: /JV-2026-03-0005/ }).click()
+    // Navigasi ke Jurnal + baris detail hasil pencarian terbuka otomatis
+    await expect(page.getByText('Pencatatan beban gaji karyawan Maret', { exact: true }).first()).toBeVisible()
+
+    // 5. Search global akun: 'Pendapatan Jasa' (bukan akun default) → klik →
+    //    Buku Besar memilih akun tsb (membuktikan fokus hasil search bekerja)
+    await globalSearch.fill('Pendapatan Jasa')
+    await expect(page.getByRole('button', { name: /Pendapatan Jasa/ }).first()).toBeVisible()
+    await page.getByRole('button', { name: /Pendapatan Jasa/ }).first().click()
+    await expect(page.getByRole('heading', { name: 'Buku Besar' })).toBeVisible()
+    await expect(page.getByText('Pendapatan Jasa', { exact: true }).first()).toBeVisible() // akun terpilih
+    await expect(page.getByText('Saldo Akhir', { exact: true })).toBeVisible()
   })
 
   test('RG-08 Selektor periode global: footer, modal, dan laporan sinkron', async ({ page }) => {

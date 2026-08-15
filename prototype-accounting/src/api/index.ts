@@ -183,8 +183,18 @@ export const api = {
   },
 
   // 9. Periode fiskal
-  closePeriod(id: string) {
-    return request<{ id: string; isOpen: false }>(`/periods/${id}/close`, { method: 'PATCH' })
+  //     Daftar lengkap (termasuk tertutup) untuk UI kelola periode di Pengaturan.
+  getPeriods() {
+    return request<{ periods: PeriodInfo[] }>('/periods', { query: { includeClosed: true } })
+  },
+  //     Tutup periode. Saat masih ada jurnal draft, server minta
+  //     confirmDraftAction ('post-all' | 'delete-all' | 'keep') — tanpa itu →
+  //     422 DRAFT_ACTION_REQUIRED (UI menampilkan dialog pilihan aksi).
+  closePeriod(id: string, confirmDraftAction?: 'post-all' | 'delete-all' | 'keep') {
+    return request<{ id: string; isOpen: false; handledDrafts: { posted: number; deleted: number; kept: number } }>(
+      `/periods/${id}/close`,
+      { method: 'PATCH', body: confirmDraftAction ? { confirmDraftAction } : undefined },
+    )
   },
   openPeriod(id: string) {
     return request<{ id: string; isOpen: true }>(`/periods/${id}/open`, { method: 'PATCH' })
@@ -225,6 +235,18 @@ export const api = {
     const filename = `${names[reportType]}-${period}.${format}`
     return download(`/exports/reports/${reportType}`, { format, period }).then(() => filename)
   },
+  // Export Buku Besar per akun (PDF/XLSX) — GET /exports/ledger/:accountId.
+  // Nama file memakai kode akun, konsisten dengan penamaan server.
+  exportLedger(accountId: string, accountCode: string, format: 'pdf' | 'xlsx', period: string) {
+    const filename = `Buku-Besar-${accountCode}-${period}.${format}`
+    return download(`/exports/ledger/${accountId}`, { format, period }).then(() => filename)
+  },
+
+  // 12. Pencarian global — GET /search (jurnal + akun). Dipakai input search
+  //     di TopBar; hasil diklik → navigasi + fokus (detail jurnal / akun).
+  search(q: string) {
+    return request<{ results: SearchResult[] }>('/search', { query: { q } })
+  },
 
   // Admin (dev-only, tanpa auth) — reset state server ke seed awal (Maret 2026).
   // Dipakai tombol "Reset ke data demo" agar satu klik mereset lokal + server.
@@ -234,6 +256,28 @@ export const api = {
       body: {},
     })
   },
+}
+
+// Periode fiskal (GET /periods?includeClosed=true) — status & data rentang.
+export interface PeriodInfo {
+  id: string
+  name: string
+  month: number
+  year: number
+  startDate: string
+  endDate: string
+  isOpen: boolean
+  isActive: boolean
+  closedAt: string | null
+}
+
+// Hasil pencarian global (GET /search) — jurnal atau akun.
+export interface SearchResult {
+  type: 'journal' | 'account'
+  id: string
+  title: string
+  subtitle: string
+  metadata: { status?: string; balance?: number }
 }
 
 // Normalisasi jurnal server → tipe lokal (status pending-approval → draft di UI).

@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { Check, ChevronDown, ChevronRight, Inbox, Send, Undo2, X } from 'lucide-react'
 import type { JournalEntry } from '../../types'
 import { useStore } from '../../store/useStore'
@@ -35,6 +35,17 @@ export default function JournalTable({ journals }: { journals: JournalEntry[] })
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [rejectingJournal, setRejectingJournal] = useState<JournalEntry | null>(null)
+
+  // Fokus dari global search: hasil jurnal diklik → buka baris detail ini saat
+  // halaman Jurnal di-mount, lalu bersihkan fokus agar tidak terulang.
+  const focusJournalId = useStore((s) => s.focusJournalId)
+  const clearSearchFocus = useStore((s) => s.clearSearchFocus)
+  useEffect(() => {
+    if (focusJournalId) {
+      setExpanded(new Set([focusJournalId]))
+      clearSearchFocus()
+    }
+  }, [focusJournalId, clearSearchFocus])
 
   const toggle = (id: string) =>
     setExpanded((prev) => {

@@ -1293,6 +1293,24 @@ app.get('/exports/accounts', requireAuthExport, (req, res) => {
   res.send(db.accounts.map((a) => `${a.code},${a.name},${a.type}`).join('\n'))
 })
 
+// Export Buku Besar per akun — validasi sama dengan GET /ledger/accounts/:id
+// (akun & periode wajib dikenal), payload placeholder seperti export laporan.
+app.get('/exports/ledger/:accountId', requireAuthExport, (req, res) => {
+  const { accountId } = req.params
+  const format = req.query.format || 'pdf'
+  if (!['pdf', 'xlsx'].includes(format)) return fail(res, 422, 'UNSUPPORTED_FORMAT', 'Format tidak didukung (pdf/xlsx)')
+  const account = db.accounts.find((a) => a.id === accountId)
+  if (!account) return fail(res, 404, 'ACCOUNT_NOT_FOUND', 'Akun tidak ditemukan')
+  const periodKey = req.query.period || '2026-03'
+  if (!periodByKey(periodKey)) return fail(res, 422, 'INVALID_PERIOD', 'Periode tidak valid')
+  const filename = `Buku-Besar-${account.code}-${periodKey}.${format}`
+  res.setHeader('Content-Type', format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+  // Mock: payload teks sederhana sebagai placeholder binary (kop & footer dokumen)
+  const entityName = db.entities.find((e) => e.id === req.entityId)?.name ?? ''
+  res.send(Buffer.from(`MOCK EXPORT ${filename}\ncompany=${entityName}\naccount=${account.code} ${account.name}\nperiod=${periodKey}\ngeneratedAt=${nowIso()}`))
+})
+
 // ------------------------------------------------------------
 // 12. PENCARIAN GLOBAL
 // ------------------------------------------------------------

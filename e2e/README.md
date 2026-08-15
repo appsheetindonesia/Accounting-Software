@@ -66,22 +66,27 @@ login bertahan saat `page.reload()` (RG-02/RG-04/RG-10).
 
 ## CI (GitHub Actions)
 
-Workflow terpadu `.github/workflows/ci.yml` menjalankan **3 job paralel**
+Workflow terpadu `.github/workflows/ci.yml` menjalankan **2 job paralel**
 di **setiap push / pull request** (ubuntu-latest, Node 22):
 
-1. **`unit`** — unit test prototipe (Vitest, `prototype-accounting`) — 157 test
-2. **`integration`** — integration test mock API (Vitest + Supertest, `mock-api`)
-   — 91 test (baseline angka §2.3, error envelope vs katalog §13, seed:extra,
-   persistence, TOKEN_EXPIRED, kedaluwarsa TTL terjadwal)
-3. **`e2e`** — E2E Playwright RG-01..RG-19 (chromium + firefox) — 38 test
+1. **`test`** — job **matrix per-tahap**:
+   - tahap **prototipe** (unit + integration, Vitest + MSW, `prototype-accounting`)
+     — 170 test
+   - tahap **mock API** (integration, Vitest + Supertest, `mock-api`) — 105 test
+     (baseline angka §2.3, error envelope vs katalog §13, seed:extra,
+     persistence, TOKEN_EXPIRED, kedaluwarsa TTL terjadwal)
+2. **`e2e`** — E2E Playwright RG-01..RG-19 (chromium + firefox) — 38 test
 
-Ketiga job berjalan **sekaligus** (tidak berurutan) — unit & integration
-selesai dalam hitungan detik tanpa tertahan E2E (~3 menit), dan kegagalan
-satu job tidak menahan job lain. Playwright menyalakan mock API + Vite
-sendiri via `webServer` (CI → `reuseExistingServer` dimatikan).
-`MOCK_API_PERSIST=0` dipasang di env job `integration` & `e2e` agar state
-in-memory murni dan deterministik. Artefak `playwright-report/` (selalu)
-dan `test-results/` (saat gagal) di-upload sebagai artifact dari job `e2e`.
+Job `test` berjalan **sekaligus** dengan `e2e` (tidak berurutan) — unit &
+integration selesai dalam hitungan detik tanpa tertahan E2E (~4 menit),
+dan kegagalan satu job tidak menahan job lain. Tiap tahap matrix menulis
+laporan **JUnit** (`test-results/junit.xml`) dan meng-upload-nya sebagai
+artifact saat **gagal** (`junit-unit-prototipe` / `junit-integration-mock-api`)
+agar debug CI lebih mudah. Playwright menyalakan mock API + Vite sendiri via
+`webServer` (CI → `reuseExistingServer` dimatikan). `MOCK_API_PERSIST=0`
+dipasang di env job `test` & `e2e` agar state in-memory murni dan
+deterministik. Artefak `playwright-report/` (selalu) dan `test-results/`
+(saat gagal) di-upload sebagai artifact dari job `e2e`.
 
 Workflow `e2e.yml` kini **manual-only** (`workflow_dispatch`) — untuk
 menjalankan E2E saja tanpa pipeline penuh:

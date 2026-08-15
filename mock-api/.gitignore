@@ -7,3 +7,6 @@
 *.log
 *.err
 nohup.out
+
+# Laporan test JUnit (dihasilkan CI saat gagal; tidak pernah di-commit)
+test-results/

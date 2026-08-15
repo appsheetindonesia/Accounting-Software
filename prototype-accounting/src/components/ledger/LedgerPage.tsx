@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, ExternalLink, NotebookPen } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import { api } from '../../api'
@@ -6,6 +6,7 @@ import { useApiFetch } from '../../hooks/useApiFetch'
 import { computeLedger } from '../../lib/ledger'
 import { formatDateShort, formatIDR } from '../../lib/format'
 import { SkeletonBar, SkeletonLines, SkeletonTable } from '../Skeleton'
+import ExportButtons from '../reports/ExportButtons'
 
 const PERIODS = [
   { key: '2026-01', label: 'Januari 2026', start: '2026-01-01', end: '2026-01-31' },
@@ -34,8 +35,20 @@ export default function LedgerPage() {
   const setPage = useStore((s) => s.setPage)
   const apiStatus = useStore((s) => s.apiStatus)
 
+  // Fokus dari global search: hasil akun diklik → akun tsb dipilih (reaktif,
+  // berfungsi walau halaman sudah terbuka), lalu fokus dibersihkan (transient).
+  // Default Kas Besar (1-1100).
+  const focusAccountId = useStore((s) => s.focusAccountId)
+  const clearSearchFocus = useStore((s) => s.clearSearchFocus)
   const [accountId, setAccountId] = useState('1-1100')
   const [periodIdx, setPeriodIdx] = useState(2) // Maret 2026
+
+  useEffect(() => {
+    if (focusAccountId) {
+      setAccountId(focusAccountId)
+      clearSearchFocus()
+    }
+  }, [focusAccountId, clearSearchFocus])
 
   const account = accounts.find((a) => a.id === accountId) ?? accounts[0]
   const period = PERIODS[periodIdx]
@@ -81,6 +94,7 @@ export default function LedgerPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <ExportButtons accountId={account?.id ?? ''} accountCode={account?.code ?? ''} accountName={account?.name ?? ''} period={period.key} />
           <label className="flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 shadow-card">
             <NotebookPen size={14} className="shrink-0 text-primary" />
             <select

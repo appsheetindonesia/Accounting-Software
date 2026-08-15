@@ -1,4 +1,4 @@
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, X } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import { api, toJournalEntry } from '../../api'
 import { useApiFetch } from '../../hooks/useApiFetch'
@@ -52,7 +52,15 @@ export default function RecentJournals() {
               <tr key={j.id} className="border-b border-line/70 last:border-0 hover:bg-surface-hover/60">
                 <td className="px-5 py-3 text-sm text-ink-soft">{formatDateShort(j.date)}</td>
                 <td className="num px-3 py-3 text-xs text-ink">{j.transactionNumber}</td>
-                <td className="max-w-[220px] truncate px-3 py-3 text-sm text-ink">{j.description}</td>
+                <td className="max-w-[240px] px-3 py-3">
+                  <p className="truncate text-sm text-ink">{j.description}</p>
+                  {j.rejectionReason && (
+                    <p className="mt-1 inline-flex items-center gap-1 rounded-md border border-bad/30 bg-bad/5 px-1.5 py-0.5 text-[10px] font-medium text-bad">
+                      <X size={10} className="shrink-0" />
+                      <span className="truncate">Ditolak — {j.rejectionReason}</span>
+                    </p>
+                  )}
+                </td>
                 <td className="num px-3 py-3 text-right text-sm font-semibold text-ink">{formatIDR(j.lines.reduce((s, l) => s + l.debit, 0))}</td>
                 <td className="px-5 py-3"><StatusBadge status={j.status} /></td>
               </tr>
