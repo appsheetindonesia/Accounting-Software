@@ -7,6 +7,13 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Log & artefak runtime prototipe — dev.log, *.err, nohup.out, dsb.
+# (aturan khusus sub-proyek ini agar tidak pernah ter-commit
+#  walau aturan root *.log dihapus/diubah)
+*.err
+nohup.out
+coverage/
+
 node_modules
 dist
 dist-ssr

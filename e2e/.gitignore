@@ -1,3 +1,13 @@
 node_modules/
+
+# Artefak test Playwright
 test-results/
 playwright-report/
+blob-report/
+
+# Log & artefak runtime E2E — *.log, *.err, nohup.out, dsb.
+# (aturan khusus sub-proyek ini agar tidak pernah ter-commit
+#  walau aturan root *.log dihapus/diubah)
+*.log
+*.err
+nohup.out
