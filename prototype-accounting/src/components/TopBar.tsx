@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bell, BookMarked, LogOut, RotateCcw, Settings } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { ROLE_BADGE, ROLE_LABELS } from '../lib/permissions'
+import { formatIDR } from '../lib/format'
 import GlobalSearch from './GlobalSearch'
 import ResetDataModal from './ResetDataModal'
 
@@ -21,6 +22,34 @@ export default function TopBar() {
 
   const closeMenu = () => setMenuOpen(false)
 
+  // ---------- Notifikasi approval ----------
+  // Badge jumlah jurnal menunggu approval di tombol lonceng + dropdown
+  // daftarnya. Klik item → navigasi ke Jurnal dengan baris detail terbuka
+  // (fokus yang sama seperti global search) — tempat aksi Setujui/Tolak ada.
+  const journals = useStore((s) => s.journals)
+  const openSearchResult = useStore((s) => s.openSearchResult)
+  const pendingApprovals = useMemo(
+    () => journals.filter((j) => j.status === 'pending-approval'),
+    [journals],
+  )
+  const [notifOpen, setNotifOpen] = useState(false)
+  const notifRef = useRef<HTMLDivElement>(null)
+
+  // Tutup dropdown saat klik di luar komponen
+  useEffect(() => {
+    if (!notifOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) setNotifOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [notifOpen])
+
+  const openPendingJournal = (id: string) => {
+    setNotifOpen(false)
+    openSearchResult('journal', id)
+  }
+
   return (
     <header className="flex h-16 shrink-0 items-center gap-4 border-b border-line bg-surface px-4 lg:px-6">
       <div className="flex items-center gap-2.5">
@@ -35,14 +64,63 @@ export default function TopBar() {
 
       <div className="ml-auto flex items-center gap-2">
         <GlobalSearch />
-        <button
-          type="button"
-          aria-label="Notifikasi"
-          className="relative flex size-9 items-center justify-center rounded-lg text-ink-soft transition hover:bg-surface-hover hover:text-ink"
-        >
-          <Bell size={18} />
-          <span className="absolute right-2 top-2 size-2 rounded-full bg-bad ring-2 ring-surface" />
-        </button>
+        <div ref={notifRef} className="relative">
+          <button
+            type="button"
+            aria-label={`Notifikasi — ${pendingApprovals.length} jurnal menunggu approval`}
+            aria-expanded={notifOpen}
+            onClick={() => setNotifOpen((v) => !v)}
+            className="relative flex size-9 items-center justify-center rounded-lg text-ink-soft transition hover:bg-surface-hover hover:text-ink"
+          >
+            <Bell size={18} />
+            {pendingApprovals.length > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-bad px-1 text-[10px] font-bold leading-none text-white ring-2 ring-surface">
+                {pendingApprovals.length > 9 ? '9+' : pendingApprovals.length}
+              </span>
+            )}
+          </button>
+
+          {notifOpen && (
+            <>
+              <div className="fixed inset-0 z-30" onClick={() => setNotifOpen(false)} aria-hidden="true" />
+              <div className="absolute right-0 top-full z-40 mt-2 w-80 overflow-hidden rounded-xl border border-line bg-surface shadow-modal animate-[fadein_0.15s_ease-out]">
+                <div className="flex items-center justify-between border-b border-line bg-canvas px-4 py-2.5">
+                  <p className="text-sm font-bold text-ink">Menunggu Approval</p>
+                  <span className="rounded-full bg-bad/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-bad">
+                    {pendingApprovals.length}
+                  </span>
+                </div>
+                <div className="max-h-80 overflow-y-auto p-1.5">
+                  {pendingApprovals.length === 0 ? (
+                    <p className="px-3 py-8 text-center text-xs text-ink-soft">Tidak ada jurnal menunggu approval 🎉</p>
+                  ) : (
+                    pendingApprovals.map((j) => {
+                      const total = j.lines.reduce((sum, ln) => sum + ln.debit, 0)
+                      return (
+                        <button
+                          key={j.id}
+                          type="button"
+                          onClick={() => openPendingJournal(j.id)}
+                          className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-surface-hover"
+                          title={`Buka detail ${j.transactionNumber}`}
+                        >
+                          <span className="min-w-0">
+                            <span className="flex items-center gap-2">
+                              <span className="num truncate text-sm font-semibold text-ink">{j.transactionNumber}</span>
+                              <span className="num shrink-0 text-[10px] text-ink-faint">{j.date}</span>
+                            </span>
+                            <span className="block truncate text-xs text-ink-soft">{j.description}</span>
+                          </span>
+                          <span className="num shrink-0 text-xs font-semibold text-ink">{formatIDR(total)}</span>
+                        </button>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
 
         <div className="relative">
           <button

@@ -18,6 +18,10 @@
 # dimatikan, server di-start fresh oleh runner).
 #
 # Pemicu: setiap push ke branch mana pun + pull request + manual.
+# JOB test (unit+integration, cepat) tetap berjalan di SEMUA push; job e2e
+# (~3 menit × 2 browser) di-skip pada push branch non-main agar hemat waktu
+# CI — hanya berjalan di push main, pull request, dan manual (lihat if: di
+# job e2e).
 # ============================================================
 name: CI (Unit + Integration + E2E)
 
@@ -81,6 +85,14 @@ jobs:
 
   e2e:
     name: E2E Playwright RG-01..RG-19 (chromium + firefox)
+    # Hemat waktu CI: E2E (~3 menit × 2 browser) hanya untuk jalur yang
+    # benar-benar butuh verifikasi penuh — push ke main, pull request,
+    # dan pemicu manual. Push ke branch fitur cukup dengan unit+integration
+    # (job test) yang jauh lebih cepat.
+    if: |
+      github.event_name == 'pull_request' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:

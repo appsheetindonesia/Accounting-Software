@@ -107,14 +107,27 @@ export default function JournalTable({ journals }: { journals: JournalEntry[] })
                       <StatusBadge status={journal.status} />
                     </td>
                     <td className="px-5 py-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => toggle(journal.id)}
-                        aria-label={isOpen ? 'Tutup detail' : 'Buka detail'}
-                        className="rounded-md p-1 text-ink-faint transition hover:bg-surface-hover hover:text-ink"
-                      >
-                        {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        {journal.status === 'pending-approval' && canApprove && (
+                          <button
+                            type="button"
+                            onClick={() => approveJournal(journal.id)}
+                            title="Setujui langsung — tanpa buka detail"
+                            aria-label={`Setujui ${journal.transactionNumber}`}
+                            className="inline-flex items-center gap-1 rounded-lg bg-ok px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-ok/90 active:translate-y-px"
+                          >
+                            <Check size={13} /> Setujui
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => toggle(journal.id)}
+                          aria-label={isOpen ? 'Tutup detail' : 'Buka detail'}
+                          className="rounded-md p-1 text-ink-faint transition hover:bg-surface-hover hover:text-ink"
+                        >
+                          {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                   {rest.map((line) => (
