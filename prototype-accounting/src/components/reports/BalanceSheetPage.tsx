@@ -253,7 +253,7 @@ export default function BalanceSheetPage() {
       ) : (
         <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-card">
           <div className="border-b border-line bg-canvas px-5 py-4">
-            <p className="text-sm font-bold text-ink">PT Maju Jaya</p>
+            <p className="text-sm font-bold text-ink">PT. Kreasi Inovasi Estetika</p>
             <p className="text-xs text-ink-soft">
               Laporan Neraca · {view.asOfLabel}
             </p>

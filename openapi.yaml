@@ -1668,7 +1668,7 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid, example: ent-001 }
-        name: { type: string, example: "PT Maju Jaya" }
+        name: { type: string, example: "PT. Kreasi Inovasi Estetika" }
         currency: { type: string, example: IDR }
         fiscalYearStart: { type: string, example: "01-01" }
         createdAt: { type: string, format: date-time }

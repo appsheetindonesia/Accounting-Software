@@ -118,7 +118,7 @@ export default function IncomeStatementPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-ink lg:text-2xl">Laporan Laba Rugi</h1>
-          <p className="mt-0.5 text-sm text-ink-soft">PT Maju Jaya · dihitung live dari jurnal posted</p>
+          <p className="mt-0.5 text-sm text-ink-soft">PT. Kreasi Inovasi Estetika · dihitung live dari jurnal posted</p>
         </div>
         <div className="flex items-center gap-1 rounded-lg border border-line bg-surface px-1 py-1 shadow-card">
           <button
@@ -169,7 +169,7 @@ export default function IncomeStatementPage() {
       ) : (
         <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-card">
           <div className="border-b border-line bg-canvas px-5 py-4">
-            <p className="text-sm font-bold text-ink">PT Maju Jaya</p>
+            <p className="text-sm font-bold text-ink">PT. Kreasi Inovasi Estetika</p>
             <p className="text-xs text-ink-soft">
               Laporan Laba Rugi · Periode {period.label} (1–{period.end.slice(8)} {period.label.split(' ')[0]} {period.key.slice(0, 4)})
             </p>

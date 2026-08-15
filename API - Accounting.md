@@ -127,7 +127,7 @@ Profile + izin role.
 
 **Request POST /users:**
 ```json
-{ "name": "Budi", "email": "budi@majujaya.co.id", "role": "accountant" }
+{ "name": "Budi", "email": "budi@estetikakreasi.co.id", "role": "accountant" }
 ```
 **Error:** 409 `EMAIL_EXISTS` · 403 `FORBIDDEN` (hanya admin)
 
@@ -139,7 +139,7 @@ Profile + izin role.
 Daftar entitas milik user (akuntan freelance punya banyak).
 **Response 200:**
 ```json
-{ "data": [ { "id": "ent-001", "name": "PT Maju Jaya", "currency": "IDR",
+{ "data": [ { "id": "ent-001", "name": "PT. Kreasi Inovasi Estetika", "currency": "IDR",
               "fiscalYearStart": "01-01", "createdAt": "2025-01-01T00:00:00Z" } ], "meta": {} }
 ```
 
@@ -438,7 +438,7 @@ Rekap saldo semua akun per periode (data baku untuk Neraca Lajur / filter akun).
 ```json
 { "data": {
     "id": "RPT-2026-03-001", "type": "income-statement",
-    "entity": { "id": "ent-001", "name": "PT Maju Jaya" },
+    "entity": { "id": "ent-001", "name": "PT. Kreasi Inovasi Estetika" },
     "period": { "start": "2026-03-01", "end": "2026-03-31" },
     "generatedAt": "2026-03-31T23:59:00Z", "currency": "IDR",
     "sections": [
@@ -462,7 +462,7 @@ Disajikan **per tanggal** (`asOf`), bukan per periode.
 ```json
 { "data": {
     "id": "RPT-2026-03-002", "type": "balance-sheet",
-    "entity": { "id": "ent-001", "name": "PT Maju Jaya" },
+    "entity": { "id": "ent-001", "name": "PT. Kreasi Inovasi Estetika" },
     "asOf": "2026-03-31", "generatedAt": "2026-03-31T23:59:00Z", "currency": "IDR",
     "sections": [
       { "title": "ASET", "subtotal": 1093000000,

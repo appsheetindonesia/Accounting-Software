@@ -96,7 +96,7 @@ export default function Sidebar() {
         </div>
         <div className="flex items-center gap-2 rounded-lg bg-primary/5 px-2.5 py-2 text-ink-soft lg:bg-transparent lg:px-0">
           <Building2 size={14} className="shrink-0 text-primary" />
-          <span className="hidden truncate text-sm font-medium text-ink lg:inline">PT Maju Jaya</span>
+          <span className="hidden truncate text-sm font-medium text-ink lg:inline">PT. Kreasi Inovasi Estetika</span>
           <span className="hidden text-[11px] text-ink-faint lg:inline">· IDR</span>
         </div>
       </div>

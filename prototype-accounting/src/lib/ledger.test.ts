@@ -3,7 +3,7 @@ import { computeLedger, computeIncomeStatement, isEffectJournal } from './ledger
 import { mockAccounts, mockJournals } from '../data/mock'
 import type { JournalEntry } from '../types'
 
-// Baseline seed Maret 2026 (PT Maju Jaya):
+// Baseline seed Maret 2026 (PT. Kreasi Inovasi Estetika):
 // Kas Besar base 50jt → 50 + 25 (JNL-001) − 10 (JNL-002) − 3 (JNL-003) + 15 (JNL-004) = 77jt
 // Pendapatan Jasa base 130jt → 130 + 25 = 155jt
 const MARCH = { start: '2026-03-01', end: '2026-03-31' }

@@ -183,7 +183,7 @@ interface FiscalPeriod {
 ### Sidebar Navigation
 ```
 ┌─────────────────┐
-│ [Logo] BukuW    │ 48px — logo + app name
+│ [Logo] Appsheet │ 48px — logo + app name
 ├─────────────────┤
 │ 🏠 Dashboard    │
 │ 📒 Jurnal       │
@@ -196,7 +196,7 @@ interface FiscalPeriod {
 │ ⚙️ Pengaturan   │
 ├─────────────────┤
 │ 📅 Periode: Mar │ — dropdown periode
-│ 🏢 PT Maju Jaya │ — entity selector
+│ 🏢 PT. Kreasi Inovasi Estetika │ — entity selector
 └─────────────────┘
 ```
 

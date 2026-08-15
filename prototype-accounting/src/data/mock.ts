@@ -1,6 +1,6 @@
 import type { Account, JournalEntry, TrendPoint } from '../types'
 
-// Chart of Accounts — PT Maju Jaya (PRD Ver 3 §16)
+// Chart of Accounts — PT. Kreasi Inovasi Estetika (PRD Ver 3 §16)
 export const mockAccounts: Account[] = [
   { id: '1-1100', code: '1-1100', name: 'Kas Besar', type: 'asset', category: 'Kas & Bank', normalBalance: 'debit', baseBalance: 50_000_000, isActive: true },
   { id: '1-1200', code: '1-1200', name: 'Bank BCA 123456', type: 'asset', category: 'Kas & Bank', normalBalance: 'debit', baseBalance: 380_000_000, isActive: true },

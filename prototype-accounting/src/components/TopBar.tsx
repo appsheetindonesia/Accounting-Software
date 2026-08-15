@@ -13,7 +13,7 @@ export default function TopBar() {
         </div>
         <div className="hidden leading-tight sm:block">
           <p className="text-sm font-bold text-ink">Appsheet Accounting Journal</p>
-          <p className="text-[11px] text-ink-soft">PT Maju Jaya</p>
+          <p className="text-[11px] text-ink-soft">PT. Kreasi Inovasi Estetika</p>
         </div>
       </div>
 

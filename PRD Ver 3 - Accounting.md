@@ -218,7 +218,7 @@ Appsheet Accounting Journal adalah aplikasi akuntansi **double-entry** berbasis 
 │ [➕ Buat Jurnal]      │  — quick action (tombol primary)
 ├──────────────────────┤
 │ 📅 Periode: Maret 26 │  — dropdown periode fiskal
-│ 🏢 PT Maju Jaya      │  — entity selector
+│ 🏢 PT. Kreasi Inovasi Estetika      │  — entity selector
 └──────────────────────┘
 ```
 
@@ -496,7 +496,7 @@ Appsheet Accounting Journal adalah aplikasi akuntansi **double-entry** berbasis 
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│ PT MAJU JAYA                                            │
+│ PT. KREASI INOVASI ESTETIKA                            │
 │ LAPORAN LABA RUGI                                       │
 │ Periode: Maret 2026                          [Cetak ▾]   │
 │ ─────────────────────────────────────────────────────── │
@@ -526,7 +526,7 @@ Appsheet Accounting Journal adalah aplikasi akuntansi **double-entry** berbasis 
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│ PT MAJU JAYA                                            │
+│ PT. KREASI INOVASI ESTETIKA                            │
 │ LAPORAN NERACA                                          │
 │ Per 31 Maret 2026                            [Cetak ▾]   │
 │ ─────────────────────────────────────────────────────── │
@@ -588,7 +588,7 @@ Appsheet Accounting Journal adalah aplikasi akuntansi **double-entry** berbasis 
 │ [+ Buka Periode Baru]                          │
 │ ────────────────────────────────────────────── │
 │ PERUSAHAAN / ENTITAS                           │
-│ Nama: PT Maju Jaya · Mata uang: IDR            │
+│ Nama: PT. Kreasi Inovasi Estetika · Mata uang: IDR            │
 │ Awal Tahun Fiskal: 1 Januari                   │
 │ ────────────────────────────────────────────── │
 │ TEMPLATE COA                                   │
@@ -751,7 +751,7 @@ interface FiscalPeriod {
 // ===== Entitas & Pengguna =====
 interface Entity {
   id: string
-  name: string               // "PT Maju Jaya"
+  name: string               // "PT. Kreasi Inovasi Estetika"
   currency: string           // "IDR"
   fiscalYearStart: string    // "01-01"
   createdAt: string

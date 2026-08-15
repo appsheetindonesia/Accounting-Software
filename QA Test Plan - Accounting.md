@@ -88,9 +88,9 @@ Data berikut dipakai semua test case. Konsisten dengan `mock-api/src/data.js` & 
 
 | Email | Peran | Entitas |
 |-------|-------|---------|
-| rina@bukuwarung.com | admin | PT Maju Jaya (ent-001) |
-| dimas@majujaya.co.id | accountant | PT Maju Jaya |
-| budi@majujaya.co.id | viewer | PT Maju Jaya |
+| rina@bukuwarung.com | admin | PT. Kreasi Inovasi Estetika (ent-001) |
+| dimas@estetikakreasi.co.id | accountant | PT. Kreasi Inovasi Estetika |
+| budi@estetikakreasi.co.id | viewer | PT. Kreasi Inovasi Estetika |
 | (opsional) | — | CV Karya Mandiri (ent-002) — untuk BW-026 |
 
 Periode: Maret 2026 = aktif & terbuka; Januari & Februari 2026 = tertutup.

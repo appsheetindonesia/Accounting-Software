@@ -1,0 +1,210 @@
+// ============================================================
+// Dev terpadu — jalankan mock API + prototipe Vite bersamaan.
+//
+//   node scripts/dev.mjs                     # seed awal (Maret 2026)
+//   node scripts/dev.mjs --extra             # seed + jurnal lintas bulan (Jan–Feb 2026)
+//   node scripts/dev.mjs --reset             # paksa reset seed walau persistence aktif
+//   MOCK_API_PERSIST=0 node scripts/dev.mjs  # tanpa persistence (in-memory, reset tiap boot)
+//
+// Alur:
+//   1. Spawn mock API (npm run dev — auto-restart saat edit file)
+//   2. Spawn prototipe (npm run dev — Vite)
+//   3. Tunggu KEDUA-nya hidup (API /health OK + Vite siap)
+//   4. Reset seed otomatis (POST /admin/reset) — prototipe selalu
+//      dibuka terhadap baseline yang terverifikasi. Reset hanya
+//      dijalankan saat persistence NONAKTIF (MOCK_API_PERSIST=0) atau
+//      flag --reset diberikan — jika persistence aktif, state tersimpan
+//      (jurnal yang diposting sebelumnya) dimuat, tidak di-reset.
+//   5. Ctrl+C menghentikan kedua proses (pohon proses ikut dimatikan)
+//
+// Catatan: `node --watch` di mock API memuat ulang state dari file
+// persist (jika aktif) saat file server berubah — data tidak hilang.
+// ============================================================
+
+import { spawn } from 'node:child_process'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const MOCK_API_DIR = path.join(root, 'mock-api')
+const PROTOTYPE_DIR = path.join(root, 'prototype-accounting')
+
+const API_PORT = Number(process.env.MOCK_API_PORT) || 4000
+const API_HEALTH_URL = `http://localhost:${API_PORT}/health`
+const withExtra = process.argv.includes('--extra')
+const forceReset = process.argv.includes('--reset')
+// Sama dengan parsing di mock-api/src/persistence.js
+const persistOn = !['0', 'false', 'off', 'no', 'n', 'disabled'].includes(
+  String(process.env.MOCK_API_PERSIST ?? '1').trim().toLowerCase(),
+)
+
+const children = new Set()
+let shuttingDown = false
+
+// ------------------------------------------------------------
+// Spawn dengan prefix output + pelacakan untuk shutdown
+// ------------------------------------------------------------
+function start(name, cwd, args) {
+  const child = spawn('npm', ['run', ...args], {
+    cwd,
+    shell: true,
+    detached: process.platform !== 'win32', // POSIX: process group agar bisa di-kill sekaligus
+    stdio: ['inherit', 'pipe', 'pipe'],
+    windowsHide: true,
+  })
+  children.add(child)
+  const tag = `[${name}]`
+  child.stdout.on('data', (d) => process.stdout.write(`${tag} ${d}`))
+  child.stderr.on('data', (d) => process.stderr.write(`${tag} ${d}`))
+  child.on('exit', (code, signal) => {
+    children.delete(child)
+    if (!shuttingDown) {
+      console.error(`\n[dev] ${name} berhenti (code=${code ?? 'null'}, signal=${signal ?? 'null'}) — menghentikan semua...`)
+      shutdown()
+    }
+  })
+  return child
+}
+
+// ------------------------------------------------------------
+// Kill pohon proses lintas platform
+// ------------------------------------------------------------
+function killTree(child) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) return
+  if (process.platform === 'win32') {
+    try {
+      spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
+    } catch { /* sudah mati */ }
+  } else {
+    try {
+      process.kill(-child.pid, 'SIGTERM')
+    } catch { /* sudah mati */ }
+  }
+}
+
+function shutdown() {
+  if (shuttingDown) return
+  shuttingDown = true
+  for (const child of children) killTree(child)
+  setTimeout(() => process.exit(0), 300)
+}
+
+process.on('SIGINT', () => { console.log('\n[dev] Menghentikan (Ctrl+C)...'); shutdown() })
+process.on('SIGTERM', () => { console.log('\n[dev] Menghentikan (SIGTERM)...'); shutdown() })
+
+// ------------------------------------------------------------
+// Tunggu sampai URL merespons
+// ------------------------------------------------------------
+async function waitForHttp(url, label, timeoutMs) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline && !shuttingDown) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(2000) })
+      if (res.ok) return true
+    } catch { /* belum siap */ }
+    await new Promise((r) => setTimeout(r, 400))
+  }
+  return false
+}
+
+// ------------------------------------------------------------
+// Deteksi URL Vite dari stdout-nya — kebal terhadap perubahan
+// port otomatis (5173 sibuk → 5174) dan variasi format.
+// ------------------------------------------------------------
+function waitForVite(child, timeoutMs) {
+  return new Promise((resolve) => {
+    let out = ''
+    const timer = setTimeout(() => { cleanup(); resolve(null) }, timeoutMs)
+    const onData = (d) => {
+      out += d
+      // Vite v8 mencetak ANSI escape codes walau di-pipe — strip dulu agar
+      // "Local:   http://localhost:5173/" selalu bisa di-match.
+      const clean = out.replace(/\x1b\[[0-9;]*m/g, '')
+      const m = clean.match(/Local:\s+(https?:\/\/localhost:\d+\/)/)
+      if (m) { cleanup(); resolve(m[1]) }
+    }
+    const onExit = () => { cleanup(); resolve(null) }
+    const cleanup = () => {
+      clearTimeout(timer)
+      child.stdout.off('data', onData)
+      child.off('exit', onExit)
+    }
+    child.stdout.on('data', onData)
+    child.on('exit', onExit)
+  })
+}
+
+// ------------------------------------------------------------
+// Reset seed otomatis — dipanggil hanya saat KEDUA server hidup
+// ------------------------------------------------------------
+async function resetSeed(viteUrl) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch(`http://localhost:${API_PORT}/admin/reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ withExtra }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const { data } = await res.json()
+      console.log(`\n[dev] ✅ Kedua server hidup — seed di-reset otomatis.`)
+      console.log(`[dev]    Seed     : ${data.seed === 'extra' ? 'base + jurnal lintas bulan (Jan–Feb 2026)' : 'base (Maret 2026)'}`)
+      console.log(`[dev]    Jurnal   : ${data.journals} · Akun: ${data.accounts} · Periode: ${data.periods}`)
+      console.log(`[dev]    ${data.message}`)
+      console.log(`\n[dev] 🚀 Siap dipakai:`)
+      console.log(`[dev]    Prototipe : ${viteUrl}`)
+      console.log(`[dev]    Mock API  : http://localhost:${API_PORT}/health`)
+      console.log(`[dev]    Login demo: rina@bukuwarung.com / password123`)
+      console.log(`[dev] Tekan Ctrl+C untuk menghentikan keduanya.\n`)
+      return true
+    } catch (err) {
+      if (attempt === 3) {
+        console.error(`[dev] ⚠️  Gagal reset seed (${err.message}) — coba manual: cd mock-api && npm run reset`)
+        return false
+      }
+      await new Promise((r) => setTimeout(r, 1000))
+    }
+  }
+}
+
+// ------------------------------------------------------------
+// Main
+// ------------------------------------------------------------
+async function main() {
+  console.log('[dev] Menjalankan mock API + prototipe Vite bersamaan...\n')
+
+  const api = start('mock-api', MOCK_API_DIR, ['dev'])
+  const vite = start('vite', PROTOTYPE_DIR, ['dev'])
+
+  const [apiOk, viteUrl] = await Promise.all([
+    waitForHttp(API_HEALTH_URL, 'mock API', 30_000),
+    waitForVite(vite, 60_000),
+  ])
+
+  if (shuttingDown) return
+
+  if (!apiOk) {
+    console.error(`[dev] ❌ Mock API tidak merespons di ${API_HEALTH_URL} — periksa log di atas.`)
+    shutdown()
+    return
+  }
+  if (!viteUrl) {
+    console.error('[dev] ❌ Vite tidak menampilkan URL lokal — periksa log di atas.')
+    shutdown()
+    return
+  }
+
+  if (persistOn && !forceReset) {
+    console.log('\n[dev] 💾 Persistence AKTIF — state tersimpan (jurnal yang diposting) akan dimuat, seed TIDAK di-reset.')
+    console.log('[dev]    Mau seed segar? jalankan ulang dengan  --reset  atau  MOCK_API_PERSIST=0')
+    console.log(`\n[dev] 🚀 Siap dipakai:`)
+    console.log(`[dev]    Prototipe : ${viteUrl}`)
+    console.log(`[dev]    Mock API  : http://localhost:${API_PORT}/health`)
+    console.log(`[dev]    Login demo: rina@bukuwarung.com / password123`)
+    console.log('[dev] Tekan Ctrl+C untuk menghentikan keduanya.\n')
+  } else {
+    await resetSeed(viteUrl)
+  }
+}
+
+main()

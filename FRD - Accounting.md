@@ -94,7 +94,7 @@ Aplikasi akuntansi double-entry berbasis cloud yang mencakup siklus akuntansi pe
 5. Sistem kelompokkan per akun pendapatan dan beban
 6. Sistem hitung total pendapatan, total beban, laba/rugi bersih
 7. Sistem tampilkan laporan dengan format:
-   - Header: "PT Maju Jaya — Laporan Laba Rugi — Maret 2025"
+   - Header: "PT. Kreasi Inovasi Estetika — Laporan Laba Rugi — Maret 2025"
    - Section Pendapatan (dengan daftar dan subtotal)
    - Section Beban (dengan daftar dan subtotal)
    - **Laba/Rugi Bersih** (bold)

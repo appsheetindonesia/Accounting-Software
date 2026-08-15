@@ -692,7 +692,7 @@ CREATE TABLE app.cash_flow_mapping (
 
 1. **Versi migrasi**: gunakan tooling migrasi (Flyway/Liquibase/`node-pg-migrate`); setiap file DDL diberi nomor urut (`001_init.sql`, `002_...`)
 2. **Order pembuatan**: extensions → schema → enum → tabel master (entities/users) → tabel data → views → fungsi/trigger → RLS (aktifkan RLS di akhir, setelah data seed)
-3. **Seed awal**: 1 entitas demo "PT Maju Jaya", 1 admin user, periode Januari–Maret 2026, template COA PSAK UKM (40+ akun)
+3. **Seed awal**: 1 entitas demo "PT. Kreasi Inovasi Estetika", 1 admin user, periode Januari–Maret 2026, template COA PSAK UKM (40+ akun)
 4. **RLS aktif per koneksi**: middleware API memanggil `SELECT set_config('app.entity_id', $1, true)` dan `set_config('app.user_id', $2, true)` per request (true = hanya transaksi ini)
 5. **Pencadangan**: PITR (point-in-time recovery) + retensi 30 hari; backup tiap 6 jam
 6. **Constraint pelengkap (aplikasi)**: Zod schema di client/server menduplikasi validasi DB — DB sebagai lapisan terakhir, bukan satu-satunya

@@ -5,8 +5,8 @@ import { useStore } from '../store/useStore'
 // Akun demo mock API (mock-api/src/data.js) — ditampilkan sebagai petunjuk
 const DEMO_ACCOUNTS = [
   { email: 'rina@bukuwarung.com', role: 'Admin' },
-  { email: 'dimas@majujaya.co.id', role: 'Akuntan' },
-  { email: 'budi@majujaya.co.id', role: 'Viewer' },
+  { email: 'dimas@estetikakreasi.co.id', role: 'Akuntan' },
+  { email: 'budi@estetikakreasi.co.id', role: 'Viewer' },
 ]
 const DEMO_PASSWORD = 'password123'
 
@@ -34,7 +34,7 @@ export default function LoginPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-ink">Appsheet Accounting Journal</h1>
-            <p className="mt-0.5 text-sm text-ink-soft">Masuk untuk mengelola jurnal PT Maju Jaya</p>
+            <p className="mt-0.5 text-sm text-ink-soft">Masuk untuk mengelola jurnal PT. Kreasi Inovasi Estetika</p>
           </div>
         </div>
 
