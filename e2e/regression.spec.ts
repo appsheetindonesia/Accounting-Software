@@ -1,0 +1,492 @@
+// ============================================================
+// Skenario Regresi RG-01..RG-12 — QA Test Plan - Accounting.md §4
+// Dijalankan terhadap MOCK API (localhost:4000) + prototipe Vite (:5173).
+//
+// Aturan main:
+// - beforeEach me-reset state mock API ke seed (setara restart server
+//   in-memory) + membersihkan localStorage → setiap test mulai dari
+//   baseline terverifikasi: Aset 557jt = Utang 150 + Modal 363 + Laba 44.
+// - Verifikasi keseimbangan buku di akhir skenario (trial balance).
+// - Fitur yang belum ada UI-nya (approval, tutup periode, switch entitas,
+//   search global, export) diuji lewat lapisan API — ditandai di annotation.
+// ============================================================
+import { test, expect, type Page } from '@playwright/test'
+import {
+  API_BASE,
+  authHeaders,
+  DEMO,
+  fillBalancedJournal,
+  gotoNav,
+  gotoOnline,
+  loginToken,
+  openJournalModal,
+  resetServer,
+  watchPageErrors,
+} from './helpers'
+
+const BASE = {
+  aset: 'Rp 557.000.000',
+  kas: 'Rp 87.000.000',
+  laba: 'Rp 44.000.000',
+  pendapatan: 'Rp 155.000.000',
+  trialBalance: 668_000_000,
+}
+
+test.beforeEach(async ({ page, request }) => {
+  await resetServer(request)
+  await page.addInitScript(() => localStorage.clear())
+  await gotoOnline(page)
+  await expect(page.getByText(BASE.aset, { exact: true }).first()).toBeVisible()
+})
+
+// Membuat jurnal 10jt via UI lalu memposting-nya (dipakai RG-01/02/03/10)
+async function createAndPostJournal(page: Page) {
+  const dialog = await openJournalModal(page)
+  await fillBalancedJournal(dialog, '10000000', 'Jurnal E2E regresi 10jt')
+  await dialog.getByRole('button', { name: 'Posting' }).click()
+  await expect(page.getByRole('status')).toContainText('Jurnal berhasil diposting')
+}
+
+// ------------------------------------------------------------
+test.describe('RG-01 s/d RG-04 — siklus jurnal, reverse, laporan, periode', () => {
+  test('RG-01 Siklus hidup jurnal penuh: draft → posting → hapus; saldo konsisten', async ({ page, request }) => {
+    // 1. Buat jurnal 10jt → SIMPAN DRAFT
+    const dialog = await openJournalModal(page)
+    await fillBalancedJournal(dialog, '10000000', 'RG-01 penerimaan jasa E2E')
+    await dialog.getByRole('button', { name: 'Simpan Draft' }).click()
+    await expect(page.getByRole('status')).toContainText('Jurnal disimpan sebagai draft')
+
+    // 2. Draft muncul di daftar jurnal, status Draft
+    await gotoNav(page, 'Jurnal')
+    await expect(page.getByText('BKM-2026-03-0009', { exact: true })).toBeVisible()
+    await expect(page.locator('tbody').getByText('Draft', { exact: true }).first()).toBeVisible()
+
+    // 3. Draft TIDAK mengubah saldo: Buku Besar Kas tetap 87jt, dashboard tetap 557jt
+    await gotoNav(page, 'Buku Besar')
+    await expect(page.getByText(BASE.kas, { exact: true }).first()).toBeVisible()
+    await gotoNav(page, 'Dashboard')
+    await expect(page.getByText(BASE.aset, { exact: true }).first()).toBeVisible()
+
+    // 4. Posting draft → saldo berubah (Kas 87→97jt, Aset 557→567jt)
+    await gotoNav(page, 'Jurnal')
+    const draftRow = page.locator('tbody tr', { hasText: 'BKM-2026-03-0009' }).first()
+    await draftRow.getByRole('button', { name: 'Buka detail' }).click()
+    await expect(page.getByText('RG-01 penerimaan jasa E2E')).toBeVisible()
+    await page.getByRole('button', { name: 'Posting' }).click()
+    await expect(page.getByRole('status')).toContainText('Jurnal berhasil diposting')
+    await expect(page.locator('tbody').getByText('Posted', { exact: true }).first()).toBeVisible()
+    await gotoNav(page, 'Dashboard')
+    await expect(page.getByText('Rp 567.000.000', { exact: true }).first()).toBeVisible()
+    await gotoNav(page, 'Buku Besar')
+    await expect(page.getByText('Rp 97.000.000', { exact: true }).first()).toBeVisible()
+
+    // 5. Hapus draft seed (BKK-0006) → saldo TIDAK berubah
+    await gotoNav(page, 'Jurnal')
+    const delRow = page.locator('tbody tr', { hasText: 'BKK-2026-03-0006' }).first()
+    await delRow.getByRole('button', { name: 'Buka detail' }).click()
+    await page.getByRole('button', { name: 'Hapus' }).click()
+    await page.getByRole('button', { name: 'Yakin hapus?' }).click()
+    await expect(page.getByRole('status')).toContainText('Jurnal draft dihapus')
+    await expect(page.getByText('BKK-2026-03-0006', { exact: true })).toHaveCount(0)
+    await gotoNav(page, 'Dashboard')
+    await expect(page.getByText('Rp 567.000.000', { exact: true }).first()).toBeVisible()
+
+    // 6. Edit draft via API (UI edit belum ada) + optimistic lock (If-Match)
+    const token = await loginToken(request)
+    const editRes = await request.put(`${API_BASE}/journals/JNL-2026-03-007`, {
+      headers: { ...authHeaders(token), 'If-Match': '1' },
+      data: {
+        date: '2026-03-20',
+        transactionNumber: 'JV-2026-03-0007',
+        description: 'Koreksi beban listrik dan air Maret (diedit E2E)',
+        lines: [
+          { accountId: '5-3000', debit: 2_500_000, credit: 0 },
+          { accountId: '1-1100', debit: 0, credit: 2_500_000 },
+        ],
+      },
+    })
+    expect(editRes.status()).toBe(200)
+    const edited = (await editRes.json()).data
+    expect(edited.version).toBe(2)
+    expect(edited.description).toContain('diedit E2E')
+    // If-Match salah → 409 DATA_CONFLICT
+    const conflict = await request.put(`${API_BASE}/journals/JNL-2026-03-007`, {
+      headers: { ...authHeaders(token), 'If-Match': '1' },
+      data: { date: '2026-03-20', description: 'versi usang', lines: [{ accountId: '5-3000', debit: 1, credit: 0 }, { accountId: '1-1100', debit: 0, credit: 1 }] },
+    })
+    expect(conflict.status()).toBe(409)
+    expect((await conflict.json()).error.code).toBe('DATA_CONFLICT')
+
+    // 7. Buku tetap seimbang
+    const tb = await (await request.get(`${API_BASE}/reports/trial-balance?period=2026-03`, { headers: authHeaders(token) })).json()
+    expect(tb.data.totals.isBalanced).toBe(true)
+  })
+
+  test('RG-02 Reverse menyeluruh: saldo & laporan kembali, net 0', async ({ page, request }) => {
+    // 1. Posting 10jt → Aset 567jt (reload: memaksa refetch dari server)
+    await createAndPostJournal(page)
+    await page.reload()
+    await expect(page.locator('footer')).toContainText('Online · Mock API', { timeout: 20_000 })
+    await expect(page.getByText('Rp 567.000.000', { exact: true }).first()).toBeVisible()
+
+    // 2. Reverse lewat UI
+    await gotoNav(page, 'Jurnal')
+    const row = page.locator('tbody tr', { hasText: 'BKM-2026-03-0009' }).first()
+    await row.getByRole('button', { name: 'Buka detail' }).click()
+    await page.getByRole('button', { name: 'Reverse' }).click()
+    await expect(page.getByRole('status')).toContainText('jurnal pembalik dibuat')
+
+    // 3. Jurnal pembalik posted + jurnal asal reversed
+    await expect(page.getByText('REV-BKM-2026-03-0009', { exact: true })).toBeVisible()
+    await expect(page.locator('tbody').getByText('Reversed', { exact: true }).first()).toBeVisible()
+
+    // 4. Saldo kembali ke baseline (Kas 87jt, Aset 557jt)
+    await gotoNav(page, 'Buku Besar')
+    await expect(page.getByText(BASE.kas, { exact: true }).first()).toBeVisible()
+    await gotoNav(page, 'Dashboard')
+    await expect(page.getByText(BASE.aset, { exact: true }).first()).toBeVisible()
+
+    // 5. Trial balance tetap seimbang; status pasangan di server benar
+    const token = await loginToken(request)
+    const tb = await (await request.get(`${API_BASE}/reports/trial-balance?period=2026-03`, { headers: authHeaders(token) })).json()
+    expect(tb.data.totals.isBalanced).toBe(true)
+    expect(tb.data.totals.debit).toBe(BASE.trialBalance)
+
+    // Keyword search match substring → filter eksak agar pasangan tidak tertukar
+    const origRes = await (await request.get(`${API_BASE}/journals?keyword=BKM-2026-03-0009`, { headers: authHeaders(token) })).json()
+    const orig = origRes.data.journals.find((j: { transactionNumber: string }) => j.transactionNumber === 'BKM-2026-03-0009')
+    expect(orig.status).toBe('reversed')
+    const revRes = await (await request.get(`${API_BASE}/journals?keyword=REV-BKM-2026-03-0009`, { headers: authHeaders(token) })).json()
+    const rev = revRes.data.journals.find((j: { transactionNumber: string }) => j.transactionNumber === 'REV-BKM-2026-03-0009')
+    expect(rev.status).toBe('posted')
+    // journalBrief tidak memuat reversalOf → ambil detail penuh
+    const revDetail = await (await request.get(`${API_BASE}/journals/${rev.id}`, { headers: authHeaders(token) })).json()
+    expect(revDetail.data.reversalOf).toBeTruthy()
+  })
+
+  test('RG-03 Posting → laporan → export: angka konsisten, neraca seimbang', async ({ page, request }) => {
+    // 1. Posting 10jt
+    await createAndPostJournal(page)
+
+    // 2. Laba Rugi UI: Pendapatan 165jt, Laba Bersih 54jt
+    await gotoNav(page, 'Laba Rugi')
+    await expect(page.getByText('Rp 165.000.000', { exact: true }).first()).toBeVisible()
+    await expect(page.getByText('Rp 54.000.000', { exact: true }).first()).toBeVisible()
+
+    // 3. Neraca & Neraca Lajur — UI masih ComingSoon → verifikasi via API
+    test.info().annotations.push({
+      type: 'Gap',
+      description: 'Halaman Neraca & Neraca Lajur belum diimplementasikan di prototipe (ComingSoon) — diverifikasi via API.',
+    })
+    const token = await loginToken(request)
+    const bs = await (await request.get(`${API_BASE}/reports/balance-sheet?asOf=2026-03-31`, { headers: authHeaders(token) })).json()
+    expect(bs.data.totalAssets).toBe(567_000_000)
+    expect(bs.data.isBalanced).toBe(true)
+    const tb = await (await request.get(`${API_BASE}/reports/trial-balance?period=2026-03`, { headers: authHeaders(token) })).json()
+    expect(tb.data.totals.isBalanced).toBe(true)
+    expect(tb.data.totals.debit).toBe(678_000_000)
+
+    // 4. Export PDF & XLSX — UI export belum ada → via API
+    test.info().annotations.push({
+      type: 'Gap',
+      description: 'Tombol export belum ada di prototipe — endpoint /exports diverifikasi via API.',
+    })
+    for (const format of ['pdf', 'xlsx']) {
+      const exp = await request.get(`${API_BASE}/exports/reports/income-statement?format=${format}&period=2026-03`, { headers: authHeaders(token) })
+      expect(exp.status()).toBe(200)
+      expect(exp.headers()['content-disposition']).toContain('attachment')
+    }
+  })
+
+  test('RG-04 Tutup periode: posting diblokir, laporan tetap terbaca, draft ter-post', async ({ page, request }) => {
+    // 1. Tutup Maret 2026 via API dengan aksi post-all (UI tutup periode belum ada)
+    test.info().annotations.push({
+      type: 'Gap',
+      description: 'UI tutup periode belum ada di prototipe — ditutup via API (PATCH /periods/:id/close).',
+    })
+    const token = await loginToken(request)
+    const close = await request.patch(`${API_BASE}/periods/fp-2026-03/close`, {
+      headers: authHeaders(token),
+      data: { confirmDraftAction: 'post-all' },
+    })
+    expect(close.status()).toBe(200)
+    const handled = (await close.json()).data.handledDrafts
+    expect(handled.posted).toBe(2) // BKK-0006 + JV-0007
+
+    // 2. UI: entri/posting di periode tertutup → error toast PERIOD_CLOSED
+    const dialog = await openJournalModal(page)
+    await fillBalancedJournal(dialog, '10000000', 'RG-04 coba posting periode tertutup')
+    await dialog.getByRole('button', { name: 'Posting' }).click()
+    await expect(page.getByRole('status')).toContainText('sudah ditutup')
+
+    // 3. Draft yang ter-post via post-all kini posted (7 total)
+    const list = await (await request.get(`${API_BASE}/journals?status=posted`, { headers: authHeaders(token) })).json()
+    expect(list.meta.total).toBe(7)
+
+    // 4. Laporan tetap bisa dibaca
+    const rpt = await request.get(`${API_BASE}/reports/income-statement?period=2026-03`, { headers: authHeaders(token) })
+    expect(rpt.status()).toBe(200)
+    expect((await rpt.json()).data.netIncome).toBeDefined()
+  })
+})
+
+// ------------------------------------------------------------
+test.describe('RG-05 s/d RG-08 — entitas, approval, search, periode', () => {
+  test('RG-05 Multi-entitas: data terisolasi via X-Entity-Id', async ({ page, request }) => {
+    test.info().annotations.push({
+      type: 'Gap',
+      description: 'Switch entitas belum ada di prototipe (sidebar statis PT Maju Jaya) — isolasi diverifikasi via header X-Entity-Id.',
+    })
+    const token = await loginToken(request)
+    const h = authHeaders(token)
+
+    // Baseline: 8 jurnal untuk ent-001
+    const before = await (await request.get(`${API_BASE}/journals`, { headers: h })).json()
+    expect(before.meta.total).toBe(8)
+
+    // Buat jurnal untuk ent-002 (override header) → 201
+    const created = await request.post(`${API_BASE}/journals`, {
+      headers: { ...h, 'X-Entity-Id': 'ent-002' },
+      data: {
+        date: '2026-03-15',
+        description: 'RG-05 jurnal entitas CV Karya Mandiri',
+        lines: [
+          { accountId: '1-1100', debit: 5_000_000, credit: 0 },
+          { accountId: '4-1000', debit: 0, credit: 5_000_000 },
+        ],
+      },
+    })
+    expect(created.status()).toBe(201)
+
+    // Terisolasi: ent-002 melihat 1, ent-001 tetap 8
+    const ent2 = await (await request.get(`${API_BASE}/journals`, { headers: { ...h, 'X-Entity-Id': 'ent-002' } })).json()
+    expect(ent2.meta.total).toBe(1)
+    const ent1 = await (await request.get(`${API_BASE}/journals`, { headers: h })).json()
+    expect(ent1.meta.total).toBe(8)
+
+    // Entitas terdaftar + header UI benar
+    const ents = await (await request.get(`${API_BASE}/entities`, { headers: h })).json()
+    expect(ents.data.map((e: { id: string }) => e.id).sort()).toEqual(['ent-001', 'ent-002'])
+    await gotoNav(page, 'Dashboard')
+    await expect(page.getByText('PT Maju Jaya', { exact: true }).first()).toBeVisible()
+  })
+
+  test('RG-06 Approval flow: saldo hanya berubah saat approve; reject kembali draft', async ({ page, request }) => {
+    test.info().annotations.push({
+      type: 'Gap',
+      description: 'UI approval (submit/approve/reject) belum ada di prototipe — alur diverifikasi via API.',
+    })
+    const token = await loginToken(request)
+    const h = authHeaders(token)
+
+    const createDraft = async (desc: string) => {
+      const res = await request.post(`${API_BASE}/journals`, {
+        headers: h,
+        data: {
+          date: '2026-03-15',
+          description: desc,
+          lines: [
+            { accountId: '1-1100', debit: 10_000_000, credit: 0 },
+            { accountId: '4-1000', debit: 0, credit: 10_000_000 },
+          ],
+        },
+      })
+      expect(res.status()).toBe(201)
+      return (await res.json()).data as { id: string }
+    }
+    const summary = async () => (await (await request.get(`${API_BASE}/dashboard/summary`, { headers: h })).json()).data.cards[0].value
+
+    // Submit → approve → saldo berubah (557 → 567)
+    const j1 = await createDraft('RG-06 jurnal approve')
+    expect(await summary()).toBe(557_000_000)
+    await request.post(`${API_BASE}/journals/${j1.id}/submit`, { headers: h })
+    const approved = await request.post(`${API_BASE}/journals/${j1.id}/approve`, { headers: h })
+    expect(approved.status()).toBe(200)
+    expect(await summary()).toBe(567_000_000)
+
+    // Submit → reject → kembali draft, saldo tidak berubah
+    const j2 = await createDraft('RG-06 jurnal reject')
+    await request.post(`${API_BASE}/journals/${j2.id}/submit`, { headers: h })
+    const rejected = await request.post(`${API_BASE}/journals/${j2.id}/reject`, { headers: h, data: { reason: 'Nominal tidak sesuai bukti' } })
+    expect(rejected.status()).toBe(200)
+    expect(await summary()).toBe(567_000_000)
+    const detail = await (await request.get(`${API_BASE}/journals/${j2.id}`, { headers: h })).json()
+    expect(detail.data.status).toBe('draft')
+    expect(detail.data.rejectionReason).toContain('tidak sesuai')
+
+    // Audit trail lengkap untuk jurnal yang di-approve
+    const audited = await (await request.get(`${API_BASE}/journals/${j1.id}`, { headers: h })).json()
+    const actions = audited.data.auditTrail.map((a: { action: string }) => a.action)
+    for (const expected of ['create', 'submit', 'approve']) expect(actions).toContain(expected)
+  })
+
+  test('RG-07 Filter & search: filter jurnal + pencarian global konsisten', async ({ page, request }) => {
+    // 1. Filter teks di halaman Jurnal (UI)
+    await gotoNav(page, 'Jurnal')
+    const search = page.getByPlaceholder('Cari no. bukti, keterangan, atau akun...')
+    await search.fill('BKM')
+    await expect(page.getByText('3 entri jurnal')).toBeVisible() // BKM-0001, 0004, 0008
+
+    await search.fill('gaji')
+    await expect(page.getByText('1 entri jurnal')).toBeVisible() // JV-0005
+
+    // 2. Filter status Draft
+    await search.fill('')
+    await page.getByLabel('Status').selectOption('draft')
+    await expect(page.getByText('2 entri jurnal')).toBeVisible() // BKK-0006, JV-0007
+
+    // 3. Buka detail dari hasil filter → navigasi benar
+    const row = page.locator('tbody tr', { hasText: 'JV-2026-03-0007' }).first()
+    await row.getByRole('button', { name: 'Buka detail' }).click()
+    await expect(page.getByText('Koreksi beban listrik dan air Maret')).toBeVisible()
+
+    // 4. Search global via API (UI global search belum ada)
+    test.info().annotations.push({
+      type: 'Gap',
+      description: 'Global search & filter di URL belum ada di prototipe — endpoint /search diverifikasi via API.',
+    })
+    const token = await loginToken(request)
+    const sres = await (await request.get(`${API_BASE}/search?q=gaji`, { headers: authHeaders(token) })).json()
+    expect(sres.data.results.some((r: { type: string; title: string }) => r.type === 'journal' && r.title === 'JV-2026-03-0005')).toBe(true)
+  })
+
+  test('RG-08 Selektor periode global: footer, modal, dan laporan sinkron', async ({ page }) => {
+    // 1. Ganti periode global di sidebar → footer sinkron
+    await page.getByLabel('Pilih periode').selectOption('2026-02')
+    await expect(page.locator('footer')).toContainText('Periode: 2026-02')
+
+    // 2. Modal jurnal ikut periode aktif
+    const dialog = await openJournalModal(page)
+    await expect(dialog.getByText('2026-02 · aktif')).toBeVisible()
+    await dialog.getByRole('button', { name: 'Batal' }).click()
+
+    // 3. Laba Rugi: navigasi periode sendiri (Maret 44jt → Februari 77jt)
+    await gotoNav(page, 'Laba Rugi')
+    await expect(page.getByText(BASE.laba, { exact: true }).first()).toBeVisible() // Maret
+    await page.getByRole('button', { name: 'Periode sebelumnya' }).click()
+    await expect(page.getByText('Rp 77.000.000', { exact: true }).first()).toBeVisible() // Februari
+
+    // 4. Buku Besar: periode tanpa transaksi → saldo tetap (60jt)
+    await gotoNav(page, 'Buku Besar')
+    await page.getByRole('button', { name: 'Periode sebelumnya' }).click()
+    await page.getByRole('button', { name: 'Periode sebelumnya' }).click()
+    await expect(page.getByText('Saldo tetap Rp 60.000.000')).toBeVisible()
+
+    // 5. Dashboard tetap fungsional setelah ganti periode
+    await gotoNav(page, 'Dashboard')
+    await expect(page.getByText(BASE.aset, { exact: true }).first()).toBeVisible()
+  })
+})
+
+// ------------------------------------------------------------
+test.describe('RG-09 s/d RG-12 — performa, restart, lintas browser, error', () => {
+  test('RG-09 Data besar: 10.000 jurnal — pagination, kecepatan, filter tetap benar', async ({ page, request }) => {
+    test.setTimeout(180_000)
+    const token = await loginToken(request)
+    const h = authHeaders(token)
+
+    // Seed 10.000 jurnal seimbang (dev endpoint)
+    const seed = await request.post(`${API_BASE}/admin/seed-bulk`, { headers: h, data: { count: 10_000 } })
+    expect(seed.status()).toBe(200)
+    expect((await seed.json()).data.added).toBe(10_000)
+
+    // Respons daftar dengan pagination < 2 detik (kriteria RG-09)
+    const t0 = Date.now()
+    const listRes = await request.get(`${API_BASE}/journals?page=1&pageSize=200`, { headers: h })
+    const ms = Date.now() - t0
+    const list = await listRes.json()
+    expect(list.meta.total).toBe(10_008) // 8 seed + 10.000 bulk
+    expect(list.data.journals.length).toBe(200)
+    expect(ms).toBeLessThan(2_000)
+
+    // UI: reload → 200 baris termuat, tanpa error
+    const errors = watchPageErrors(page)
+    await page.reload()
+    await expect(page.locator('footer')).toContainText('Online · Mock API', { timeout: 20_000 })
+    await gotoNav(page, 'Jurnal')
+    await expect(page.getByText('200 entri jurnal')).toBeVisible()
+
+    // Filter server tetap benar pada data besar (10.000 jurnal)
+    const byKeyword = await (await request.get(`${API_BASE}/journals?keyword=bulk%20%231001`, { headers: h })).json()
+    expect(byKeyword.meta.total).toBe(1)
+    expect(byKeyword.data.journals[0].transactionNumber).toBe('BKM-2026-03-2001') // n=1001 → nomor n+1000
+
+    // Filter UI tetap benar: nomor bukti yang pasti ada di 200 baris pertama
+    const search = page.getByPlaceholder('Cari no. bukti, keterangan, atau akun...')
+    await search.fill('BKM-2026-03-5236')
+    await expect(page.getByText('1 entri jurnal')).toBeVisible()
+    await expect(page.getByText('BKM-2026-03-5236', { exact: true })).toBeVisible()
+    expect(errors).toEqual([])
+  })
+
+  test('RG-10 Restart & persistensi: reset server = kembali seed; UI tanpa error', async ({ page, request }) => {
+    const errors = watchPageErrors(page)
+
+    // 1. Posting 10jt via UI → server & UI punya 9 jurnal
+    await createAndPostJournal(page)
+    await gotoNav(page, 'Jurnal')
+    await expect(page.getByText('BKM-2026-03-0009', { exact: true })).toBeVisible()
+
+    // 2. "Restart" server in-memory = POST /admin/reset (setara restart)
+    test.info().annotations.push({
+      type: 'Dokumentasi',
+      description: 'Server mock in-memory: restart ≡ POST /admin/reset (data kembali ke seed). RG-10 didokumentasikan, bukan bug.',
+    })
+    await resetServer(request)
+
+    // 3. UI (tanpa reload) masih memegang 9 jurnal — state klien tidak hilang
+    await expect(page.getByText('BKM-2026-03-0009', { exact: true })).toBeVisible()
+
+    // 4. Reload → data dari server (8 jurnal), tidak ada error UI
+    await page.reload()
+    await expect(page.locator('footer')).toContainText('Online · Mock API', { timeout: 20_000 })
+    await gotoNav(page, 'Jurnal')
+    await expect(page.getByText('BKM-2026-03-0009', { exact: true })).toHaveCount(0)
+    await gotoNav(page, 'Dashboard')
+    await expect(page.getByText(BASE.aset, { exact: true }).first()).toBeVisible()
+    expect(errors).toEqual([])
+  })
+
+  test('RG-11 Mobile 320px: layout tetap dapat dipakai tanpa overflow', async ({ browser }) => {
+    // Suite penuh sudah berjalan di chromium + firefox (konfigurasi projects).
+    // Di sini: verifikasi tambahan viewport mobile 320px.
+    const ctx = await browser.newContext({ viewport: { width: 320, height: 640 } })
+    const page = await ctx.newPage()
+    await page.goto('http://localhost:5173/') // baseURL tidak berlaku untuk context manual
+    await expect(page.locator('footer')).toContainText('Online · Mock API', { timeout: 20_000 })
+    await expect(page.getByText(BASE.aset, { exact: true }).first()).toBeVisible()
+
+    // Navigasi tetap tersedia (sidebar ikon-only)
+    await page.getByRole('button', { name: 'Jurnal', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Jurnal Umum' })).toBeVisible()
+
+    // Tidak ada horizontal overflow dokumen
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    )
+    expect(overflow).toBe(false)
+    await ctx.close()
+  })
+
+  test('RG-12 Error handling: server mati → banner offline + fallback, tanpa crash', async ({ page }) => {
+    const errors = watchPageErrors(page)
+
+    // Simulasi server mati: blokir semua request ke localhost:4000
+    await page.route('**://localhost:4000/**', (route) => route.abort())
+    await page.reload()
+
+    // Banner offline (dengan petunjuk menjalankan) + toast error + footer
+    await expect(page.getByText(/Jalankan npm start/)).toBeVisible()
+    await expect(page.getByRole('status')).toContainText('Mock API tidak terhubung')
+    await expect(page.locator('footer')).toContainText('Offline · Data lokal')
+
+    // Dashboard tetap render dengan data lokal (bukan halaman putih)
+    await expect(page.getByText('Total Aset', { exact: true })).toBeVisible()
+
+    // Pulihkan koneksi → "Coba lagi" kembali online
+    await page.unroute('**://localhost:4000/**')
+    await page.getByRole('button', { name: 'Coba lagi' }).click()
+    await expect(page.locator('footer')).toContainText('Online · Mock API', { timeout: 20_000 })
+    expect(errors).toEqual([])
+  })
+})

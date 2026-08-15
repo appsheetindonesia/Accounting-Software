@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, Plus, TrendingUp } from 'lucide-react'
-import { useStore, isEffectJournal } from '../../store/useStore'
+import { useStore } from '../../store/useStore'
 import { api } from '../../api'
+import { computeIncomeStatement } from '../../lib/ledger'
 import { formatIDR } from '../../lib/format'
 
 const PERIODS = [
@@ -37,29 +38,10 @@ export default function IncomeStatementPage() {
   const period = PERIODS[periodIdx]
 
   // Fallback offline: hitung dari data lokal
-  const localView = useMemo<ReportView>(() => {
-    const closing = new Map<string, number>()
-    for (const a of accounts) closing.set(a.id, a.baseBalance)
-    for (const j of journals) {
-      if (!isEffectJournal(j) || j.date > period.end) continue
-      for (const ln of j.lines) {
-        const account = accounts.find((a) => a.id === ln.accountId)
-        if (!account) continue
-        const delta = account.normalBalance === 'debit' ? ln.debit - ln.credit : ln.credit - ln.debit
-        closing.set(account.id, (closing.get(account.id) ?? 0) + delta)
-      }
-    }
-    const toLines = (type: string): ReportLine[] =>
-      accounts
-        .filter((a) => a.type === type)
-        .map((a) => ({ accountId: a.id, code: a.code, name: a.name, amount: closing.get(a.id) ?? 0 }))
-        .filter((l) => l.amount !== 0)
-    const revenueLines = toLines('revenue')
-    const expenseLines = toLines('expense')
-    const revenueTotal = revenueLines.reduce((s, l) => s + l.amount, 0)
-    const expenseTotal = expenseLines.reduce((s, l) => s + l.amount, 0)
-    return { revenueLines, expenseLines, revenueTotal, expenseTotal, netIncome: revenueTotal - expenseTotal }
-  }, [accounts, journals, period])
+  const localView = useMemo<ReportView>(
+    () => computeIncomeStatement(accounts, journals, period.end),
+    [accounts, journals, period],
+  )
 
   // Data via API: GET /reports/income-statement?period= (tunggu koneksi menetap)
   const ready = apiStatus === 'online' || apiStatus === 'offline'

@@ -8,7 +8,9 @@
     "start": "node index.js",
     "dev": "node --watch index.js",
     "reset": "node scripts/reset.js",
-    "seed:extra": "node scripts/reset.js --extra"
+    "seed:extra": "node scripts/reset.js --extra",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [
     "mock",
@@ -20,5 +22,9 @@
   "dependencies": {
     "cors": "^2.8.6",
     "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "supertest": "^7.1.1",
+    "vitest": "^3.2.0"
   }
 }

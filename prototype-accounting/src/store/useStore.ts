@@ -1,10 +1,15 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, type PersistOptions } from 'zustand/middleware'
 import { useMemo } from 'react'
 import type { Account, JournalEntry, NewJournalInput, PageKey } from '../types'
-import { mockAccounts, mockJournals } from '../data/mock'
+import { mockAccounts, mockJournals, SEED_JOURNAL_IDS, SEED_VERSION } from '../data/mock'
 import { api, ApiError, isNetworkError, toJournalEntry } from '../api'
 import type { AuthUser } from '../api'
+import { isEffectJournal } from '../lib/ledger'
+import { CURRENT_VERSION, migratePersistedState, type PersistedShape } from './persist'
+
+export { isEffectJournal }
+export { CURRENT_VERSION, migratePersistedState } from './persist'
 
 export interface Toast {
   message: string
@@ -35,6 +40,7 @@ interface AccountingState {
   postJournal: (id: string) => Promise<void>
   reverseJournal: (id: string) => Promise<void>
   deleteJournal: (id: string) => Promise<void>
+  resetDemoData: () => void
 
   toast: Toast | null
   showToast: (message: string, kind?: Toast['kind']) => void
@@ -42,19 +48,24 @@ interface AccountingState {
 
 const nowIso = () => new Date().toISOString()
 
-// Key localStorage + versi seed. Bump VERSION jika mock data berubah
-// agar state lama yang tidak kompatibel otomatis di-reset ke seed.
+// Key localStorage. JANGAN ganti nama key: data lama dimigrasi lewat
+// version + migrate() (lihat src/store/persist.ts), bukan di-reset.
+// NAIKKAN CURRENT_VERSION (bukan key) saat mock data berubah.
 const STORAGE_KEY = 'appsheet-accounting-v1'
 
 // Hanya field data yang dipersist (bukan UI ephemeral seperti modal/toast)
-const persistOptions = {
+// + metadata seed agar migrasi ke depan tahu jurnal mana milik seed.
+const persistOptions: PersistOptions<AccountingState, PersistedShape> = {
   name: STORAGE_KEY,
-  version: 1,
-  partialize: (s: AccountingState) => ({
+  version: CURRENT_VERSION,
+  partialize: (s) => ({
     accounts: s.accounts,
     journals: s.journals,
     activePeriod: s.activePeriod,
+    seedVersion: SEED_VERSION,
+    seedJournalIds: SEED_JOURNAL_IDS,
   }),
+  migrate: (persisted) => migratePersistedState(persisted),
 }
 
 // Kredensial demo mock API (mock-api/README.md)
@@ -300,6 +311,23 @@ export const useStore = create<AccountingState>()(
           localDelete(id)
         },
 
+        // Reset demo: hapus localStorage (data pengguna) + kembali ke seed murni.
+        // Koneksi mock API tidak diubah — reload berikutnya akan memuat ulang
+        // dari server (server di-reset terpisah via `npm run reset` di mock-api).
+        resetDemoData: () => {
+          // `persist` API hanya ada saat storage tersedia (browser);
+          // di lingkungan tanpa storage (test) di-skip aman.
+          useStore.persist?.clearStorage()
+          set({
+            accounts: mockAccounts,
+            journals: mockJournals,
+            activePeriod: '2026-03',
+            page: 'dashboard',
+            modalOpen: false,
+            toast: { message: 'Data demo di-reset ke seed awal', kind: 'success' },
+          })
+        },
+
         toast: null,
         showToast: (message, kind = 'success') => set({ toast: { message, kind } }),
       }
@@ -307,11 +335,6 @@ export const useStore = create<AccountingState>()(
     persistOptions,
   ),
 )
-
-// Jurnal yang memengaruhi saldo: posted DAN bukan jurnal pembalik.
-// Jurnal asli yang di-reverse berstatus 'reversed' (tidak dihitung),
-// jurnal pembalik punya reversalOf (tidak dihitung) → pasangan bernet 0.
-export const isEffectJournal = (j: JournalEntry) => j.status === 'posted' && !j.reversalOf
 
 // Hitung saldo live: saldo awal + efek jurnal posted (BR-6, BR-7)
 export const computeBalances = (accounts: Account[], journals: JournalEntry[]) => {

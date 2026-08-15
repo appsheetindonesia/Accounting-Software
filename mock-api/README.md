@@ -17,6 +17,22 @@ npm start          # atau: npm run dev (auto-restart saat edit file)
 
 Health check: `http://localhost:4000/health`
 
+## Integration test (Vitest + Supertest)
+
+Uji endpoint terhadap **baseline angka** QA Test Plan §2.3 (seed Maret 2026).
+Supertest memanggil app Express langsung — **tanpa perlu server berjalan**.
+
+```bash
+npm test          # vitest run — 11 test
+npm run test:watch
+```
+
+Cakupan (`test/api-baseline.test.js`): 5 jurnal posted total 98jt = 98jt;
+Kas Besar 60 → 87jt (saldo berjalan 85/75/72/87); Pendapatan 155jt, Utang 150jt,
+Modal 363jt; Neraca 557 = 150 + 363 + 44 (isBalanced); Trial balance 668 = 668;
+Laba Rugi 155 − 111 = 44jt; dashboard 4 kartu; alert 2 draft; posting 10jt → saldo
+live (87→97, 155→165, 557→567); reverse → kembali ke baseline (net 0).
+
 ## Reset & seed tambahan
 
 State server **in-memory** — dua cara mengembalikan ke seed:
@@ -30,6 +46,13 @@ State server **in-memory** — dua cara mengembalikan ke seed:
 Keduanya memanggil `POST /admin/reset` (dev-only, tanpa auth) di `http://localhost:4000`.
 Contoh pemakaian: setelah pengujian QA lewat API, `npm run reset` membersihkan jurnal uji
 agar angka kembali ke baseline yang terverifikasi, tanpa mematikan server.
+
+Endpoint dev lain: `POST /admin/seed-bulk {count}` (maks 50.000) — seed massal jurnal
+seimbang untuk uji performa (RG-09). Reset memakai `structuredClone` agar mutasi runtime
+(tutup periode, reverse, edit akun) tidak mencemari seed.
+
+Multi-tenant: jurnal kini membawa `entityId` (dari `X-Entity-Id`, default entitas user);
+`GET /journals` memfilter berdasarkan entitas aktif — dipakai RG-05 di suite E2E.
 
 ## Login demo
 

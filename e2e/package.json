@@ -1,0 +1,16 @@
+{
+  "name": "accounting-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Playwright E2E — skenario regresi RG-01..RG-12 (QA Test Plan - Accounting.md) terhadap mock API + prototipe",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:rg9": "playwright test --project=chromium -g \"RG-09\"",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.0"
+  }
+}

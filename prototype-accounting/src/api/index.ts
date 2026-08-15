@@ -72,6 +72,25 @@ export interface IncomeStatement {
   period: { start: string; end: string }
 }
 
+export interface TrialBalance {
+  lines: { accountId?: string; accountCode: string; accountName: string; debit: number; credit: number }[]
+  totals: { debit: number; credit: number; isBalanced: boolean }
+  period: { start: string; end: string }
+}
+
+export interface BalanceSheet {
+  asOf: string
+  entity: { id: string; name: string }
+  sections: {
+    title: string
+    subtotal: number
+    lines: { accountCode: string; accountName: string; amount: number; indentLevel: number; isBold: boolean; isTotal: boolean }[]
+  }[]
+  totalAssets: number
+  totalLiabilitiesEquity: number
+  isBalanced: boolean
+}
+
 export const api = {
   // 2. Auth
   login(credentials: { email: string; password: string }) {
@@ -133,6 +152,12 @@ export const api = {
   },
   getIncomeStatement(period: string) {
     return request<IncomeStatement>('/reports/income-statement', { query: { period } })
+  },
+  getTrialBalance(period: string) {
+    return request<TrialBalance>('/reports/trial-balance', { query: { period } })
+  },
+  getBalanceSheet(asOf: string) {
+    return request<BalanceSheet>('/reports/balance-sheet', { query: { asOf } })
   },
 }
 

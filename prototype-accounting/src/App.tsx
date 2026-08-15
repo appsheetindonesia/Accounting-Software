@@ -10,6 +10,9 @@ import JournalPage from './components/journal/JournalPage'
 import JournalEntryModal from './components/journal/JournalEntryModal'
 import LedgerPage from './components/ledger/LedgerPage'
 import IncomeStatementPage from './components/reports/IncomeStatementPage'
+import TrialBalancePage from './components/reports/TrialBalancePage'
+import BalanceSheetPage from './components/reports/BalanceSheetPage'
+import SettingsPage from './components/SettingsPage'
 import ComingSoon from './components/ComingSoon'
 
 function App() {
@@ -37,6 +40,12 @@ function App() {
             <LedgerPage />
           ) : page === 'laba-rugi' ? (
             <IncomeStatementPage />
+          ) : page === 'neraca-lajur' ? (
+            <TrialBalancePage />
+          ) : page === 'neraca' ? (
+            <BalanceSheetPage />
+          ) : page === 'pengaturan' ? (
+            <SettingsPage />
           ) : (
             <ComingSoon />
           )}

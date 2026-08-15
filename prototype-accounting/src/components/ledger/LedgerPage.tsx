@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, ExternalLink, NotebookPen } from 'lucide-react'
-import { useStore, isEffectJournal } from '../../store/useStore'
+import { useStore } from '../../store/useStore'
 import { api } from '../../api'
+import { computeLedger } from '../../lib/ledger'
 import { formatDateShort, formatIDR } from '../../lib/format'
-import type { JournalEntry } from '../../types'
 
 const PERIODS = [
   { key: '2026-01', label: 'Januari 2026', start: '2026-01-01', end: '2026-01-31' },
@@ -41,38 +41,10 @@ export default function LedgerPage() {
   const period = PERIODS[periodIdx]
 
   // Fallback offline: hitung saldo berjalan dari data lokal
-  const localView = useMemo<LedgerView>(() => {
-    if (!account) return { opening: 0, rows: [], closing: 0 }
-    const lineOf = (j: JournalEntry) => j.lines.find((ln) => ln.accountId === account.id)
-    const relevant = journals.filter((j) => isEffectJournal(j) && lineOf(j))
-
-    let opening = account.baseBalance
-    for (const j of relevant) {
-      if (j.date < period.start) {
-        const ln = lineOf(j)!
-        opening += account.normalBalance === 'debit' ? ln.debit - ln.credit : ln.credit - ln.debit
-      }
-    }
-
-    const within = relevant
-      .filter((j) => j.date >= period.start && j.date <= period.end)
-      .sort((a, b) => a.date.localeCompare(b.date) || a.transactionNumber.localeCompare(b.transactionNumber))
-
-    let running = opening
-    const rows: LedgerRow[] = within.map((j) => {
-      const ln = lineOf(j)!
-      running += account.normalBalance === 'debit' ? ln.debit - ln.credit : ln.credit - ln.debit
-      return {
-        reference: j.transactionNumber,
-        date: j.date,
-        description: ln.description || j.description,
-        debit: ln.debit,
-        credit: ln.credit,
-        balance: running,
-      }
-    })
-    return { opening, rows, closing: running }
-  }, [account, journals, period])
+  const localView = useMemo<LedgerView>(
+    () => computeLedger(accounts, journals, account?.id ?? '', { start: period.start, end: period.end }),
+    [accounts, journals, account, period],
+  )
 
   // Data via API: GET /ledger/accounts/:id?period= (tunggu koneksi menetap)
   const ready = apiStatus === 'online' || apiStatus === 'offline'

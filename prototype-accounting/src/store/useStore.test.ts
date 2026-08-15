@@ -322,6 +322,41 @@ describe('reverseJournal — pembalikan otomatis', () => {
   })
 })
 
+describe('resetDemoData — kembali ke seed awal', () => {
+  it('reset menghapus jurnal pengguna & kembali ke seed murni', async () => {
+    // Tambah dulu 1 jurnal pengguna + ubah periode → lalu reset
+    await useStore.getState().saveJournal(
+      {
+        date: '2026-03-25',
+        transactionNumber: 'BKM-2026-03-0009',
+        description: 'Penerimaan jasa PT Test',
+        lines: [
+          { accountId: '1-1100', debit: 10_000_000, credit: 0, description: 'Tunai' },
+          { accountId: '4-1000', debit: 0, credit: 10_000_000, description: 'Pendapatan' },
+        ],
+      },
+      'post',
+    )
+    useStore.setState({ activePeriod: '2026-02', page: 'journal' })
+    expect(useStore.getState().journals).toHaveLength(mockJournals.length + 1)
+
+    useStore.getState().resetDemoData()
+
+    const s = useStore.getState()
+    expect(s.journals).toEqual(mockJournals)
+    expect(s.accounts).toEqual(mockAccounts)
+    expect(s.activePeriod).toBe('2026-03')
+    expect(s.page).toBe('dashboard')
+    expect(s.toast?.kind).toBe('success')
+    expect(s.toast?.message).toContain('di-reset')
+  })
+
+  it('reset tidak crash di lingkungan tanpa localStorage (storage null)', () => {
+    expect(() => useStore.getState().resetDemoData()).not.toThrow()
+    expect(useStore.getState().journals).toEqual(mockJournals)
+  })
+})
+
 describe('deleteJournal — hapus draft', () => {
   it('menghapus jurnal yang dimaksud saja (path lokal)', async () => {
     await useStore.getState().deleteJournal('JNL-2026-03-006')

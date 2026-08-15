@@ -21,11 +21,15 @@ app.use(express.json())
 // withExtra=true ikut memuat jurnal lintas bulan (Jan–Feb 2026).
 // ------------------------------------------------------------
 const createDb = ({ withExtra = false } = {}) => ({
-  entities: [...entities],
-  users: [...users],
-  accounts: [...accounts],
-  journals: [...journals, ...(withExtra ? extraJournals : [])],
-  periods: [...periods],
+  // structuredClone PENTING: seed di data.js adalah modul-level. Tanpa deep-copy,
+  // mutasi saat runtime (tutup periode, reverse jurnal, ganti password, edit akun)
+  // ikut mengubah objek seed → reset tidak mengembalikan kondisi awal.
+  entities: structuredClone(entities),
+  users: structuredClone(users),
+  accounts: structuredClone(accounts),
+  // Seed dimiliki entitas default (ent-001) — semua user seed juga ent-001
+  journals: structuredClone([...journals, ...(withExtra ? extraJournals : [])]).map((j) => ({ entityId: 'ent-001', ...j })),
+  periods: structuredClone(periods),
   sessions: new Map(), // refreshToken -> userId
   seq: { journal: 100, line: 100, attachment: 100, user: 100, entity: 100 },
 })
@@ -126,8 +130,9 @@ const findPeriodByDate = (dateStr) => {
 
 const periodByKey = (key) => db.periods.find((p) => p.id === key) ?? db.periods.find((p) => `${p.year}-${pad(p.month, 2)}` === key)
 
-// Validasi jurnal (BR-1..BR-5) — dipakai POST & PUT
-const validateJournal = (body) => {
+// Validasi jurnal (BR-1..BR-5) — dipakai POST & PUT.
+// excludeJournalId: saat PUT, nomor bukti milik jurnal yang sama tidak dianggap duplikat.
+const validateJournal = (body, excludeJournalId) => {
   const { date, lines, transactionNumber } = body
   if (!date || !Array.isArray(lines) || lines.length === 0)
     return { code: 'JOURNAL_NO_LINES', message: 'Jurnal harus memiliki minimal 1 debit dan 1 kredit', status: 422 }
@@ -163,7 +168,7 @@ const validateJournal = (body) => {
     }
   if (transactionNumber) {
     const dup = db.journals.find((j) => j.transactionNumber === transactionNumber)
-    if (dup) return { code: 'TRANSACTION_NUMBER_DUPLICATE', message: 'Nomor bukti sudah digunakan', status: 409 }
+    if (dup && dup.id !== excludeJournalId) return { code: 'TRANSACTION_NUMBER_DUPLICATE', message: 'Nomor bukti sudah digunakan', status: 409 }
   }
   const period = findPeriodByDate(date)
   if (period && !period.isOpen)
@@ -222,6 +227,35 @@ app.post('/admin/reset', (req, res) => {
     periods: db.periods.length,
     message: withExtra ? 'Seed + jurnal lintas bulan (Jan–Feb 2026) dimuat' : 'State di-reset ke seed awal (Maret 2026)',
   })
+})
+
+// Seed massal jurnal seimbang (alat development) — dipakai uji performa
+// RG-09 di QA Test Plan (10.000 jurnal). Langsung push ke db tanpa validasi
+// per-baris agar cepat; angka unik agar tidak bentrok dengan seed.
+app.post('/admin/seed-bulk', requireAuth, (req, res) => {
+  const count = Math.min(50000, Math.max(1, Number(req.body?.count) || 1000))
+  const base = db.journals.length
+  const chunks = []
+  for (let i = 1; i <= count; i++) {
+    const n = base + i
+    const date = `2026-03-${String((i % 28) + 1).padStart(2, '0')}`
+    chunks.push({
+      id: `JNL-BULK-${pad(n, 6)}`,
+      transactionNumber: `BKM-2026-03-${pad(n + 1000, 4)}`,
+      date,
+      description: `Jurnal bulk #${n} — penerimaan jasa konsultasi`,
+      lines: [
+        { id: `bl-${n}-1`, accountId: '1-1100', accountCode: '1-1100', accountName: 'Kas Besar', debit: 1_000_000, credit: 0, description: 'Seed massal' },
+        { id: `bl-${n}-2`, accountId: '4-1000', accountCode: '4-1000', accountName: 'Pendapatan Jasa', debit: 0, credit: 1_000_000, description: 'Seed massal' },
+      ],
+      status: 'posted', version: 1, createdBy: 'user-001', createdAt: `${date}T09:00:00Z`, postedAt: `${date}T09:05:00Z`,
+      auditTrail: [{ userId: 'user-001', action: 'create', timestamp: `${date}T09:00:00Z` }],
+      attachments: [],
+      entityId: req.entityId,
+    })
+  }
+  db.journals.push(...chunks)
+  ok(res, { added: count, journals: db.journals.length })
 })
 
 // ------------------------------------------------------------
@@ -471,6 +505,8 @@ app.get('/accounts/export', requireAuth, (req, res) => {
 // ------------------------------------------------------------
 app.get('/journals', requireAuth, (req, res) => {
   let list = [...db.journals]
+  // Multi-tenant: hanya jurnal entitas aktif (X-Entity-Id, default dari user)
+  list = list.filter((j) => j.entityId === req.entityId)
   const { startDate, endDate, accountId, status, keyword, period } = req.query
   if (startDate) list = list.filter((j) => j.date >= startDate)
   if (endDate) list = list.filter((j) => j.date <= endDate)
@@ -537,6 +573,7 @@ app.post('/journals', requireAuth, requirePermission('journal.write'), (req, res
     createdAt: nowIso(),
     auditTrail: [{ userId: req.user.id, action: 'create', timestamp: nowIso() }],
     attachments: [],
+    entityId: req.entityId,
   }
   db.journals.unshift(journal)
   ok(res, journal, null, 201)
@@ -556,7 +593,7 @@ app.put('/journals/:id', requireAuth, requirePermission('journal.write'), (req, 
   // Optimistic locking (API §1.5 409 DATA_CONFLICT)
   const ifMatch = req.headers['if-match']
   if (ifMatch && Number(ifMatch) !== journal.version) return fail(res, 409, 'DATA_CONFLICT', 'Data sudah diubah oleh pengguna lain. Muat ulang halaman.')
-  const err = validateJournal(req.body)
+  const err = validateJournal(req.body, journal.id)
   if (err) return fail(res, err.status, err.code, err.message, err.details)
   const accountName = (accountId) => db.accounts.find((a) => a.id === accountId)?.name ?? ''
   journal.date = req.body.date
@@ -620,6 +657,7 @@ app.post('/journals/:id/reverse', requireAuth, requirePermission('journal.write'
       { userId: req.user.id, action: 'post', timestamp: nowIso() },
     ],
     attachments: [],
+    entityId: journal.entityId ?? req.entityId,
   }
   journal.status = 'reversed'
   journal.reversedAt = nowIso()

@@ -174,3 +174,13 @@ export const accountTypeLabel: Record<Account['type'], string> = {
   revenue: 'Pendapatan',
   expense: 'Beban',
 }
+
+// ---------------------------------------------------------------------------
+// Metadata seed untuk migrasi persist (lihat src/store/persist.ts).
+// NAIKKAN SEED_VERSION saat mock data berubah (tambah/hapus akun, ubah
+// nominal, tambah jurnal seed) agar state lama dimigrasi — jurnal buatan
+// pengguna tetap dipertahankan, tidak di-reset ke seed.
+// ---------------------------------------------------------------------------
+export const SEED_VERSION = 1
+export const SEED_JOURNAL_IDS = mockJournals.map((j) => j.id)
+export const SEED_ACCOUNT_IDS = mockAccounts.map((a) => a.id)

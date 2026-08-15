@@ -2,11 +2,8 @@ import { ArrowLeft, Hammer } from 'lucide-react'
 import { useStore } from '../store/useStore'
 
 const LABELS: Record<string, string> = {
-  'neraca-lajur': 'Neraca Lajur',
-  neraca: 'Neraca',
   'arus-kas': 'Arus Kas',
   'laporan-lain': 'Laporan Lain',
-  pengaturan: 'Pengaturan',
 }
 
 export default function ComingSoon() {
@@ -21,7 +18,7 @@ export default function ComingSoon() {
       </div>
       <h2 className="text-lg font-bold text-ink">Modul {label}</h2>
       <p className="max-w-sm text-sm text-ink-soft">
-        Modul ini belum diimplementasikan di prototipe. Prototipe saat ini mencakup Dashboard dan Jurnal.
+        Modul ini belum diimplementasikan di prototipe. Prototipe saat ini mencakup Dashboard, Jurnal, Buku Besar, Laba Rugi, Neraca, Neraca Lajur, dan Pengaturan.
       </p>
       <button
         type="button"

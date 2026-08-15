@@ -23,7 +23,7 @@ Build, lint & test:
 ```bash
 npm run build
 npm run lint
-npm test          # Vitest — logika akuntansi (33 test)
+npm test          # Vitest — akuntansi, Buku Besar/Laba Rugi, migrasi persist (60 test)
 ```
 
 ## Yang Bisa Dicoba
@@ -35,15 +35,17 @@ npm test          # Vitest — logika akuntansi (33 test)
 - Draft → Posting → Reverse (dari expand detail baris jurnal)
 - **Buku Besar**: saldo berjalan per akun (Saldo Awal → transaksi → Saldo Akhir), selector akun, nav periode, hanya jurnal posted
 - **Laba Rugi**: dihitung live dari jurnal posted (Pendapatan − Beban = Laba/Rugi Bersih), selector periode, empty state
-- Modul lain (Neraca Lajur, Neraca, Arus Kas, dst.) menampilkan halaman placeholder
+- **Neraca Lajur**: trial balance live (saldo YTD per akhir periode), kolom Debit/Kredit per akun, indikator **✓ Seimbang (Debit = Kredit)**, nav periode
+- **Neraca**: posisi keuangan live (section ASET & KEWAJIBAN + EKUITAS + Laba Ditahan berjalan), indikator **✓ Seimbang (Aset = Kewajiban + Ekuitas)**, "Per 31 Maret 2026", nav periode
+- Modul lain (Arus Kas, Laporan Lain, Pengaturan) menampilkan halaman placeholder
 
 ## Lapisan API (async fetch — `API - Accounting.md`)
 
 - `src/api/client.ts` — wrapper `fetch`: envelope `{ data }` / `{ error: { code, message } }`, bearer JWT, header `X-Entity-Id`, `ApiError`, deteksi gagal jaringan
-- `src/api/index.ts` — endpoint typed: auth (login), akun, jurnal (create/post/reverse/delete), dashboard (summary/trend/recent/alerts), buku besar, laba rugi + normalisasi ke tipe lokal
+- `src/api/index.ts` — endpoint typed: auth (login), akun, jurnal (create/post/reverse/delete), dashboard (summary/trend/recent/alerts), buku besar, laba rugi, neraca lajur, neraca + normalisasi ke tipe lokal
 - `src/hooks/useApiFetch.ts` — fetch async dengan gate koneksi (hindari 401 saat token belum siap), loading, fallback offline
 - `src/store/useStore.ts` — `init()` auto-login demo (rina@bukuwarung.com) lalu muat akun & jurnal; semua mutasi (save/post/reverse/delete) memanggil API saat online, fallback lokal saat offline; persist localStorage untuk ketahanan offline
-- Dashboard, Buku Besar & Laba Rugi memakai endpoint masing-masing (bukan hitung lokal) dengan fallback lokal saat offline
+- Dashboard, Buku Besar, Laba Rugi, Neraca Lajur & Neraca memakai endpoint masing-masing (bukan hitung lokal) dengan fallback lokal saat offline
 
 ## Stack
 
@@ -63,5 +65,5 @@ src/
     ├── dashboard/        # BalanceCards, TrendChart, RecentJournals, AlertsPanel
     ├── journal/          # JournalPage, JournalTable, JournalEntryModal
     ├── ledger/           # LedgerPage — buku besar saldo berjalan (via API)
-    └── reports/          # IncomeStatementPage — laba rugi live (via API)
+    └── reports/          # IncomeStatementPage, TrialBalancePage, BalanceSheetPage — laporan live (via API)
 ```
