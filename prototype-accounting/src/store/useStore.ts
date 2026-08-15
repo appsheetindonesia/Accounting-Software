@@ -157,7 +157,7 @@ export const useStore = create<AccountingState>()(
       }
 
       // ---------- Mutasi lokal (fallback offline) ----------
-      const localSave = (input: NewJournalInput, action: 'draft' | 'post') => {
+      const localSave = (input: NewJournalInput, action: 'draft' | 'submit' | 'post') => {
         set((state) => {
           const seq = nextLocalSeq(state.journals)
           const entry: JournalEntry = {

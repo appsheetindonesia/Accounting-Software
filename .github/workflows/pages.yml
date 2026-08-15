@@ -1,0 +1,72 @@
+# ============================================================
+# Build & Deploy prototipe ke GitHub Pages
+# Job terpisah dari CI (ci.yml) — workflow ini khusus membangun
+# prototipe (prototype-accounting) dan men-deploy hasilnya ke
+# GitHub Pages via actions/deploy-pages.
+#
+#   npm run build (tsc -b && vite build) dengan --base yang
+#   diambil dari nama repo (subpath Pages), jadi aset tidak 404.
+#
+# Persyaratan sekali-setel di GitHub:
+#   Settings → Pages → Source: "GitHub Actions"
+# ============================================================
+name: Build & Deploy prototipe ke GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build prototipe (Vite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22 (Vite 8 butuh ^20.19 || >=22.12)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: prototype-accounting/package-lock.json
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Install dependencies
+        working-directory: prototype-accounting
+        run: npm ci
+
+      - name: Build (tsc -b && vite build, base = nama repo)
+        working-directory: prototype-accounting
+        run: npm run build -- --base=/${{ github.event.repository.name }}/
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: prototype-accounting/dist
+
+  deploy:
+    name: Deploy ke GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

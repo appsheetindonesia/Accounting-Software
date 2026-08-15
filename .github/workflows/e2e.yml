@@ -1,23 +1,59 @@
 # ============================================================
-# E2E Regression (manual) — Appsheet Accounting Journal
-# Menjalankan suite Playwright RG-01..RG-19 (chromium + firefox)
-# terhadap mock API (localhost:4000) + prototipe Vite (:5173).
+# Verifikasi penuh (manual) — Appsheet Accounting Journal
+# Dua job PARALEL saat di-dispatch manual:
+#   1. unit  — unit + integration test PROTOTIPE (Vitest + MSW) dan
+#              integration test MOCK API (Vitest + Supertest)
+#   2. e2e   — suite Playwright RG-01..RG-19 (chromium + firefox)
+#              terhadap mock API (localhost:4000) + prototipe Vite (:5173).
 #
-# CATATAN: E2E juga dijalankan OTOMATIS di setiap push/PR oleh
+# CATATAN: semua ini juga dijalankan OTOMATIS di setiap push/PR oleh
 # workflow terpadu `.github/workflows/ci.yml` (unit → integration
-# → e2e). Workflow ini hanya untuk menjalankan E2E secara manual
-# tanpa harus menunggu pipeline penuh.
+# → e2e). Workflow ini untuk menjalankan verifikasi penuh secara
+# manual tanpa harus menunggu pipeline push.
 #
 # Playwright otomatis menyalakan kedua server lewat konfigurasi
 # `webServer` di e2e/playwright.config.ts (CI=true → reuseExistingServer
 # dimatikan, server selalu di-start fresh oleh runner).
 # ============================================================
-name: E2E Regression (manual)
+name: Verifikasi penuh (unit + e2e, manual)
 
 on:
   workflow_dispatch:
 
 jobs:
+  unit:
+    name: Unit test prototipe + mock API (Vitest + Supertest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # CI deterministik: persistence mock API dimatikan — state
+      # in-memory, reset ke seed di setiap test (beforeEach).
+      MOCK_API_PERSIST: '0'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22 (Vite 8 butuh ^20.19 || >=22.12)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            mock-api/package-lock.json
+            prototype-accounting/package-lock.json
+
+      - name: 'Install dependencies + test prototipe (Vitest: unit + MSW)'
+        working-directory: prototype-accounting
+        run: |
+          npm ci
+          npm test
+
+      - name: Install dependencies + test mock API (Vitest + Supertest)
+        working-directory: mock-api
+        run: |
+          npm ci
+          npm test
+
   e2e:
     name: RG-01..RG-19 (chromium + firefox)
     runs-on: ubuntu-latest
