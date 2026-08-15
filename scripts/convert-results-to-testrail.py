@@ -30,7 +30,8 @@ Contoh pemakaian (baca CSV default → tulis JSON default):
 Dengan pemetaan ID kustom → numerik:
     python scripts/convert-results-to-testrail.py --mapping testrail-case-ids.json
 
-Kirim ke TestRail (curl — ganti <host>, <run_id>, user:apikey):
+Kirim ke TestRail (curl — isi <host>/<run_id> manual, atau berikan
+--host dan --run-id agar contoh curl terisi otomatis):
     curl -u user:apikey -H 'Content-Type: application/json' \
          -d @qa-test-results-testrail.json \
          'https://<host>/index.php?/api/v2/add_results_for_cases/<run_id>'
@@ -39,6 +40,10 @@ Argumen:
     --input PATH   CSV sumber (default: qa-test-results-testrail.csv)
     --output PATH  JSON tujuan, '-' = stdout (default: qa-test-results-testrail.json)
     --mapping PATH JSON pemetaan referensi kustom → ID case numerik
+    --host URL     host TestRail, mis. https://myco.testrail.io — dipakai mengisi
+                   URL contoh curl (fallback placeholder <host>)
+    --run-id INT   ID test run TestRail — dipakai mengisi URL contoh curl
+                   (fallback placeholder <run_id>)
 """
 from __future__ import annotations
 
@@ -134,6 +139,12 @@ def main() -> None:
                          "(default: qa-test-results-testrail.json)")
     ap.add_argument("--mapping", type=Path, default=None,
                     help="JSON pemetaan referensi kustom → ID case numerik")
+    ap.add_argument("--host", metavar="URL", default="",
+                    help="host TestRail, mis. https://myco.testrail.io — mengisi "
+                         "URL contoh curl (fallback <host>)")
+    ap.add_argument("--run-id", metavar="INT", default="",
+                    help="ID test run TestRail — mengisi URL contoh curl "
+                         "(fallback <run_id>)")
     args = ap.parse_args()
 
     if not args.input.exists():
@@ -157,11 +168,15 @@ def main() -> None:
     print(f"  → {stats['unknown_status']} status tidak dikenal")
     print(f"  → {stats['no_numeric_id']} case_id non-numerik tanpa pemetaan")
     if results:
+        host = args.host.strip().rstrip("/")
+        run_id = args.run_id.strip()
+        url = (f"{host or '<host>'}/index.php?/api/v2/add_results_for_cases/"
+               f"{run_id or '<run_id>'}")
         print(f"\nPayload tertulis ke {out if out != '-' else 'stdout'}")
-        print("Contoh kirim:\n"
+        print("Contoh kirim (siap salin-tempel):\n"
               "  curl -u user:apikey -H 'Content-Type: application/json' \\\n"
               f"       -d @{Path(out).name if out != '-' else '<file.json>'} \\\n"
-              "       'https://<host>/index.php?/api/v2/add_results_for_cases/<run_id>'")
+              f"       '{url}'")
     else:
         raise SystemExit("[ERROR] Tidak ada result yang bisa dikirim — "
                          "isi kolom Status dulu di CSV.")
