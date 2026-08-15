@@ -135,3 +135,28 @@ const doRequest = async <T>(path: string, opts: RequestOptions, allowRefresh: bo
 export async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   return doRequest<T>(path, opts, true)
 }
+
+/**
+ * Unduh file (export PDF/XLSX) dengan auth — berbasis NAVIGASI browser, bukan
+ * fetch: Firefox menolak fetch() ke URL yang responsnya membawa
+ * `Content-Disposition: attachment` (NetworkError), jadi blob-fetch hanya
+ * berfungsi di Chromium. Anchor <a href> membuat browser menangani unduhan
+ * secara native di semua browser. Token & entitas dikirim via query (`?token=`,
+ * `?entity=`) karena navigasi tidak bisa membawa header — endpoint export di
+ * mock API menerima keduanya (lihat requireAuthExport di server.js).
+ */
+export async function download(path: string, query: Record<string, string | number | boolean | undefined> = {}): Promise<void> {
+  const params = new URLSearchParams()
+  for (const [k, v] of Object.entries(query)) {
+    if (v !== undefined && v !== '') params.set(k, String(v))
+  }
+  if (accessToken) params.set('token', accessToken)
+  if (entityId) params.set('entity', entityId)
+
+  const a = document.createElement('a')
+  a.href = `${BASE_URL}${path}?${params.toString()}`
+  a.download = ''
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}

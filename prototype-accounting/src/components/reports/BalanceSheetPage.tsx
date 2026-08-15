@@ -5,6 +5,7 @@ import { api } from '../../api'
 import { computeBalanceSheet, type BalanceSheetLine, type BalanceSheetView } from '../../lib/ledger'
 import { formatIDR } from '../../lib/format'
 import { canWriteJournal } from '../../lib/permissions'
+import ExportButtons from './ExportButtons'
 
 const PERIODS = [
   { key: '2026-01', label: 'Januari 2026', end: '2026-01-31' },
@@ -28,6 +29,9 @@ export default function BalanceSheetPage() {
   const accounts = useStore((s) => s.accounts)
   const journals = useStore((s) => s.journals)
   const apiStatus = useStore((s) => s.apiStatus)
+  const entities = useStore((s) => s.entities)
+  const activeEntityId = useStore((s) => s.activeEntityId)
+  const entityName = entities.find((e) => e.id === activeEntityId)?.name ?? 'PT. Kreasi Inovasi Estetika'
   const openModal = useStore((s) => s.openModal)
   const user = useStore((s) => s.user)
   const canWrite = canWriteJournal(user?.role)
@@ -138,26 +142,29 @@ export default function BalanceSheetPage() {
             Posisi keuangan · dihitung live dari jurnal <span className="font-semibold text-ok">posted</span>
           </p>
         </div>
-        <div className="flex items-center gap-1 rounded-lg border border-line bg-surface px-1 py-1 shadow-card">
-          <button
-            type="button"
-            onClick={() => setPeriodIdx((i) => Math.max(0, i - 1))}
-            disabled={periodIdx === 0}
-            aria-label="Periode sebelumnya"
-            className="rounded-md p-1.5 text-ink-soft transition hover:bg-surface-hover disabled:opacity-30"
-          >
-            <ChevronLeft size={15} />
-          </button>
-          <span className="min-w-[130px] text-center text-sm font-semibold text-ink">{period.label}</span>
-          <button
-            type="button"
-            onClick={() => setPeriodIdx((i) => Math.min(PERIODS.length - 1, i + 1))}
-            disabled={periodIdx === PERIODS.length - 1}
-            aria-label="Periode berikutnya"
-            className="rounded-md p-1.5 text-ink-soft transition hover:bg-surface-hover disabled:opacity-30"
-          >
-            <ChevronRight size={15} />
-          </button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <ExportButtons reportType="balance-sheet" period={period.key} />
+          <div className="flex items-center gap-1 rounded-lg border border-line bg-surface px-1 py-1 shadow-card">
+            <button
+              type="button"
+              onClick={() => setPeriodIdx((i) => Math.max(0, i - 1))}
+              disabled={periodIdx === 0}
+              aria-label="Periode sebelumnya"
+              className="rounded-md p-1.5 text-ink-soft transition hover:bg-surface-hover disabled:opacity-30"
+            >
+              <ChevronLeft size={15} />
+            </button>
+            <span className="min-w-[130px] text-center text-sm font-semibold text-ink">{period.label}</span>
+            <button
+              type="button"
+              onClick={() => setPeriodIdx((i) => Math.min(PERIODS.length - 1, i + 1))}
+              disabled={periodIdx === PERIODS.length - 1}
+              aria-label="Periode berikutnya"
+              className="rounded-md p-1.5 text-ink-soft transition hover:bg-surface-hover disabled:opacity-30"
+            >
+              <ChevronRight size={15} />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -214,7 +221,7 @@ export default function BalanceSheetPage() {
       ) : (
         <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-card">
           <div className="border-b border-line bg-canvas px-5 py-4">
-            <p className="text-sm font-bold text-ink">PT. Kreasi Inovasi Estetika</p>
+            <p className="text-sm font-bold text-ink">{entityName}</p>
             <p className="text-xs text-ink-soft">
               Laporan Neraca · {view.asOfLabel}
             </p>

@@ -7,8 +7,8 @@
 //   in-memory) + membersihkan localStorage → setiap test mulai dari
 //   baseline terverifikasi: Aset 557jt = Utang 150 + Modal 363 + Laba 44.
 // - Verifikasi keseimbangan buku di akhir skenario (trial balance).
-// - Fitur yang belum ada UI-nya (approval, tutup periode, switch entitas,
-//   search global, export) diuji lewat lapisan API — ditandai di annotation.
+// - Fitur yang belum ada UI-nya (tutup periode, search global) diuji lewat
+//   lapisan API — ditandai di annotation. Export laporan sudah lewat tombol UI.
 // ============================================================
 import { test, expect, type Page } from '@playwright/test'
 import {
@@ -191,17 +191,40 @@ test.describe('RG-01 s/d RG-04 — siklus jurnal, reverse, laporan, periode', ()
     await expect(page.getByText('✓ Seimbang (Debit = Kredit)', { exact: true })).toBeVisible()
     await expect(page.getByText('Rp 678.000.000', { exact: true }).first()).toBeVisible()
 
-    // 5. Export PDF & XLSX — UI export belum ada → via API
-    test.info().annotations.push({
-      type: 'Gap',
-      description: 'Tombol export belum ada di prototipe — endpoint /exports diverifikasi via API.',
-    })
-    const token = await loginToken(request)
-    for (const format of ['pdf', 'xlsx']) {
-      const exp = await request.get(`${API_BASE}/exports/reports/income-statement?format=${format}&period=2026-03`, { headers: authHeaders(token) })
-      expect(exp.status()).toBe(200)
-      expect(exp.headers()['content-disposition']).toContain('attachment')
+    // 5. Export PDF & XLSX via tombol UI (Laba Rugi) — klik tombol memicu
+    //    unduhan nyata browser (navigasi, auth via ?token=). Chromium: event
+    //    download + nama file dari Content-Disposition server. Firefox headless
+    //    (Playwright/Juggler) tidak meng-emit event download untuk respons
+    //    attachment HTTP — verifikasi request export terkirim dengan token auth.
+    await gotoNav(page, 'Laba Rugi')
+    await expect(page.getByText('Rp 165.000.000', { exact: true }).first()).toBeVisible()
+
+    const isFirefox = test.info().project.name === 'firefox'
+    for (const [label, fmt] of [
+      ['Export PDF', 'pdf'],
+      ['Export XLSX', 'xlsx'],
+    ] as const) {
+      const reqPromise = page.waitForRequest(
+        (r) =>
+          r.method() === 'GET' &&
+          r.url().includes('/exports/reports/income-statement') &&
+          r.url().includes(`format=${fmt}`) &&
+          r.url().includes('token='),
+      )
+      const dlPromise = isFirefox ? null : page.waitForEvent('download')
+      await page.getByRole('button', { name: label }).click()
+      const req = await reqPromise
+      expect(req.url()).toContain('token=mock.')
+      if (dlPromise) expect((await dlPromise).suggestedFilename()).toBe(`Laba-Rugi-2026-03.${fmt}`)
     }
+
+    // Tombol export juga tersedia di halaman Neraca & Neraca Lajur
+    await gotoNav(page, 'Neraca')
+    await expect(page.getByRole('button', { name: 'Export PDF' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Export XLSX' })).toBeVisible()
+    await gotoNav(page, 'Neraca Lajur')
+    await expect(page.getByRole('button', { name: 'Export PDF' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Export XLSX' })).toBeVisible()
   })
 
   test('RG-04 Tutup periode: posting diblokir, laporan tetap terbaca, draft ter-post', async ({ page, request }) => {
@@ -243,43 +266,33 @@ test.describe('RG-01 s/d RG-04 — siklus jurnal, reverse, laporan, periode', ()
 
 // ------------------------------------------------------------
 test.describe('RG-05 s/d RG-08 — entitas, approval, search, periode', () => {
-  test('RG-05 Multi-entitas: data terisolasi via X-Entity-Id', async ({ page, request }) => {
-    test.info().annotations.push({
-      type: 'Gap',
-      description: 'Switch entitas belum ada di prototipe (sidebar statis PT. Kreasi Inovasi Estetika) — isolasi diverifikasi via header X-Entity-Id.',
-    })
-    const token = await loginToken(request)
-    const h = authHeaders(token)
+  test('RG-05 Multi-entitas: data terisolasi via switch entitas di UI', async ({ page }) => {
+    const entitySelect = page.getByLabel('Pilih entitas')
+    // Nama entitas aktif tampil di TopBar (header) — bukan option dropdown yang hidden
+    const entityLabel = page.locator('header').getByText(/PT\. Kreasi Inovasi Estetika|CV Karya Mandiri/)
 
-    // Baseline: 8 jurnal untuk ent-001
-    const before = await (await request.get(`${API_BASE}/journals`, { headers: h })).json()
-    expect(before.meta.total).toBe(8)
+    // 1. Default: ent-001 (PT. Kreasi Inovasi Estetika) → 8 jurnal di UI
+    await expect(entityLabel).toHaveText('PT. Kreasi Inovasi Estetika')
+    await gotoNav(page, 'Jurnal')
+    await expect(page.getByText('8 entri jurnal')).toBeVisible()
 
-    // Buat jurnal untuk ent-002 (override header) → 201
-    const created = await request.post(`${API_BASE}/journals`, {
-      headers: { ...h, 'X-Entity-Id': 'ent-002' },
-      data: {
-        date: '2026-03-15',
-        description: 'RG-05 jurnal entitas CV Karya Mandiri',
-        lines: [
-          { accountId: '1-1100', debit: 5_000_000, credit: 0 },
-          { accountId: '4-1000', debit: 0, credit: 5_000_000 },
-        ],
-      },
-    })
-    expect(created.status()).toBe(201)
+    // 2. Switch ke ent-002 (CV Karya Mandiri) via dropdown sidebar →
+    //    data TERISOLASI: 0 jurnal (jurnal ent-001 tidak terlihat di UI)
+    await entitySelect.selectOption('ent-002')
+    await expect(entityLabel).toHaveText('CV Karya Mandiri')
+    await expect(page.getByText('0 entri jurnal')).toBeVisible()
 
-    // Terisolasi: ent-002 melihat 1, ent-001 tetap 8
-    const ent2 = await (await request.get(`${API_BASE}/journals`, { headers: { ...h, 'X-Entity-Id': 'ent-002' } })).json()
-    expect(ent2.meta.total).toBe(1)
-    const ent1 = await (await request.get(`${API_BASE}/journals`, { headers: h })).json()
-    expect(ent1.meta.total).toBe(8)
+    // 3. Buat jurnal 5jt via UI di ent-002 → kini 1 entri jurnal
+    const dialog = await openJournalModal(page)
+    await fillBalancedJournal(dialog, '5000000', 'RG-05 jurnal entitas CV Karya Mandiri')
+    await dialog.getByRole('button', { name: 'Posting' }).click()
+    await expect(page.getByRole('status')).toContainText('Jurnal berhasil diposting')
+    await expect(page.getByText('1 entri jurnal')).toBeVisible()
 
-    // Entitas terdaftar + header UI benar
-    const ents = await (await request.get(`${API_BASE}/entities`, { headers: h })).json()
-    expect(ents.data.map((e: { id: string }) => e.id).sort()).toEqual(['ent-001', 'ent-002'])
-    await gotoNav(page, 'Dashboard')
-    await expect(page.getByText('PT. Kreasi Inovasi Estetika', { exact: true }).first()).toBeVisible()
+    // 4. Switch balik ke ent-001 → jurnal ent-002 TIDAK terlihat, tetap 8
+    await entitySelect.selectOption('ent-001')
+    await expect(page.getByText('8 entri jurnal')).toBeVisible()
+    await expect(page.getByText('RG-05 jurnal entitas CV Karya Mandiri', { exact: true })).not.toBeVisible()
   })
 
   test('RG-06 Approval flow via UI: saldo hanya berubah saat approve; reject kembali draft', async ({ page, request }) => {

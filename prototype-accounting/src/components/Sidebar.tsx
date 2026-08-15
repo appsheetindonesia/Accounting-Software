@@ -39,9 +39,13 @@ export default function Sidebar() {
   const setPage = useStore((s) => s.setPage)
   const activePeriod = useStore((s) => s.activePeriod)
   const setActivePeriod = useStore((s) => s.setActivePeriod)
+  const entities = useStore((s) => s.entities)
+  const activeEntityId = useStore((s) => s.activeEntityId)
+  const setActiveEntity = useStore((s) => s.setActiveEntity)
   const openModal = useStore((s) => s.openModal)
   const user = useStore((s) => s.user)
   const canWrite = canWriteJournal(user?.role)
+  const activeEntity = entities.find((e) => e.id === activeEntityId) ?? entities[0]
 
   return (
     <aside className="flex w-16 shrink-0 flex-col border-r border-line bg-surface lg:w-64">
@@ -99,9 +103,27 @@ export default function Sidebar() {
             </select>
           </label>
         </div>
+        <div className="hidden lg:block">
+          <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-ink-faint">Entitas</p>
+          <label className="flex items-center gap-2 rounded-lg border border-line bg-canvas px-2.5 py-2">
+            <Building2 size={14} className="shrink-0 text-primary" />
+            <select
+              value={activeEntityId}
+              onChange={(e) => setActiveEntity(e.target.value)}
+              className="w-full bg-transparent text-sm text-ink focus:outline-none"
+              aria-label="Pilih entitas"
+            >
+              {entities.map((en) => (
+                <option key={en.id} value={en.id}>
+                  {en.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         <div className="flex items-center gap-2 rounded-lg bg-primary/5 px-2.5 py-2 text-ink-soft lg:bg-transparent lg:px-0">
           <Building2 size={14} className="shrink-0 text-primary" />
-          <span className="hidden truncate text-sm font-medium text-ink lg:inline">PT. Kreasi Inovasi Estetika</span>
+          <span className="hidden truncate text-sm font-medium text-ink lg:inline">{activeEntity?.name ?? '—'}</span>
           <span className="hidden text-[11px] text-ink-faint lg:inline">· IDR</span>
         </div>
       </div>

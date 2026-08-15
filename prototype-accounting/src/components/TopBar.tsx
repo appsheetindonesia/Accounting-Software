@@ -8,6 +8,9 @@ export default function TopBar() {
   const user = useStore((s) => s.user)
   const logout = useStore((s) => s.logout)
   const setPage = useStore((s) => s.setPage)
+  const entities = useStore((s) => s.entities)
+  const activeEntityId = useStore((s) => s.activeEntityId)
+  const entityName = entities.find((e) => e.id === activeEntityId)?.name ?? 'PT. Kreasi Inovasi Estetika'
   const initial = user?.name?.[0] ?? 'R'
   const role = user?.role ?? null
 
@@ -25,7 +28,7 @@ export default function TopBar() {
         </div>
         <div className="hidden leading-tight sm:block">
           <p className="text-sm font-bold text-ink">Appsheet Accounting Journal</p>
-          <p className="text-[11px] text-ink-soft">PT. Kreasi Inovasi Estetika</p>
+          <p className="text-[11px] text-ink-soft">{entityName}</p>
         </div>
       </div>
 

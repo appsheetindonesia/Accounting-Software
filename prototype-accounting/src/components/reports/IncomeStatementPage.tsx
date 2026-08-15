@@ -7,6 +7,7 @@ import { computeIncomeStatement } from '../../lib/ledger'
 import { formatIDR } from '../../lib/format'
 import { canWriteJournal } from '../../lib/permissions'
 import { SkeletonBar, SkeletonLines } from '../Skeleton'
+import ExportButtons from './ExportButtons'
 
 const PERIODS = [
   { key: '2026-01', label: 'Januari 2026', end: '2026-01-31' },
@@ -33,6 +34,9 @@ export default function IncomeStatementPage() {
   const accounts = useStore((s) => s.accounts)
   const journals = useStore((s) => s.journals)
   const openModal = useStore((s) => s.openModal)
+  const entities = useStore((s) => s.entities)
+  const activeEntityId = useStore((s) => s.activeEntityId)
+  const entityName = entities.find((e) => e.id === activeEntityId)?.name ?? 'PT. Kreasi Inovasi Estetika'
   const apiStatus = useStore((s) => s.apiStatus)
   const user = useStore((s) => s.user)
   const canWrite = canWriteJournal(user?.role)
@@ -107,28 +111,31 @@ export default function IncomeStatementPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-ink lg:text-2xl">Laporan Laba Rugi</h1>
-          <p className="mt-0.5 text-sm text-ink-soft">PT. Kreasi Inovasi Estetika · dihitung live dari jurnal posted</p>
+          <p className="mt-0.5 text-sm text-ink-soft">{entityName} · dihitung live dari jurnal posted</p>
         </div>
-        <div className="flex items-center gap-1 rounded-lg border border-line bg-surface px-1 py-1 shadow-card">
-          <button
-            type="button"
-            onClick={() => setPeriodIdx((i) => Math.max(0, i - 1))}
-            disabled={periodIdx === 0}
-            aria-label="Periode sebelumnya"
-            className="rounded-md p-1.5 text-ink-soft transition hover:bg-surface-hover disabled:opacity-30"
-          >
-            <ChevronLeft size={15} />
-          </button>
-          <span className="min-w-[130px] text-center text-sm font-semibold text-ink">{period.label}</span>
-          <button
-            type="button"
-            onClick={() => setPeriodIdx((i) => Math.min(PERIODS.length - 1, i + 1))}
-            disabled={periodIdx === PERIODS.length - 1}
-            aria-label="Periode berikutnya"
-            className="rounded-md p-1.5 text-ink-soft transition hover:bg-surface-hover disabled:opacity-30"
-          >
-            <ChevronRight size={15} />
-          </button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <ExportButtons reportType="income-statement" period={period.key} />
+          <div className="flex items-center gap-1 rounded-lg border border-line bg-surface px-1 py-1 shadow-card">
+            <button
+              type="button"
+              onClick={() => setPeriodIdx((i) => Math.max(0, i - 1))}
+              disabled={periodIdx === 0}
+              aria-label="Periode sebelumnya"
+              className="rounded-md p-1.5 text-ink-soft transition hover:bg-surface-hover disabled:opacity-30"
+            >
+              <ChevronLeft size={15} />
+            </button>
+            <span className="min-w-[130px] text-center text-sm font-semibold text-ink">{period.label}</span>
+            <button
+              type="button"
+              onClick={() => setPeriodIdx((i) => Math.min(PERIODS.length - 1, i + 1))}
+              disabled={periodIdx === PERIODS.length - 1}
+              aria-label="Periode berikutnya"
+              className="rounded-md p-1.5 text-ink-soft transition hover:bg-surface-hover disabled:opacity-30"
+            >
+              <ChevronRight size={15} />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -169,7 +176,7 @@ export default function IncomeStatementPage() {
       ) : (
         <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-card">
           <div className="border-b border-line bg-canvas px-5 py-4">
-            <p className="text-sm font-bold text-ink">PT. Kreasi Inovasi Estetika</p>
+            <p className="text-sm font-bold text-ink">{entityName}</p>
             <p className="text-xs text-ink-soft">
               Laporan Laba Rugi · Periode {period.label} (1–{period.end.slice(8)} {period.label.split(' ')[0]} {period.key.slice(0, 4)})
             </p>

@@ -13,7 +13,9 @@ import { entities, users, rolePermissions, accounts, coaTemplate, journals, peri
 import { isEnabled as persistEnabled, getFilePath as persistFilePath, loadState as loadPersisted, saveState as savePersisted } from './persistence.js'
 
 const app = express()
-app.use(cors())
+// exposedHeaders: browser perlu membaca Content-Disposition (nama file export)
+// dari respons download laporan (GET /exports/...).
+app.use(cors({ exposedHeaders: ['Content-Disposition'] }))
 app.use(express.json())
 
 // ------------------------------------------------------------
@@ -179,7 +181,9 @@ const periodByKey = (key) => db.periods.find((p) => p.id === key) ?? db.periods.
 
 // Validasi jurnal (BR-1..BR-5) — dipakai POST & PUT.
 // excludeJournalId: saat PUT, nomor bukti milik jurnal yang sama tidak dianggap duplikat.
-const validateJournal = (body, excludeJournalId) => {
+// entityId: nomor bukti berseri PER ENTITAS (multi-tenant) — dua entitas boleh
+// memakai nomor yang sama; duplikat hanya diperiksa dalam entitas yang sama.
+const validateJournal = (body, excludeJournalId, entityId) => {
   const { date, lines, transactionNumber } = body
   if (!date || !Array.isArray(lines) || lines.length === 0)
     return { code: 'JOURNAL_NO_LINES', message: 'Jurnal harus memiliki minimal 1 debit dan 1 kredit', status: 422 }
@@ -214,7 +218,7 @@ const validateJournal = (body, excludeJournalId) => {
       details: [{ field: 'lines', message: `Selisih: Rp${Math.abs(debit - credit).toLocaleString('id-ID')}` }],
     }
   if (transactionNumber) {
-    const dup = db.journals.find((j) => j.transactionNumber === transactionNumber)
+    const dup = db.journals.find((j) => j.entityId === entityId && j.transactionNumber === transactionNumber)
     if (dup && dup.id !== excludeJournalId) return { code: 'TRANSACTION_NUMBER_DUPLICATE', message: 'Nomor bukti sudah digunakan', status: 409 }
   }
   const period = findPeriodByDate(date)
@@ -254,6 +258,16 @@ const requireAuth = (req, res, next) => {
   // Multi-tenant: X-Entity-Id, default dari profil user
   req.entityId = req.headers['x-entity-id'] || user.entityId
   next()
+}
+
+// Auth khusus endpoint export: terima token dari header Bearer ATAU query
+// `?token=` (+ `?entity=`). Unduhan berbasis navigasi browser (anchor download)
+// tidak bisa mengirim header Authorization/X-Entity-Id, jadi token & entitas
+// dikirim via query — hanya berlaku untuk GET /exports/... (bukan endpoint lain).
+const requireAuthExport = (req, res, next) => {
+  if (req.query.token && !req.headers.authorization) req.headers.authorization = `Bearer ${req.query.token}`
+  if (req.query.entity && !req.headers['x-entity-id']) req.headers['x-entity-id'] = String(req.query.entity)
+  requireAuth(req, res, next)
 }
 
 const requirePermission = (...perms) => (req, res, next) => {
@@ -645,7 +659,7 @@ app.get('/journals/next-number', requireAuth, (req, res) => {
   const period = req.query.period || '2026-03'
   const [year, month] = period.split('-')
   const existing = db.journals
-    .filter((j) => j.transactionNumber.startsWith(`${prefix}-${period}-`))
+    .filter((j) => j.entityId === req.entityId && j.transactionNumber.startsWith(`${prefix}-${period}-`))
     .map((j) => Number(j.transactionNumber.split('-').pop()))
   const next = existing.length ? Math.max(...existing) + 1 : 1
   ok(res, { transactionNumber: `${prefix}-${period}-${pad(next, 4)}` })
@@ -653,7 +667,7 @@ app.get('/journals/next-number', requireAuth, (req, res) => {
 
 app.post('/journals', requireAuth, requirePermission('journal.write'), (req, res) => {
   const { date, transactionNumber, description, submitForApproval, lines } = req.body ?? {}
-  const err = validateJournal(req.body)
+  const err = validateJournal(req.body, undefined, req.entityId)
   if (err) return fail(res, err.status, err.code, err.message, err.details)
   const seq = db.seq.journal++
   const id = `JNL-${String(date).slice(0, 7)}-${pad(seq)}`
@@ -700,7 +714,7 @@ app.put('/journals/:id', requireAuth, requirePermission('journal.write'), (req, 
   // Optimistic locking (API §1.5 409 DATA_CONFLICT)
   const ifMatch = req.headers['if-match']
   if (ifMatch && Number(ifMatch) !== journal.version) return fail(res, 409, 'DATA_CONFLICT', 'Data sudah diubah oleh pengguna lain. Muat ulang halaman.')
-  const err = validateJournal(req.body, journal.id)
+  const err = validateJournal(req.body, journal.id, req.entityId)
   if (err) return fail(res, err.status, err.code, err.message, err.details)
   const accountName = (accountId) => db.accounts.find((a) => a.id === accountId)?.name ?? ''
   journal.date = req.body.date
@@ -1186,7 +1200,7 @@ app.get('/dashboard/alerts', requireAuth, (req, res) => {
 // ------------------------------------------------------------
 // 11. EXPORT
 // ------------------------------------------------------------
-app.get('/exports/reports/:reportType', requireAuth, (req, res) => {
+app.get('/exports/reports/:reportType', requireAuthExport, (req, res) => {
   const { reportType } = req.params
   const format = req.query.format || 'pdf'
   if (!['pdf', 'xlsx'].includes(format)) return fail(res, 422, 'UNSUPPORTED_FORMAT', 'Format tidak didukung (pdf/xlsx)')
@@ -1201,7 +1215,7 @@ app.get('/exports/reports/:reportType', requireAuth, (req, res) => {
   res.send(Buffer.from(`MOCK EXPORT ${filename}\ncompany=${entityName}\nperiod=${periodKey}\ngeneratedAt=${nowIso()}`))
 })
 
-app.get('/exports/accounts', requireAuth, (req, res) => {
+app.get('/exports/accounts', requireAuthExport, (req, res) => {
   res.setHeader('Content-Type', 'text/csv; charset=utf-8')
   res.setHeader('Content-Disposition', 'attachment; filename="chart-of-accounts.csv"')
   res.send(db.accounts.map((a) => `${a.code},${a.name},${a.type}`).join('\n'))

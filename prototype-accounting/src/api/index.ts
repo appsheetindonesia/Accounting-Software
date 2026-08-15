@@ -1,5 +1,5 @@
 // Endpoint typed — implementasi `API - Accounting.md` (mock server localhost:4000).
-import { request, setAuth } from './client'
+import { download, request, setAuth } from './client'
 import type { Account, BalanceCardData, JournalEntry, JournalStatus, TrendPoint } from '../types'
 
 export { ApiError, isNetworkError } from './client'
@@ -36,6 +36,13 @@ export interface AuthUser {
   name: string
   email: string
   role: string
+}
+
+export interface Entity {
+  id: string
+  name: string
+  code: string
+  isActive: boolean
 }
 
 export interface DashboardAlert {
@@ -127,6 +134,11 @@ export const api = {
     }>('/auth/forgot-password', { method: 'POST', body: { email }, auth: false })
   },
 
+  // 3. Entitas (multi-tenant) — daftar entitas untuk entity switcher di sidebar
+  getEntities() {
+    return request<Entity[]>('/entities')
+  },
+
   // 4. Chart of Accounts
   getAccounts() {
     return request<{ accounts: Account[] }>('/accounts', { query: { pageSize: 200 } })
@@ -201,6 +213,14 @@ export const api = {
   },
   getBalanceSheet(asOf: string) {
     return request<BalanceSheet>('/reports/balance-sheet', { query: { asOf } })
+  },
+
+  // 11. Export laporan (PDF/XLSX) — unduhan file via navigasi browser.
+  //     Nama file dihitung di sini (konsisten dengan penamaan server) untuk toast.
+  exportReport(reportType: 'trial-balance' | 'income-statement' | 'balance-sheet', format: 'pdf' | 'xlsx', period: string) {
+    const names = { 'trial-balance': 'Neraca-Lajur', 'income-statement': 'Laba-Rugi', 'balance-sheet': 'Neraca' }
+    const filename = `${names[reportType]}-${period}.${format}`
+    return download(`/exports/reports/${reportType}`, { format, period }).then(() => filename)
   },
 
   // Admin (dev-only, tanpa auth) — reset state server ke seed awal (Maret 2026).

@@ -3,7 +3,7 @@ import { persist, type PersistOptions } from 'zustand/middleware'
 import { useMemo } from 'react'
 import type { Account, JournalEntry, JournalStatus, NewJournalInput, OfflineJournalOp, OfflineOpInput, PageKey } from '../types'
 import { mockAccounts, mockJournals, SEED_JOURNAL_IDS, SEED_VERSION } from '../data/mock'
-import { api, ApiError, isNetworkError, toJournalEntry } from '../api'
+import { api, ApiError, isNetworkError, toJournalEntry, type Entity } from '../api'
 import { setAuth, setRefreshToken, setSessionExpiredHandler, setTokensRefreshedHandler } from '../api/client'
 import type { AuthUser } from '../api'
 import { isEffectJournal } from '../lib/ledger'
@@ -24,6 +24,11 @@ export type ApiStatus = 'idle' | 'connecting' | 'online' | 'offline'
 const DEMO_EMAIL = 'rina@estetikakreasi.co.id'
 const DEMO_PASSWORD = 'password123'
 
+// Entitas fallback saat offline / daftar belum termuat — entitas utama demo.
+const DEFAULT_ENTITIES: Entity[] = [
+  { id: 'ent-001', name: 'PT. Kreasi Inovasi Estetika', code: 'KI-001', isActive: true },
+]
+
 interface AccountingState {
   page: PageKey
   setPage: (page: PageKey) => void
@@ -32,6 +37,12 @@ interface AccountingState {
   journals: JournalEntry[]
   activePeriod: string
   setActivePeriod: (period: string) => void
+
+  // Entitas (multi-tenant): daftar entitas + entitas aktif. Switch entitas
+  // mengubah header X-Entity-Id client (setAuth) lalu re-fetch data server.
+  entities: Entity[]
+  activeEntityId: string
+  setActiveEntity: (id: string) => Promise<void>
 
   modalOpen: boolean
   openModal: () => void
@@ -133,6 +144,18 @@ const enrichCreatedBy = <T extends JournalEntry>(j: T, user: AccountingState['us
 export const useStore = create<AccountingState>()(
   persist(
     (set, get) => {
+      // ---------- Entitas (multi-tenant) ----------
+      // Fetch daftar entitas — aman gagal: user tanpa permission entity.manage
+      // (accountant/viewer) atau koneksi mati → fallback ke entitas utama demo.
+      const fetchEntities = async (): Promise<Entity[]> => {
+        try {
+          const list = await api.getEntities()
+          return list.length ? list : DEFAULT_ENTITIES
+        } catch {
+          return DEFAULT_ENTITIES
+        }
+      }
+
       // ---------- Mutasi lokal (fallback offline) ----------
       const localSave = (input: NewJournalInput, action: 'draft' | 'post') => {
         set((state) => {
@@ -266,6 +289,26 @@ export const useStore = create<AccountingState>()(
         activePeriod: '2026-03',
         setActivePeriod: (activePeriod) => set({ activePeriod }),
 
+        entities: DEFAULT_ENTITIES,
+        activeEntityId: 'ent-001',
+        // Ganti entitas aktif: sinkronkan header X-Entity-Id client (setAuth)
+        // lalu re-fetch journals/accounts dari server (online) agar semua
+        // halaman menampilkan data entitas baru. Saat offline, hanya ganti
+        // penanda aktif — data lokal demo (ent-001) tetap ditampilkan.
+        setActiveEntity: async (id) => {
+          if (id === get().activeEntityId) return
+          set({ activeEntityId: id })
+          setAuth(get().accessToken, id, get().refreshToken)
+          if (get().apiStatus !== 'online') return
+          try {
+            const [accRes, jrnRes] = await Promise.all([api.getAccounts(), api.getJournals()])
+            const journals = jrnRes.journals.map((j) => enrichCreatedBy(toJournalEntry(j), get().user))
+            set({ accounts: accRes.accounts, journals, lastSyncedAt: nowIso() })
+          } catch {
+            set({ apiStatus: 'offline' })
+          }
+        },
+
         modalOpen: false,
         openModal: () => set({ modalOpen: true }),
         closeModal: () => set({ modalOpen: false }),
@@ -296,6 +339,7 @@ export const useStore = create<AccountingState>()(
             const auth = token === 'local.demo' ? await api.login({ email: DEMO_EMAIL, password: DEMO_PASSWORD }) : null
             const [accRes, jrnRes] = await Promise.all([api.getAccounts(), api.getJournals()])
             const journals = jrnRes.journals.map((j) => enrichCreatedBy(toJournalEntry(j), auth?.user ?? get().user))
+            const entities = await fetchEntities()
             set({
               apiStatus: 'online',
               ...(auth
@@ -307,6 +351,7 @@ export const useStore = create<AccountingState>()(
                 : {}),
               accounts: accRes.accounts,
               journals,
+              entities,
               activePeriod: get().activePeriod,
               lastSyncedAt: nowIso(),
               ...(auth && !opts?.silent
@@ -345,6 +390,7 @@ export const useStore = create<AccountingState>()(
             const auth = await api.login({ email, password })
             const [accRes, jrnRes] = await Promise.all([api.getAccounts(), api.getJournals()])
             const journals = jrnRes.journals.map((j) => enrichCreatedBy(toJournalEntry(j), auth.user))
+            const entities = await fetchEntities()
             set({
               apiStatus: 'online',
               accessToken: auth.accessToken,
@@ -352,6 +398,7 @@ export const useStore = create<AccountingState>()(
               user: { id: auth.user.id, name: auth.user.name, email: auth.user.email, role: auth.user.role },
               accounts: accRes.accounts,
               journals,
+              entities,
               activePeriod: auth.activePeriod?.id ?? get().activePeriod,
               lastSyncedAt: nowIso(),
               authLoading: false,
@@ -376,6 +423,8 @@ export const useStore = create<AccountingState>()(
             user: null,
             accounts: mockAccounts,
             journals: mockJournals,
+            entities: DEFAULT_ENTITIES,
+            activeEntityId: 'ent-001',
             lastSyncedAt: null, // data demo — belum pernah tersinkron
             lastRefreshedAt: null,
             authLoading: false,
@@ -400,6 +449,8 @@ export const useStore = create<AccountingState>()(
             accounts: mockAccounts,
             journals: mockJournals,
             activePeriod: '2026-03',
+            entities: DEFAULT_ENTITIES,
+            activeEntityId: 'ent-001',
             page: 'dashboard',
             modalOpen: false,
             offlineQueue: [],

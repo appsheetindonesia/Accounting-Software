@@ -163,13 +163,27 @@ describe('409 — Conflict (API §13)', () => {
   it('nomor bukti duplikat → TRANSACTION_NUMBER_DUPLICATE', async () => {
     const res = await request(app).post('/journals').set(auth()).send({
       date: '2026-03-15',
-      transactionNumber: 'BKM-2026-03-0001', // sudah dipakai seed posted
+      transactionNumber: 'BKM-2026-03-0001', // sudah dipakai seed posted (ent-001)
       lines: [
         { accountId: '1-1100', debit: 1_000_000, credit: 0 },
         { accountId: '4-1000', debit: 0, credit: 1_000_000 },
       ],
     })
     expectError(res, 409, 'TRANSACTION_NUMBER_DUPLICATE')
+  })
+
+  it('nomor bukti sama di entitas lain TIDAK duplikat (multi-tenant, scoped per entityId)', async () => {
+    // ent-002 tidak punya jurnal — nomor BKM-2026-03-0001 (dipakai ent-001) sah di sini
+    const res = await request(app).post('/journals').set({ ...auth(), 'X-Entity-Id': 'ent-002' }).send({
+      date: '2026-03-15',
+      transactionNumber: 'BKM-2026-03-0001',
+      lines: [
+        { accountId: '1-1100', debit: 1_000_000, credit: 0 },
+        { accountId: '4-1000', debit: 0, credit: 1_000_000 },
+      ],
+    })
+    expect(res.status).toBe(201)
+    expect(res.body.data.entityId).toBe('ent-002')
   })
 
   it('edit jurnal posted → JOURNAL_ALREADY_POSTED', async () => {
@@ -380,6 +394,25 @@ describe('422 — Validasi bisnis (API §13)', () => {
       .query({ format: 'docx' })
       .set(auth())
     expectError(res, 422, 'UNSUPPORTED_FORMAT')
+  })
+})
+
+// ------------------------------------------------------------
+describe('Export laporan — auth via query token (unduhan navigasi browser)', () => {
+  it('export PDF dengan ?token= → 200 + Content-Disposition attachment', async () => {
+    const res = await request(app)
+      .get('/exports/reports/income-statement')
+      .query({ format: 'pdf', period: '2026-03', token: tokens.admin })
+    expect(res.status).toBe(200)
+    expect(res.headers['content-disposition']).toContain('attachment')
+    expect(res.headers['content-disposition']).toContain('Laba-Rugi-2026-03.pdf')
+  })
+
+  it('token query invalid → 401 UNAUTHORIZED', async () => {
+    const res = await request(app)
+      .get('/exports/reports/income-statement')
+      .query({ format: 'pdf', token: 'mock.user-999.1234567890' })
+    expectError(res, 401, 'UNAUTHORIZED')
   })
 })
 
