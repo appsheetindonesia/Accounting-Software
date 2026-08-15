@@ -10,7 +10,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import request from 'supertest'
 import app from '../src/server.js'
 
-const DEMO = { email: 'rina@bukuwarung.com', password: 'password123' }
+const DEMO = { email: 'rina@estetikakreasi.co.id', password: 'password123' }
 
 let token
 
@@ -35,16 +35,16 @@ describe('2.5 Lupa password — hint akun demo', () => {
   it('forgot-password email terdaftar → 200 dengan hint + arahan admin', async () => {
     const res = await request(app).post('/auth/forgot-password').send({ email: DEMO.email })
     expect(res.status).toBe(200)
-    expect(res.body.data.email).toBe('rina@bukuwarung.com')
+    expect(res.body.data.email).toBe('rina@estetikakreasi.co.id')
     expect(res.body.data.role).toBe('admin')
     expect(res.body.data.hint).toContain('password123')
     expect(res.body.data.note).toContain('admin')
   })
 
   it('forgot-password case-insensitive & trim whitespace', async () => {
-    const res = await request(app).post('/auth/forgot-password').send({ email: '  RINA@BUKUWARUNG.COM  ' })
+    const res = await request(app).post('/auth/forgot-password').send({ email: '  RINA@ESTETIKAKREASI.CO.ID  ' })
     expect(res.status).toBe(200)
-    expect(res.body.data.email).toBe('rina@bukuwarung.com')
+    expect(res.body.data.email).toBe('rina@estetikakreasi.co.id')
   })
 })
 

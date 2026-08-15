@@ -4,7 +4,7 @@ import { useStore } from '../store/useStore'
 
 // Akun demo mock API (mock-api/src/data.js) — ditampilkan sebagai petunjuk
 const DEMO_ACCOUNTS = [
-  { email: 'rina@bukuwarung.com', role: 'Admin' },
+  { email: 'rina@estetikakreasi.co.id', role: 'Admin' },
   { email: 'dimas@estetikakreasi.co.id', role: 'Akuntan' },
   { email: 'budi@estetikakreasi.co.id', role: 'Viewer' },
 ]

@@ -1196,8 +1196,9 @@ app.get('/exports/reports/:reportType', requireAuth, (req, res) => {
   const filename = `${names[reportType]}-${periodKey}.${format}`
   res.setHeader('Content-Type', format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
-  // Mock: kirim payload teks sederhana sebagai placeholder binary
-  res.send(Buffer.from(`MOCK EXPORT ${filename}\nperiod=${periodKey}\ngeneratedAt=${nowIso()}`))
+  // Mock: kirim payload teks sederhana sebagai placeholder binary (kop & footer dokumen)
+  const entityName = db.entities.find((e) => e.id === req.entityId)?.name ?? ''
+  res.send(Buffer.from(`MOCK EXPORT ${filename}\ncompany=${entityName}\nperiod=${periodKey}\ngeneratedAt=${nowIso()}`))
 })
 
 app.get('/exports/accounts', requireAuth, (req, res) => {

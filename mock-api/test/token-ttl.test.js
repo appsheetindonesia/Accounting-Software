@@ -16,7 +16,7 @@ import { describe, it, expect, beforeAll } from 'vitest'
 import request from 'supertest'
 import app from '../src/server.js'
 
-const ADMIN = { email: 'rina@bukuwarung.com', password: 'password123' }
+const ADMIN = { email: 'rina@estetikakreasi.co.id', password: 'password123' }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 

@@ -11,7 +11,7 @@ export const entities = [
 ]
 
 export const users = [
-  { id: 'user-001', name: 'Rina', email: 'rina@bukuwarung.com', password: 'password123', role: 'admin', entityId: 'ent-001', isActive: true, createdAt: '2025-01-01T00:00:00Z' },
+  { id: 'user-001', name: 'Rina', email: 'rina@estetikakreasi.co.id', password: 'password123', role: 'admin', entityId: 'ent-001', isActive: true, createdAt: '2025-01-01T00:00:00Z' },
   { id: 'user-002', name: 'Dimas', email: 'dimas@estetikakreasi.co.id', password: 'password123', role: 'accountant', entityId: 'ent-001', isActive: true, createdAt: '2025-01-02T00:00:00Z' },
   { id: 'user-003', name: 'Budi', email: 'budi@estetikakreasi.co.id', password: 'password123', role: 'viewer', entityId: 'ent-001', isActive: true, createdAt: '2025-01-03T00:00:00Z' },
 ]

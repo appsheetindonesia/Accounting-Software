@@ -70,7 +70,7 @@ const input = {
   ],
 }
 
-const demoUser = { id: 'user-001', name: 'Rina', email: 'rina@bukuwarung.com', role: 'admin' }
+const demoUser = { id: 'user-001', name: 'Rina', email: 'rina@estetikakreasi.co.id', role: 'admin' }
 
 beforeEach(() => {
   resetStore()

@@ -47,7 +47,7 @@ afterAll(() => server.close())
 
 describe('periode tertutup → 422 PERIOD_CLOSED (MSW)', () => {
   it('POST jurnal di periode tertutup (Januari seed) → 422 PERIOD_CLOSED, tidak masuk store', async () => {
-    await useStore.getState().login('rina@bukuwarung.com', 'password123')
+    await useStore.getState().login('rina@estetikakreasi.co.id', 'password123')
 
     await useStore.getState().saveJournal(input('2026-01-15', 'BKM-2026-01-0001'), 'post')
 
@@ -58,7 +58,7 @@ describe('periode tertutup → 422 PERIOD_CLOSED (MSW)', () => {
   })
 
   it('tutup periode Maret via handler → post draft & reverse → 422 PERIOD_CLOSED; buka lagi → sukses', async () => {
-    await useStore.getState().login('rina@bukuwarung.com', 'password123')
+    await useStore.getState().login('rina@estetikakreasi.co.id', 'password123')
 
     // Tutup periode Maret lewat handler
     await expect(api.closePeriod('fp-2026-03')).resolves.toMatchObject({ id: 'fp-2026-03', isOpen: false })
@@ -96,7 +96,7 @@ describe('periode tertutup → 422 PERIOD_CLOSED (MSW)', () => {
   })
 
   it('close periode dua kali → 409 PERIOD_ALREADY_CLOSED; periode tak dikenal → 404 PERIOD_NOT_FOUND', async () => {
-    await useStore.getState().login('rina@bukuwarung.com', 'password123')
+    await useStore.getState().login('rina@estetikakreasi.co.id', 'password123')
 
     await expect(api.closePeriod('fp-2026-03')).resolves.toMatchObject({ id: 'fp-2026-03', isOpen: false })
     await expect(api.closePeriod('fp-2026-03')).rejects.toMatchObject({ status: 409, code: 'PERIOD_ALREADY_CLOSED' })

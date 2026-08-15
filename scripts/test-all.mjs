@@ -3,7 +3,7 @@
 // SATU perintah `npm test`:
 //
 //   1. mock-api               — integration test Vitest + Supertest
-//                               (83 test, tanpa server — app Express langsung)
+//                               (91 test, tanpa server — app Express langsung)
 //   2. prototype-accounting   — unit + integration MSW (Vitest, 168 test)
 //   3. e2e                    — Playwright RG-01..RG-19 (38 test;
 //                               webServer menyalakan mock API :4000 + Vite :5173)

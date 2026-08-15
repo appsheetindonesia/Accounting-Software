@@ -41,7 +41,7 @@ Rilis pertama — prototipe fungsional aplikasi akuntansi *double-entry* lengkap
 |-------|--------|--------|---------|
 | **Unit + integration prototipe** | `prototype-accounting/` | **168 test** | Logika akuntansi (auto-balance, posting, reverse), Buku Besar (saldo berjalan), Laba Rugi, Neraca & Neraca Lajur (identitas A = K+E, debit = kredit), migrasi persist per-version, refresh token, polling koneksi, antrian offline, rehidrasi localStorage penuh, indikator sinkronisasi |
 | **Property-based (fast-check)** | `prototype-accounting/src/lib/ledger.property.test.ts` | 6 property | Invarian akuntansi untuk jurnal acak: total debit = kredit selalu, reverse pasangan **net-0 per akun** (bukan hanya total) |
-| **Integration mock API** | `mock-api/` | **83 test** | Baseline angka QA §2.3, error envelope semua endpoint (409/422/401/403), seed:extra lintas bulan, periode tertutup, **kedaluwarsa token terjadwal (TTL runtime)** |
+| **Integration mock API** | `mock-api/` | **91 test** | Baseline angka QA §2.3, error envelope semua endpoint (409/422/401/403), seed:extra lintas bulan (Buku Besar rantai 60→40→64→91 + Pendapatan 130→160→208→233, Laba Rugi YTD 57/59/26), periode tertutup, **kedaluwarsa token terjadwal (TTL runtime)** |
 | **E2E Playwright** | `e2e/` | **38 test** | RG-01..RG-19: posting → reverse, approval workflow, Buku Besar/Laba Rugi/Neraca/Neraca Lajur dari API, offline → fallback & reconnect (RG-12, RG-17) + **auto-reconnect polling tanpa klik (RG-18)** + **TTL terjadwal → auto-refresh sesi aktif tanpa reload (RG-19)**, performa 10.000 jurnal, restart & persistensi, mobile 320px, alur auth (RG-13..16), lintas browser (chromium + firefox) |
 
 Semua suite hijau dan berjalan otomatis di CI setelah setiap push.
@@ -67,7 +67,7 @@ npm run dev
 #    http://localhost:5173  → login demo: rina@estetikakreasi.co.id / password123
 
 # Test — satu perintah menjalankan KETIGA suite sekaligus (paralel)
-npm test                      # mock-api Supertest (83) + prototype unit/MSW (168) + E2E RG-01..RG-19 (38)
+npm test                      # mock-api Supertest (91) + prototype unit/MSW (168) + E2E RG-01..RG-19 (38)
 # Per-suite:
 npm run test:mock-api         # integration test Vitest + Supertest
 npm run test:prototype        # unit + integration MSW (Vitest)

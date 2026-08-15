@@ -50,7 +50,7 @@ afterAll(() => server.close())
 
 describe('approval workflow → submit → approve/reject (MSW)', () => {
   it('submit → approve → posted: status & saldo berubah setelah approve, server sinkron', async () => {
-    await useStore.getState().login('rina@bukuwarung.com', 'password123')
+    await useStore.getState().login('rina@estetikakreasi.co.id', 'password123')
 
     // Draft tidak berpengaruh ke saldo
     await useStore.getState().saveJournal(input, 'draft')
@@ -79,7 +79,7 @@ describe('approval workflow → submit → approve/reject (MSW)', () => {
   })
 
   it('reject: pending-approval → draft + rejectionReason; saldo tidak berubah', async () => {
-    await useStore.getState().login('rina@bukuwarung.com', 'password123')
+    await useStore.getState().login('rina@estetikakreasi.co.id', 'password123')
     await useStore.getState().saveJournal(input, 'draft')
     const id = findId()
     const before = computeBalances(useStore.getState().accounts, useStore.getState().journals).get('1-1100')!
@@ -98,7 +98,7 @@ describe('approval workflow → submit → approve/reject (MSW)', () => {
   })
 
   it('transisi tidak valid → 409 INVALID_STATUS_TRANSITION (submit posted, approve draft, reject posted)', async () => {
-    await useStore.getState().login('rina@bukuwarung.com', 'password123')
+    await useStore.getState().login('rina@estetikakreasi.co.id', 'password123')
 
     const postedId = mockJournals[0].id // JNL-2026-03-001 posted
     await useStore.getState().submitJournal(postedId)
@@ -133,7 +133,7 @@ describe('approval workflow → submit → approve/reject (MSW)', () => {
     expect(useStore.getState().journals.find((j) => j.id === id)?.status).toBe('pending-approval')
 
     // Admin (Rina) approve → sukses
-    await useStore.getState().login('rina@bukuwarung.com', 'password123')
+    await useStore.getState().login('rina@estetikakreasi.co.id', 'password123')
     await useStore.getState().approveJournal(id)
     expect(useStore.getState().toast?.kind).toBe('success')
     expect(useStore.getState().journals.find((j) => j.id === id)?.status).toBe('posted')

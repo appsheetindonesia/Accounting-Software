@@ -63,7 +63,7 @@ const resetStore = () =>
 
 const bal = () => computeBalances(useStore.getState().accounts, useStore.getState().journals)
 
-const demoUser = { id: 'user-001', name: 'Rina', email: 'rina@bukuwarung.com', role: 'admin' }
+const demoUser = { id: 'user-001', name: 'Rina', email: 'rina@estetikakreasi.co.id', role: 'admin' }
 
 const createdJournal: any = {
   id: 'JNL-2026-03-009',
@@ -149,10 +149,10 @@ describe('login — POST /auth/login (bukan auto-login demo)', () => {
     mockedApi.getAccounts.mockResolvedValue({ accounts: mockAccounts })
     mockedApi.getJournals.mockResolvedValue({ journals: mockJournals, totals: { debit: 0, credit: 0, difference: 0 } })
 
-    await useStore.getState().login('rina@bukuwarung.com', 'password123')
+    await useStore.getState().login('rina@estetikakreasi.co.id', 'password123')
 
     const s = useStore.getState()
-    expect(mockedApi.login).toHaveBeenCalledWith({ email: 'rina@bukuwarung.com', password: 'password123' })
+    expect(mockedApi.login).toHaveBeenCalledWith({ email: 'rina@estetikakreasi.co.id', password: 'password123' })
     expect(s.accessToken).toBe('mock.user-001.1')
     expect(s.refreshToken).toBe('x')
     expect(s.apiStatus).toBe('online')
@@ -166,7 +166,7 @@ describe('login — POST /auth/login (bukan auto-login demo)', () => {
   it('kredensial salah (401) → authError, TIDAK masuk & TIDAK auto-login demo', async () => {
     mockedApi.login.mockRejectedValue(new ApiError(401, 'INVALID_CREDENTIALS', 'Email atau password salah'))
 
-    await useStore.getState().login('rina@bukuwarung.com', 'salah')
+    await useStore.getState().login('rina@estetikakreasi.co.id', 'salah')
 
     const s = useStore.getState()
     expect(s.accessToken).toBeNull()
@@ -177,7 +177,7 @@ describe('login — POST /auth/login (bukan auto-login demo)', () => {
   it('server mati (network error) → authError offline, tidak masuk', async () => {
     mockedApi.login.mockRejectedValue(new TypeError('fetch failed'))
 
-    await useStore.getState().login('rina@bukuwarung.com', 'password123')
+    await useStore.getState().login('rina@estetikakreasi.co.id', 'password123')
 
     const s = useStore.getState()
     expect(s.accessToken).toBeNull()
@@ -254,7 +254,7 @@ describe('init — reconnect sesi offline (accessToken local.demo) via "Coba lag
 
     const s = useStore.getState()
     // Login demo dijalankan otomatis saat reconnect, bukan menunggu 401
-    expect(mockedApi.login).toHaveBeenCalledWith({ email: 'rina@bukuwarung.com', password: 'password123' })
+    expect(mockedApi.login).toHaveBeenCalledWith({ email: 'rina@estetikakreasi.co.id', password: 'password123' })
     expect(s.apiStatus).toBe('online')
     expect(s.accessToken).toBe('mock.user-001.2')
     expect(s.refreshToken).toBe('rt-2')

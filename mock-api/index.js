@@ -8,7 +8,7 @@ const PERSIST = persistEnabled()
 app.listen(PORT, () => {
   console.log(`✅ Mock API Appsheet Accounting Journal berjalan di http://localhost:${PORT}`)
   console.log(`   Health check : http://localhost:${PORT}/health`)
-  console.log(`   Login demo   : rina@bukuwarung.com / password123`)
+  console.log(`   Login demo   : rina@estetikakreasi.co.id / password123`)
   console.log(`   Token        : dapatkan lewat POST /auth/login, kirim via "Authorization: Bearer mock.<userId>"`)
   console.log(`   Persist      : ${PERSIST ? `AKTIF → ${persistFilePath()}` : 'nonaktif (in-memory, reset saat restart) — aktifkan: MOCK_API_PERSIST=1'}`)
 })

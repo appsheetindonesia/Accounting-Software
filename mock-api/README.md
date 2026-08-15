@@ -44,7 +44,7 @@ Uji endpoint terhadap **baseline angka** QA Test Plan §2.3 (seed Maret 2026).
 Supertest memanggil app Express langsung — **tanpa perlu server berjalan**.
 
 ```bash
-npm test          # vitest run — 83 test
+npm test          # vitest run — 91 test
 npm run test:watch
 ```
 

@@ -21,7 +21,7 @@ export type ApiStatus = 'idle' | 'connecting' | 'online' | 'offline'
 
 // Kredensial akun demo (mirror mock-api/src/data.js) — dipakai AUTO-LOGIN saat
 // sesi offline ('local.demo') reconnect lewat init() / tombol "Coba lagi".
-const DEMO_EMAIL = 'rina@bukuwarung.com'
+const DEMO_EMAIL = 'rina@estetikakreasi.co.id'
 const DEMO_PASSWORD = 'password123'
 
 interface AccountingState {

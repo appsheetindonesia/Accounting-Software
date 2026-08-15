@@ -12,7 +12,8 @@ info:
     - Nominal dalam IDR (number), tanggal ISO 8601, periode `YYYY-MM`.
   version: 1.0.0
   contact:
-    name: Tim Appsheet Accounting Journal
+    name: PT. Kreasi Inovasi Estetika
+    url: https://estetikakreasi.co.id
 servers:
   - url: https://api.appsheetaccountingjournal.com/v1
     description: Production
@@ -64,7 +65,7 @@ paths:
                 email:
                   type: string
                   format: email
-                  example: rina@bukuwarung.com
+                  example: rina@estetikakreasi.co.id
                 password:
                   type: string
                   format: password

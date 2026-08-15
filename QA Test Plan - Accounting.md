@@ -88,7 +88,7 @@ Data berikut dipakai semua test case. Konsisten dengan `mock-api/src/data.js` & 
 
 | Email | Peran | Entitas |
 |-------|-------|---------|
-| rina@bukuwarung.com | admin | PT. Kreasi Inovasi Estetika (ent-001) |
+| rina@estetikakreasi.co.id | admin | PT. Kreasi Inovasi Estetika (ent-001) |
 | dimas@estetikakreasi.co.id | accountant | PT. Kreasi Inovasi Estetika |
 | budi@estetikakreasi.co.id | viewer | PT. Kreasi Inovasi Estetika |
 | (opsional) | — | CV Karya Mandiri (ent-002) — untuk AAJ-026 |

@@ -46,7 +46,7 @@ interface Db {
 
 const createDb = (): Db => ({
   users: [
-    { id: 'user-001', name: 'Rina', email: 'rina@bukuwarung.com', password: 'password123', role: 'admin', isActive: true },
+    { id: 'user-001', name: 'Rina', email: 'rina@estetikakreasi.co.id', password: 'password123', role: 'admin', isActive: true },
     { id: 'user-002', name: 'Dimas', email: 'dimas@estetikakreasi.co.id', password: 'password123', role: 'accountant', isActive: true },
   ],
   accounts: structuredClone(mockAccounts),

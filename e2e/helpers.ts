@@ -2,7 +2,7 @@
 import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test'
 
 export const API_BASE = 'http://localhost:4000'
-export const DEMO = { email: 'rina@bukuwarung.com', password: 'password123' }
+export const DEMO = { email: 'rina@estetikakreasi.co.id', password: 'password123' }
 
 export const authHeaders = (token: string) => ({ Authorization: `Bearer ${token}` })
 

@@ -15,10 +15,15 @@
 //      dijalankan saat persistence NONAKTIF (MOCK_API_PERSIST=0) atau
 //      flag --reset diberikan — jika persistence aktif, state tersimpan
 //      (jurnal yang diposting sebelumnya) dimuat, tidak di-reset.
-//   5. Ctrl+C menghentikan kedua proses (pohon proses ikut dimatikan)
+//   5. SAMA SETIAP KALI mock API di-restart oleh `node --watch` (file
+//      server berubah): deteksi baris "Restarting" di output, tunggu
+//      /health OK kembali, lalu jalankan ulang logika reset yang sama
+//      → seed baseline tidak hilang walau kode server diedit.
+//   6. Ctrl+C menghentikan kedua proses (pohon proses ikut dimatikan)
 //
 // Catatan: `node --watch` di mock API memuat ulang state dari file
-// persist (jika aktif) saat file server berubah — data tidak hilang.
+// persist (jika aktif) saat file server berubah — data tidak hilang;
+// tanpa persist, seed dijalankan ulang otomatis seperti boot.
 // ============================================================
 
 import { spawn } from 'node:child_process'
@@ -139,9 +144,11 @@ function waitForVite(child, timeoutMs) {
 }
 
 // ------------------------------------------------------------
-// Reset seed otomatis — dipanggil hanya saat KEDUA server hidup
+// Reset seed otomatis — dipanggil saat KEDUA server hidup (boot)
+// dan setiap kali mock API di-restart oleh `node --watch` (file
+// server berubah). boot=true → tambahkan blok "Siap dipakai".
 // ------------------------------------------------------------
-async function resetSeed(viteUrl) {
+async function resetSeed(viteUrl, { boot = true } = {}) {
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const res = await fetch(`http://localhost:${API_PORT}/admin/reset`, {
@@ -151,15 +158,17 @@ async function resetSeed(viteUrl) {
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const { data } = await res.json()
-      console.log(`\n[dev] ✅ Kedua server hidup — seed di-reset otomatis.`)
+      console.log(`\n[dev] ✅ ${boot ? 'Kedua server hidup — seed di-reset otomatis.' : 'Mock API di-restart oleh node --watch — seed dijalankan ulang otomatis.'}`)
       console.log(`[dev]    Seed     : ${data.seed === 'extra' ? 'base + jurnal lintas bulan (Jan–Feb 2026)' : 'base (Maret 2026)'}`)
       console.log(`[dev]    Jurnal   : ${data.journals} · Akun: ${data.accounts} · Periode: ${data.periods}`)
       console.log(`[dev]    ${data.message}`)
-      console.log(`\n[dev] 🚀 Siap dipakai:`)
-      console.log(`[dev]    Prototipe : ${viteUrl}`)
-      console.log(`[dev]    Mock API  : http://localhost:${API_PORT}/health`)
-      console.log(`[dev]    Login demo: rina@estetikakreasi.co.id / password123`)
-      console.log(`[dev] Tekan Ctrl+C untuk menghentikan keduanya.\n`)
+      if (boot) {
+        console.log(`\n[dev] 🚀 Siap dipakai:`)
+        console.log(`[dev]    Prototipe : ${viteUrl}`)
+        console.log(`[dev]    Mock API  : http://localhost:${API_PORT}/health`)
+        console.log(`[dev]    Login demo: rina@estetikakreasi.co.id / password123`)
+        console.log('[dev] Tekan Ctrl+C untuk menghentikan keduanya.\n')
+      }
       return true
     } catch (err) {
       if (attempt === 3) {
@@ -172,6 +181,38 @@ async function resetSeed(viteUrl) {
 }
 
 // ------------------------------------------------------------
+// Pantau restart `node --watch` pada mock API. Child npm TIDAK
+// exit saat watch me-restart (restart di proses yang sama) →
+// deteksi lewat baris "Restarting" di output, tunggu /health OK
+// kembali, lalu jalankan ulang logika reset yang sama seperti boot.
+// ------------------------------------------------------------
+let mockApiRestarting = false
+function watchMockApiRestart(api) {
+  const RESTART_RE = /Restarting\s/i
+  const onData = (chunk) => {
+    if (mockApiRestarting || shuttingDown) return
+    if (!RESTART_RE.test(String(chunk))) return
+    mockApiRestarting = true
+    console.log('\n[dev] 🔄 Mock API di-restart oleh node --watch — menyiapkan ulang seed...')
+    ;(async () => {
+      const ok = await waitForHttp(API_HEALTH_URL, 'mock API (setelah restart)', 60_000)
+      if (shuttingDown || !ok) {
+        mockApiRestarting = false
+        return
+      }
+      if (persistOn && !forceReset) {
+        console.log('[dev]    Persistence AKTIF — state tersimpan dimuat, seed tidak di-reset (sama seperti boot).')
+      } else {
+        await resetSeed(null, { boot: false })
+      }
+      mockApiRestarting = false
+    })()
+  }
+  api.stdout.on('data', onData)
+  api.stderr.on('data', onData)
+}
+
+// ------------------------------------------------------------
 // Main
 // ------------------------------------------------------------
 async function main() {
@@ -179,6 +220,10 @@ async function main() {
 
   const api = start('mock-api', MOCK_API_DIR, ['dev'])
   const vite = start('vite', PROTOTYPE_DIR, ['dev'])
+
+  // Seed ulang otomatis SETIAP kali node --watch me-restart mock API,
+  // bukan hanya saat boot pertama (lihat watchMockApiRestart di atas).
+  watchMockApiRestart(api)
 
   const [apiOk, viteUrl] = await Promise.all([
     waitForHttp(API_HEALTH_URL, 'mock API', 30_000),

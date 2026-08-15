@@ -116,7 +116,7 @@ describe('rehidrasi penuh via localStorage — upgrade seed v1 → v2', () => {
         seedJournalIds: OLD_SEED_IDS,
         accessToken: 'mock.user-001.1',
         refreshToken: 'refresh-1',
-        user: { id: 'user-001', name: 'Rina', email: 'rina@bukuwarung.com', role: 'admin' },
+        user: { id: 'user-001', name: 'Rina', email: 'rina@estetikakreasi.co.id', role: 'admin' },
         offlineQueue: [{ id: 'op-1', kind: 'post', ref: 'JNL-USER-999' }],
         lastSyncedAt: '2026-08-15T04:00:00Z',
       },

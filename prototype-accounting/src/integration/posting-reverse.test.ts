@@ -47,7 +47,7 @@ afterAll(() => server.close())
 
 describe('alur posting → reverse terhadap skema API (MSW)', () => {
   it('login → buat + posting jurnal → saldo Kas 74 → 84jt (data dari API)', async () => {
-    await useStore.getState().login('rina@bukuwarung.com', 'password123')
+    await useStore.getState().login('rina@estetikakreasi.co.id', 'password123')
     expect(useStore.getState().apiStatus).toBe('online')
 
     await useStore.getState().saveJournal(input, 'post')
@@ -65,7 +65,7 @@ describe('alur posting → reverse terhadap skema API (MSW)', () => {
   })
 
   it('reverse: jurnal pembalik debit/kredit ditukar + saldo kembali 84jt (net 0)', async () => {
-    await useStore.getState().login('rina@bukuwarung.com', 'password123')
+    await useStore.getState().login('rina@estetikakreasi.co.id', 'password123')
     await useStore.getState().saveJournal(input, 'post')
     const id = useStore.getState().journals.find((j) => j.transactionNumber === 'BKM-2026-03-0009')!.id
 
@@ -89,7 +89,7 @@ describe('alur posting → reverse terhadap skema API (MSW)', () => {
   })
 
   it('jurnal TIDAK balance → 422 JOURNAL_UNBALANCED, tidak masuk store', async () => {
-    await useStore.getState().login('rina@bukuwarung.com', 'password123')
+    await useStore.getState().login('rina@estetikakreasi.co.id', 'password123')
     const bad = {
       ...input,
       transactionNumber: 'BKM-2026-03-0010',
@@ -106,7 +106,7 @@ describe('alur posting → reverse terhadap skema API (MSW)', () => {
   })
 
   it('reverse jurnal draft → 409 INVALID_STATUS_TRANSITION (API menolak)', async () => {
-    await useStore.getState().login('rina@bukuwarung.com', 'password123')
+    await useStore.getState().login('rina@estetikakreasi.co.id', 'password123')
     const draftId = mockJournals[5].id // JNL-006 draft
     // Store menangkap ApiError 409 → toast error, tanpa jurnal pembalik
     await useStore.getState().reverseJournal(draftId)
@@ -123,7 +123,7 @@ describe('alur posting → reverse terhadap skema API (MSW)', () => {
 
   it('access token kedaluwarsa → POST /auth/refresh → retry sukses (alur refresh nyata)', async () => {
     // Login langsung ke API untuk mengambil refresh token valid
-    const auth = await api.login({ email: 'rina@bukuwarung.com', password: 'password123' })
+    const auth = await api.login({ email: 'rina@estetikakreasi.co.id', password: 'password123' })
     // Access token "kedaluwarsa", refresh token tetap valid
     setAuth('mock.expired.999', undefined, auth.refreshToken)
 
@@ -145,7 +145,7 @@ describe('alur posting → reverse terhadap skema API (MSW)', () => {
 
   it('logout → POST /auth/logout menghapus refresh token di server (refresh berikutnya 401)', async () => {
     // Login → dapat refresh token valid
-    const auth = await api.login({ email: 'rina@bukuwarung.com', password: 'password123' })
+    const auth = await api.login({ email: 'rina@estetikakreasi.co.id', password: 'password123' })
     setAuth('mock.user-001.1', undefined, auth.refreshToken)
 
     // Logout: server harus membuang sesi (refresh token tidak bisa dipakai lagi)
@@ -157,7 +157,7 @@ describe('alur posting → reverse terhadap skema API (MSW)', () => {
   })
 
   it('store logout: bersihkan sesi lokal + token di client (request berikutnya tanpa auth)', async () => {
-    await useStore.getState().login('rina@bukuwarung.com', 'password123')
+    await useStore.getState().login('rina@estetikakreasi.co.id', 'password123')
     expect(useStore.getState().accessToken).toBeTruthy()
     expect(useStore.getState().refreshToken).toBeTruthy()
 

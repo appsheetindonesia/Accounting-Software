@@ -75,7 +75,7 @@ Login dengan email & password.
 
 **Request:**
 ```json
-{ "email": "rina@bukuwarung.com", "password": "*****" }
+{ "email": "rina@estetikakreasi.co.id", "password": "*****" }
 ```
 
 **Response 200:**
@@ -85,7 +85,7 @@ Login dengan email & password.
     "accessToken": "eyJhbGciOi...",
     "refreshToken": "eyJhbGciOi...",
     "expiresIn": 86400,
-    "user": { "id": "user-001", "name": "Rina", "email": "rina@bukuwarung.com",
+    "user": { "id": "user-001", "name": "Rina", "email": "rina@estetikakreasi.co.id",
               "role": "admin", "entityId": "ent-001" }
   }
 }
@@ -106,7 +106,7 @@ Profile + izin role.
 ```json
 {
   "data": {
-    "user": { "id": "user-001", "name": "Rina", "email": "rina@bukuwarung.com",
+    "user": { "id": "user-001", "name": "Rina", "email": "rina@estetikakreasi.co.id",
               "role": "admin", "entityId": "ent-001" },
     "permissions": ["account.write", "journal.write", "journal.approve", "report.read", "period.manage"],
     "activePeriod": { "id": "fp-2026-03", "name": "Maret 2026", "isOpen": true }
@@ -116,12 +116,12 @@ Profile + izin role.
 
 ### 2.5 POST `/auth/forgot-password`
 Lupa password (tanpa auth). Di produksi mengirim tautan reset ke email; di **mock** info akun dikembalikan langsung (mode demo) + arahan hubungi admin.
-**Request:** `{ "email": "rina@bukuwarung.com" }`
+**Request:** `{ "email": "rina@estetikakreasi.co.id" }`
 **Response 200:**
 ```json
 {
   "data": {
-    "email": "rina@bukuwarung.com",
+    "email": "rina@estetikakreasi.co.id",
     "name": "Rina",
     "role": "admin",
     "expiresIn": 900,

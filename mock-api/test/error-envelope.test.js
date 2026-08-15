@@ -20,7 +20,7 @@ import request from 'supertest'
 import app from '../src/server.js'
 
 const USERS = {
-  admin: { email: 'rina@bukuwarung.com', password: 'password123' },
+  admin: { email: 'rina@estetikakreasi.co.id', password: 'password123' },
   accountant: { email: 'dimas@estetikakreasi.co.id', password: 'password123' },
   viewer: { email: 'budi@estetikakreasi.co.id', password: 'password123' },
 }

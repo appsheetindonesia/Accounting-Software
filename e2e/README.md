@@ -71,7 +71,7 @@ di **setiap push / pull request** (ubuntu-latest, Node 22):
 
 1. **`unit`** — unit test prototipe (Vitest, `prototype-accounting`) — 157 test
 2. **`integration`** — integration test mock API (Vitest + Supertest, `mock-api`)
-   — 83 test (baseline angka §2.3, error envelope vs katalog §13, seed:extra,
+   — 91 test (baseline angka §2.3, error envelope vs katalog §13, seed:extra,
    persistence, TOKEN_EXPIRED, kedaluwarsa TTL terjadwal)
 3. **`e2e`** — E2E Playwright RG-01..RG-19 (chromium + firefox) — 38 test
 
