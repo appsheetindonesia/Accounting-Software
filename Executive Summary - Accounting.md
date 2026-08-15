@@ -1,10 +1,10 @@
-# Ringkasan Eksekutif — BukuWarung Akuntansi
+# Ringkasan Eksekutif — Appsheet Accounting Journal
 ### Executive Summary (1 Halaman) · Agustus 2026 · Dokumen lengkap: `PRD Ver 3 - Accounting.md`
 
 ---
 
 ## 🎯 The Pitch
-**BukuWarung Akuntansi** adalah aplikasi akuntansi **double-entry** untuk UKM Indonesia yang mengotomatiskan siklus pembukuan penuh: catat jurnal → buku besar → laporan keuangan — semudah mencatat di buku tulis, dalam Bahasa Indonesia, mobile-first, dan terjangkau.
+**Appsheet Accounting Journal** adalah aplikasi akuntansi **double-entry** untuk UKM Indonesia yang mengotomatiskan siklus pembukuan penuh: catat jurnal → buku besar → laporan keuangan — semudah mencatat di buku tulis, dalam Bahasa Indonesia, mobile-first, dan terjangkau.
 
 **Masalah:** ±65 juta UKM Indonesia masih mencatat manual/spreadsheet — rawan error, tidak terstruktur, laporan lambat. Software existing (Accurate Rp150rb+, Jurnal Rp99rb+, Zahir Rp175rb+) terlalu mahal & kompleks untuk UMKM mikro.
 
@@ -29,7 +29,7 @@
 *Fase berikutnya (P1–P2): approval workflow, multi-user & role, multi-entitas, integrasi bank.*
 
 ## 🏆 Diferensiator
-| Kompetitor | Kelemahan | BukuWarung Akuntansi |
+| Kompetitor | Kelemahan | Appsheet Accounting Journal |
 |------------|-----------|----------------------|
 | Accurate Online | Mahal, kompleks, enterprise | Terjangkau, sederhana |
 | Jurnal (Mekari) | Overkill untuk UKM kecil | Fokus UKM, lebih murah |

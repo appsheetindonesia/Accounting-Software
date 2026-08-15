@@ -99,9 +99,13 @@ export const api = {
       body: credentials,
       auth: false,
     }).then((data) => {
-      setAuth(data.accessToken)
+      // Klien menyimpan access + refresh token (refresh otomatis saat 401)
+      setAuth(data.accessToken, undefined, data.refreshToken)
       return data
     })
+  },
+  logout(refreshToken: string) {
+    return request<void>('/auth/logout', { method: 'POST', body: { refreshToken }, auth: false })
   },
 
   // 4. Chart of Accounts

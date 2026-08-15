@@ -1,4 +1,4 @@
-# Database Schema — BukuWarung Akuntansi
+# Database Schema — Appsheet Accounting Journal
 ### PostgreSQL 16+ · Rancangan lengkap untuk semua modul PRD Ver 3 · Agustus 2026
 
 ---
@@ -7,7 +7,7 @@
 
 | Field | Nilai |
 |-------|-------|
-| **Produk** | BukuWarung Akuntansi |
+| **Produk** | Appsheet Accounting Journal |
 | **Database** | PostgreSQL 16+ |
 | **Schema** | `app` (domain terpisah dari `auth`/`public`) |
 | **Sumber** | PRD Ver 3 (§9, §10, §14), API - Accounting.md |

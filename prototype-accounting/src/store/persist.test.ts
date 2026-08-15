@@ -106,8 +106,8 @@ describe('migratePersistedState — migrasi saat mock data (seed) berubah', () =
 })
 
 describe('freshPersistedState & CURRENT_VERSION', () => {
-  it('CURRENT_VERSION = 2 (bump saat struktur/seed berubah)', () => {
-    expect(CURRENT_VERSION).toBe(2)
+  it('CURRENT_VERSION = 3 (bump saat struktur/seed berubah)', () => {
+    expect(CURRENT_VERSION).toBe(3)
   })
 
   it('freshPersistedState = seed murni tanpa jurnal user', () => {

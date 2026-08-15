@@ -24,6 +24,7 @@ vi.mock('../api', () => {
     }),
     api: {
       login: vi.fn(),
+      logout: vi.fn(),
       getAccounts: vi.fn(),
       getJournals: vi.fn(),
       createJournal: vi.fn(),
@@ -48,6 +49,10 @@ const resetStore = () =>
     toast: null,
     apiStatus: 'idle',
     user: null,
+    accessToken: null,
+    refreshToken: null,
+    authLoading: false,
+    authError: null,
   })
 
 const bal = () => computeBalances(useStore.getState().accounts, useStore.getState().journals)
@@ -71,6 +76,7 @@ const createdJournal: any = {
 beforeEach(() => {
   resetStore()
   mockedApi.login.mockReset()
+  mockedApi.logout.mockReset()
   mockedApi.getAccounts.mockReset()
   mockedApi.getJournals.mockReset()
   mockedApi.createJournal.mockReset()
@@ -79,6 +85,7 @@ beforeEach(() => {
   mockedApi.deleteJournal.mockReset()
   // Default: gagal jaringan agar path lokal (fallback) yang teruji
   mockedApi.login.mockRejectedValue(new TypeError('fetch failed'))
+  mockedApi.logout.mockResolvedValue(undefined)
   mockedApi.getAccounts.mockRejectedValue(new TypeError('fetch failed'))
   mockedApi.getJournals.mockRejectedValue(new TypeError('fetch failed'))
   mockedApi.createJournal.mockRejectedValue(new TypeError('fetch failed'))
@@ -122,25 +129,91 @@ describe('computeBalances — saldo live dari jurnal posted', () => {
   })
 })
 
-describe('init — koneksi ke mock API', () => {
-  it('berhasil: login + muat akun & jurnal → status online', async () => {
+describe('login — POST /auth/login (bukan auto-login demo)', () => {
+  it('berhasil: token + akun + jurnal dimuat, status online', async () => {
     mockedApi.login.mockResolvedValue({ accessToken: 'mock.user-001.1', refreshToken: 'x', expiresIn: 86400, user: demoUser, activePeriod: { id: '2026-03', name: 'Maret 2026', isOpen: true } } as any)
     mockedApi.getAccounts.mockResolvedValue({ accounts: mockAccounts })
     mockedApi.getJournals.mockResolvedValue({ journals: mockJournals, totals: { debit: 0, credit: 0, difference: 0 } })
 
-    await useStore.getState().init()
+    await useStore.getState().login('rina@bukuwarung.com', 'password123')
 
     const s = useStore.getState()
+    expect(mockedApi.login).toHaveBeenCalledWith({ email: 'rina@bukuwarung.com', password: 'password123' })
+    expect(s.accessToken).toBe('mock.user-001.1')
+    expect(s.refreshToken).toBe('x')
     expect(s.apiStatus).toBe('online')
     expect(s.user?.name).toBe('Rina')
     expect(s.accounts).toEqual(mockAccounts)
     expect(s.journals).toHaveLength(mockJournals.length)
+    expect(s.authError).toBeNull()
   })
 
-  it('gagal (server mati) → status offline, data seed tetap', async () => {
-    await useStore.getState().init()
-    expect(useStore.getState().apiStatus).toBe('offline')
-    expect(useStore.getState().journals).toHaveLength(mockJournals.length)
+  it('kredensial salah (401) → authError, TIDAK masuk & TIDAK auto-login demo', async () => {
+    mockedApi.login.mockRejectedValue(new ApiError(401, 'INVALID_CREDENTIALS', 'Email atau password salah'))
+
+    await useStore.getState().login('rina@bukuwarung.com', 'salah')
+
+    const s = useStore.getState()
+    expect(s.accessToken).toBeNull()
+    expect(s.apiStatus).toBe('idle')
+    expect(s.authError).toContain('Email atau password salah')
+  })
+
+  it('server mati (network error) → authError offline, tidak masuk', async () => {
+    mockedApi.login.mockRejectedValue(new TypeError('fetch failed'))
+
+    await useStore.getState().login('rina@bukuwarung.com', 'password123')
+
+    const s = useStore.getState()
+    expect(s.accessToken).toBeNull()
+    expect(s.authError).toContain('tidak terhubung')
+  })
+})
+
+describe('loginOffline — masuk dengan data demo lokal (tanpa server)', () => {
+  it('mengaktifkan sesi lokal tanpa token API', () => {
+    useStore.getState().loginOffline()
+    const s = useStore.getState()
+    expect(s.accessToken).toBe('local.demo')
+    expect(s.apiStatus).toBe('offline')
+    expect(s.journals).toEqual(mockJournals)
+  })
+})
+
+describe('logout — kembali ke halaman login', () => {
+  it('menghapus token & user, reset ke seed', async () => {
+    // Masuk dulu (offline), lalu keluar
+    useStore.getState().loginOffline()
+    expect(useStore.getState().accessToken).toBe('local.demo')
+
+    useStore.getState().logout()
+
+    const s = useStore.getState()
+    expect(s.accessToken).toBeNull()
+    expect(s.refreshToken).toBeNull()
+    expect(s.user).toBeNull()
+    expect(s.journals).toEqual(mockJournals)
+    expect(s.apiStatus).toBe('idle')
+  })
+
+  it('logout memanggil POST /auth/logout dengan refresh token (best-effort)', () => {
+    useStore.setState({ accessToken: 'mock.t', refreshToken: 'r1' })
+    useStore.getState().logout()
+    expect(mockedApi.logout).toHaveBeenCalledWith('r1')
+  })
+})
+
+describe('handleSessionExpired — refresh gagal → kembali ke halaman login', () => {
+  it('menghapus token & user, mengisi authError', () => {
+    useStore.setState({ accessToken: 'mock.t', refreshToken: 'r1', user: demoUser, apiStatus: 'online' })
+    useStore.getState().handleSessionExpired()
+
+    const s = useStore.getState()
+    expect(s.accessToken).toBeNull()
+    expect(s.refreshToken).toBeNull()
+    expect(s.user).toBeNull()
+    expect(s.apiStatus).toBe('idle')
+    expect(s.authError).toContain('Sesi berakhir')
   })
 })
 

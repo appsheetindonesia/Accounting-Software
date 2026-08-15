@@ -8,7 +8,7 @@
 
 | Field | Nilai |
 |-------|-------|
-| **Produk** | Appsheet Accounting Journal (BukuWarung Akuntansi) |
+| **Produk** | Appsheet Accounting Journal |
 | **Cakupan** | MVP: 34 user stories (BW-001 – BW-034), 6 sprint |
 | **Lingkungan uji** | Staging (mock API `localhost:4000`) + prototipe (Vite `localhost:5173`) |
 | **Browser target** | Chrome (utama) ≥ 120, Firefox ≥ 121, Safari ≥ 17; mobile 320px |
@@ -110,7 +110,7 @@ Periode: Maret 2026 = aktif & terbuka; Januari & Februari 2026 = tertutup.
 | TC-LAY-03 | Sidebar collapsible | Klik toggle | 280px ↔ 64px (ikon saja); state tersimpan; hover `bg-slate-100` | BW-001/002 | S3 |
 | TC-LAY-04 | Submenu Laporan Lain | Klik "Laporan Lain" | Expand/collapse submenu; item anak tampil | BW-002 | S3 |
 | TC-LAY-05 | Responsive | Resize 1440 / 768 / 375 / 320px | Desktop penuh; tablet sidebar collapse; mobile drawer; tidak ada horizontal scroll | BW-001 | S2 |
-| TC-LAY-06 | Tema & font | Inspeksi CSS | Hijau `#0D5C3D` (primary), Inter + JetBrains Mono aktif | BW-001 | S3 |
+| TC-LAY-06 | Tema & font | Inspeksi CSS | Biru `#2596BE` (primary), Inter + JetBrains Mono aktif | BW-001 | S3 |
 | TC-LAY-07 | Quick action Buat Jurnal | Klik "+ Buat Jurnal" di sidebar | Navigasi ke form jurnal baru, periode = periode aktif | BW-002 | S2 |
 
 ### 3.2 Chart of Accounts (BW-003, BW-004, BW-005, BW-033)

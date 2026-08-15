@@ -1,10 +1,10 @@
-# Executive Summary — BukuWarung Akuntansi (English)
+# Executive Summary — Appsheet Accounting Journal (English)
 ### One-Pager · August 2026 · Full document: `PRD Ver 3 - Accounting.md`
 
 ---
 
 ## 🎯 The Pitch
-**BukuWarung Akuntansi** is a **double-entry accounting** application for Indonesian MSMEs that automates the full bookkeeping cycle: journal entries → general ledger → financial reports — as easy as writing in a notebook, in Bahasa Indonesia, mobile-first, and affordable.
+**Appsheet Accounting Journal** is a **double-entry accounting** application for Indonesian MSMEs that automates the full bookkeeping cycle: journal entries → general ledger → financial reports — as easy as writing in a notebook, in Bahasa Indonesia, mobile-first, and affordable.
 
 **The problem:** Indonesia's ~65 million MSMEs still keep books manually or in spreadsheets — error-prone, unstructured, and slow to produce reports. Existing software (Accurate from Rp150K, Jurnal from Rp99K, Zahir from Rp175K per month) is too expensive and complex for micro-businesses. Fewer than 20% of MSMEs use any accounting software.
 
@@ -29,7 +29,7 @@
 *Next phases (P1–P2): approval workflow, multi-user roles, multi-entity, bank integration.*
 
 ## 🏆 Differentiators
-| Competitor | Weakness | BukuWarung Akuntansi |
+| Competitor | Weakness | Appsheet Accounting Journal |
 |------------|----------|----------------------|
 | Accurate Online | Expensive, complex, enterprise-grade | Affordable, simple |
 | Jurnal (Mekari) | Overkill for small SMEs | SME-focused, cheaper |

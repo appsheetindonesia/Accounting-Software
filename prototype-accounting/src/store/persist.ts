@@ -16,11 +16,17 @@ export interface PersistedShape {
   activePeriod: string
   seedVersion: number
   seedJournalIds: string[]
+  // Sesi login (v3): token & user tersimpan agar reload tidak login ulang.
+  accessToken?: string | null
+  refreshToken?: string | null
+  user?: { id: string; name: string; email: string; role: string } | null
 }
 
 // Versi format state tersimpan. NAIKKAN saat struktur data/seed berubah.
+// v3: menambah sesi login (accessToken + user) — field opsional, migrasi
+// lama tetap mempertahankan jurnal pengguna.
 // (Jangan ganti STORAGE_KEY — itu membuat data lama ter-orphan dan hilang.)
-export const CURRENT_VERSION = 2
+export const CURRENT_VERSION = 3
 
 export const freshPersistedState = (): PersistedShape => ({
   accounts: mockAccounts,

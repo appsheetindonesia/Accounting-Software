@@ -1,4 +1,4 @@
-# FRD: BukuWarung Akuntansi — Functional Requirements
+# FRD: Appsheet Accounting Journal — Functional Requirements
 
 ## 1. Scope
 

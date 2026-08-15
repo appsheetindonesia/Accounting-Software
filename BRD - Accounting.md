@@ -1,4 +1,4 @@
-# BRD: BukuWarung Akuntansi — Business Requirements
+# BRD: Appsheet Accounting Journal — Business Requirements
 
 ## 1. Latar Belakang & Konteks Bisnis
 
@@ -9,7 +9,7 @@ UMKM di Indonesia (total ±65 juta unit usaha) masih sangat bergantung pada penc
 - **Bahasa:** Mayoritas software berbahasa Inggris atau tidak menggunakan istilah akuntansi Indonesia yang sesuai PSAK
 - **Mobile-first:** Kebutuhan akses dari smartphone untuk pemilik usaha yang mobile
 
-BukuWarung Akuntansi hadir sebagai solusi akuntansi double-entry berbasis cloud yang terjangkau, mudah digunakan, dan berbahasa Indonesia.
+Appsheet Accounting Journal hadir sebagai solusi akuntansi double-entry berbasis cloud yang terjangkau, mudah digunakan, dan berbahasa Indonesia.
 
 ## 2. Tujuan Bisnis
 
@@ -24,7 +24,7 @@ BukuWarung Akuntansi hadir sebagai solusi akuntansi double-entry berbasis cloud 
 
 ## 3. Value Proposition
 
-| Masalah | Solusi BukuWarung |
+| Masalah | Solusi Appsheet Accounting Journal |
 |---------|-------------------|
 | Pencatatan manual rawan error | Sistem double-entry dengan validasi otomatis |
 | Spreadsheet tidak terstruktur | Chart of Account standar PSAK dengan kustomisasi |
@@ -109,7 +109,7 @@ BukuWarung Akuntansi hadir sebagai solusi akuntansi double-entry berbasis cloud 
 | **Excel/Spreadsheet** | Gratis, fleksibel | Rawan error, tidak real-time, tidak aman | Gratis |
 | **BukuKas** | Mobile-first, gratis | Fokus pencatatan, bukan akuntansi penuh | Gratis |
 
-**Differentiator BukuWarung Akuntansi:** Double-entry penuh, UI dioptimalkan untuk mobile, bahasa Indonesia murni, harga terjangkau untuk UKM.
+**Differentiator Appsheet Accounting Journal:** Double-entry penuh, UI dioptimalkan untuk mobile, bahasa Indonesia murni, harga terjangkau untuk UKM.
 
 ## 9. Risiko & Mitigasi
 

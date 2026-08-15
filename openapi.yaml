@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Appsheet Accounting Journal API
   description: |
-    REST API untuk BukuWarung Akuntansi (Appsheet Accounting Journal) — aplikasi akuntansi
+    REST API untuk Appsheet Accounting Journal — aplikasi akuntansi
     double-entry untuk UKM Indonesia. Spec ini diterjemahkan dari dokumen
     "API - Accounting.md" dan selaras dengan PRD Ver 3.
 
@@ -12,7 +12,7 @@ info:
     - Nominal dalam IDR (number), tanggal ISO 8601, periode `YYYY-MM`.
   version: 1.0.0
   contact:
-    name: Tim BukuWarung Akuntansi
+    name: Tim Appsheet Accounting Journal
 servers:
   - url: https://api.bukuwarung.com/v1
     description: Production

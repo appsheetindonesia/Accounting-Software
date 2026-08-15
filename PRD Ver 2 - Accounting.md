@@ -1,13 +1,13 @@
 # PRD: Aplikasi Akuntansi Double-Entry — Sistem Pembukuan Digital untuk UKM Indonesia
 
-**Project:** BukuWarung Akuntansi
-**Aesthetic:** Modern, professional, clean SaaS dengan nuansa hijau tua (#0D5C3D) sebagai warna utama
+**Project:** Appsheet Accounting Journal
+**Aesthetic:** Modern, professional, clean SaaS dengan nuansa biru (#2596BE) sebagai warna utama
 
 ## 1. Core Layout
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│ [Logo] BukuWarung Akuntansi                            [Profil] [⚙] │
+│ [Logo] Appsheet Accounting Journal                     [Profil] [⚙] │
 ├────────┬────────────────────────────────────────────────────────────┤
 │        │  Dashboard / Jurnal / Buku Besar / Laporan / Pengaturan    │
 │ Sidebar│────────────────────────────────────────────────────────────│
@@ -28,7 +28,7 @@
 │        │                                                           │
 │        │  [Footer: Total Debit | Total Kredit | Selisih]         │
 ├────────┴────────────────────────────────────────────────────────────┤
-│ © 2025 BukuWarung Akuntansi — v1.0.0                               │
+│ © 2025 Appsheet Accounting Journal — v1.0.0                        │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -153,9 +153,9 @@ interface FiscalPeriod {
 ## 4. Styling & Theming
 
 **Palette:**
-- Primary: `#0D5C3D` (hijau tua) — mewakili pertumbuhan dan keuangan
-- Primary Light: `#1A8C5E`
-- Primary Dark: `#083A26`
+- Primary: `#2596BE` (biru) — mewakili kepercayaan dan keandalan
+- Primary Light: `#4FB3D8`
+- Primary Dark: `#1A6985`
 - Accent: `#F59E0B` (kuning emas) — untuk aksen peringatan dan sorotan
 - Background: `#F8FAFC` (slate 50)
 - Surface: `#FFFFFF`

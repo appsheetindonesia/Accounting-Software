@@ -1,5 +1,5 @@
 // ============================================================
-// Mock API Server — BukuWarung Akuntansi
+// Mock API Server — Appsheet Accounting Journal
 // Implementasi endpoint di `API - Accounting.md` dengan logika
 // akuntansi nyata: double-entry, saldo diturunkan dari jurnal,
 // reverse membuat jurnal pembalik, periode tertutup diblokir.

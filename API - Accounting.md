@@ -1,4 +1,4 @@
-# API Contract — BukuWarung Akuntansi (Draft)
+# API Contract — Appsheet Accounting Journal (Draft)
 ### REST API Contract · Selaras dengan PRD Ver 3 & TRD
 
 ---
@@ -7,7 +7,7 @@
 
 | Field | Nilai |
 |-------|-------|
-| **Produk** | BukuWarung Akuntansi |
+| **Produk** | Appsheet Accounting Journal |
 | **Versi API** | v1 |
 | **Base URL** | `https://api.bukuwarung.com/v1` |
 | **Format** | JSON (UTF-8), `Content-Type: application/json` |

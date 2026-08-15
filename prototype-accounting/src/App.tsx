@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useStore } from './store/useStore'
+import LoginPage from './components/LoginPage'
 import TopBar from './components/TopBar'
 import Sidebar from './components/Sidebar'
 import BottomBar from './components/BottomBar'
@@ -18,12 +19,16 @@ import ComingSoon from './components/ComingSoon'
 function App() {
   const page = useStore((s) => s.page)
   const modalOpen = useStore((s) => s.modalOpen)
+  const accessToken = useStore((s) => s.accessToken)
   const init = useStore((s) => s.init)
 
-  // Koneksi ke mock API (auto-login demo + muat data) saat aplikasi mulai
+  // Reconnect sesi tersimpan saat aplikasi mulai (bukan auto-login demo)
   useEffect(() => {
     init()
   }, [init])
+
+  // Belum login → halaman login
+  if (!accessToken) return <LoginPage />
 
   return (
     <div className="flex h-dvh flex-col bg-canvas font-sans text-ink">

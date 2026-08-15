@@ -1,8 +1,9 @@
-import { Bell, BookMarked, Search } from 'lucide-react'
+import { Bell, BookMarked, LogOut, Search } from 'lucide-react'
 import { useStore } from '../store/useStore'
 
 export default function TopBar() {
   const user = useStore((s) => s.user)
+  const logout = useStore((s) => s.logout)
   const initial = user?.name?.[0] ?? 'R'
   return (
     <header className="flex h-16 shrink-0 items-center gap-4 border-b border-line bg-surface px-4 lg:px-6">
@@ -39,6 +40,15 @@ export default function TopBar() {
           className="flex size-9 items-center justify-center rounded-full bg-primary text-xs font-bold text-white"
         >
           {initial}
+        </button>
+        <button
+          type="button"
+          onClick={logout}
+          title="Keluar"
+          aria-label="Keluar"
+          className="flex size-9 items-center justify-center rounded-lg text-ink-soft transition hover:bg-surface-hover hover:text-bad"
+        >
+          <LogOut size={17} />
         </button>
       </div>
     </header>

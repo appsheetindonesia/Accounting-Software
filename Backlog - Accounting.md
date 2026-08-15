@@ -1,4 +1,4 @@
-# Backlog User Stories — BukuWarung Akuntansi
+# Backlog User Stories — Appsheet Accounting Journal
 ### Sprint-Ready Backlog · Sumber: PRD Ver 3 - Accounting · Agustus 2026
 
 ---
@@ -7,7 +7,7 @@
 
 | Field | Nilai |
 |-------|-------|
-| **Produk** | BukuWarung Akuntansi |
+| **Produk** | Appsheet Accounting Journal |
 | **Format story** | "Sebagai [peran], saya ingin [aksi], agar [manfaat]" |
 | **Estimasi** | Story Points (Fibonacci: 1, 2, 3, 5, 8, 13) — kalibrasi di planning poker |
 | **Asumsi tim** | 2–3 developer frontend/backend + 1 QA |
@@ -64,7 +64,7 @@ Story dianggap selesai jika:
 - [ ] Bottom bar (32px): versi, periode aktif, status koneksi
 - [ ] Rute tiap modul berfungsi (React Router, lazy loading) & state aktif di URL
 - [ ] Responsive: desktop penuh / tablet sidebar-collapse / mobile drawer
-- [ ] Tema hijau `#0D5C3D` + font Inter & JetBrains Mono aktif
+- [ ] Tema biru `#2596BE` + font Inter & JetBrains Mono aktif
 
 ### BW-002 · Sidebar Navigasi + Pemilih Periode & Entitas — 3 SP
 **Referensi:** P0-01 · **Prioritas:** P0 · **Dependensi:** BW-001

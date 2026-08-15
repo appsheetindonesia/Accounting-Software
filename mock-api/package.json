@@ -1,7 +1,7 @@
 {
   "name": "mock-api",
   "version": "1.0.0",
-  "description": "Mock API server BukuWarung Akuntansi — implementasi API - Accounting.md dengan logika akuntansi nyata (double-entry)",
+  "description": "Mock API server Appsheet Accounting Journal — implementasi API - Accounting.md dengan logika akuntansi nyata (double-entry)",
   "type": "module",
   "main": "index.js",
   "scripts": {

@@ -1,4 +1,4 @@
-# PRD Ver 3 — BukuWarung Akuntansi
+# PRD Ver 3 — Appsheet Accounting Journal
 ### Product Requirements Document — Aplikasi Akuntansi Double-Entry untuk UKM Indonesia
 
 ---
@@ -7,7 +7,7 @@
 
 | Field | Nilai |
 |-------|-------|
-| **Nama Produk** | BukuWarung Akuntansi |
+| **Nama Produk** | Appsheet Accounting Journal |
 | **Jenis Dokumen** | Product Requirements Document (PRD) |
 | **Versi** | 3.0 (Final Draft) |
 | **Status** | Disetujui untuk Pengembangan (MVP) |
@@ -19,7 +19,7 @@
 | Versi | Tanggal | Perubahan |
 |-------|---------|-----------|
 | Ver 1 | — | Struktur dasar: layout multi-panel, data structure, wireframe Jurnal/Buku Besar/Laba Rugi/COA, mock data, kriteria sukses |
-| Ver 2 | — | Penyempurnaan produk: branding BukuWarung, theming lengkap, state loading/empty/error/edge case, detail data model, dashboard |
+| Ver 2 | — | Penyempurnaan produk: branding Appsheet Accounting Journal, theming lengkap, state loading/empty/error/edge case, detail data model, dashboard |
 | **Ver 3** | Agustus 2026 | **Penggabungan terbaik Ver 1 + Ver 2**, diselaraskan dengan BRD/FRD/TRD: modul lengkap 9 fitur, aturan bisnis, use case, validasi, NFR, roadmap, kriteria penerimaan per modul |
 
 ---
@@ -50,12 +50,12 @@
 
 ## 1. Ringkasan Eksekutif
 
-BukuWarung Akuntansi adalah aplikasi akuntansi **double-entry** berbasis web (PWA) untuk UKM Indonesia yang mengotomatiskan siklus akuntansi penuh: pencatatan jurnal → buku besar → laporan keuangan. Produk menjawab masalah utama UKM yang masih mengandalkan pencatatan manual/spreadsheet: rawan error, tidak terstruktur, dan lambat menghasilkan laporan.
+Appsheet Accounting Journal adalah aplikasi akuntansi **double-entry** berbasis web (PWA) untuk UKM Indonesia yang mengotomatiskan siklus akuntansi penuh: pencatatan jurnal → buku besar → laporan keuangan. Produk menjawab masalah utama UKM yang masih mengandalkan pencatatan manual/spreadsheet: rawan error, tidak terstruktur, dan lambat menghasilkan laporan.
 
 **Visi:** Membuat pembukuan akuntansi profesional semudah mencatat di buku tulis — dalam Bahasa Indonesia, dengan harga terjangkau, dan dioptimalkan untuk mobile.
 
 **Value Proposition Utama:**
-| Masalah | Solusi BukuWarung |
+| Masalah | Solusi Appsheet Accounting Journal |
 |---------|-------------------|
 | Pencatatan manual rawan error | Sistem double-entry dengan validasi otomatis (debit = kredit) |
 | Spreadsheet tidak terstruktur | Chart of Account standar PSAK + kustomisasi |
@@ -160,7 +160,7 @@ BukuWarung Akuntansi adalah aplikasi akuntansi **double-entry** berbasis web (PW
 
 ```
 ┌───────────────────────────────────────────────────────────────────────┐
-│ [Logo] BukuWarung Akuntansi   [🔍 Cari transaksi…]  [🔔] [👤 Profil] │  ← Top Bar (64px)
+│ [Logo] Appsheet Accounting Journal   [🔍 Cari transaksi…]  [🔔] [👤 Profil] │  ← Top Bar (64px)
 ├──────────┬────────────────────────────────────────────────────────────┤
 │          │                                                            │
 │ Sidebar  │  Panel Utama (Konten Dinamis)                              │
@@ -180,7 +180,7 @@ BukuWarung Akuntansi adalah aplikasi akuntansi **double-entry** berbasis web (PW
 │ 📅 Peri  │                                                            │
 │ 🏢 Entit │                                                            │
 ├──────────┴────────────────────────────────────────────────────────────┤
-│ © 2026 BukuWarung Akuntansi · v1.0.0 · Periode: Maret 2026 · Online   │  ← Bottom Bar (32px)
+│ © 2026 Appsheet Accounting Journal · v1.0.0 · Periode: Maret 2026 · Online │  ← Bottom Bar (32px)
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -203,7 +203,7 @@ BukuWarung Akuntansi adalah aplikasi akuntansi **double-entry** berbasis web (PW
 
 ```
 ┌──────────────────────┐
-│ [Logo] BukuWarung    │  48px — logo + nama aplikasi
+│ [Logo] Appsheet Accounting Journal    │  48px — logo + nama aplikasi
 ├──────────────────────┤
 │ 🏠 Dashboard         │
 │ 📒 Jurnal            │
@@ -232,16 +232,16 @@ BukuWarung Akuntansi adalah aplikasi akuntansi **double-entry** berbasis web (PW
 
 ### 7.1 Identitas Visual
 - **Aesthetic:** Modern, profesional, bersih, nuansa SaaS akuntansi — "spreadsheet yang indah"
-- **Warna utama:** Hijau tua `#0D5C3D` (pertumbuhan & keuangan) — mengikuti BRD/FRD/TRD
+- **Warna utama:** Biru `#2596BE` (kepercayaan & keandalan) — mengikuti BRD/FRD/TRD
 - **Semantik akun:** Debit = biru `#3B82F6`, Kredit = emerald `#10B981` (membantu scan cepat tabel)
 
 ### 7.2 Palet Warna
 
 | Token | Nilai | Penggunaan |
 |-------|-------|------------|
-| `--color-primary` | `#0D5C3D` | Brand, tombol utama, item aktif |
-| `--color-primary-light` | `#1A8C5E` | Hover, gradient |
-| `--color-primary-dark` | `#083A26` | Tekan (pressed), header |
+| `--color-primary` | `#2596BE` | Brand, tombol utama, item aktif |
+| `--color-primary-light` | `#4FB3D8` | Hover, gradient |
+| `--color-primary-dark` | `#1A6985` | Tekan (pressed), header |
 | `--color-accent` | `#F59E0B` | Peringatan, sorotan, badge |
 | `--color-background` | `#F8FAFC` (slate-50) | Latar halaman |
 | `--color-surface` | `#FFFFFF` | Kartu, sidebar, tabel |
@@ -1194,4 +1194,4 @@ const mockFiscalPeriods: FiscalPeriod[] = [
 
 ---
 
-*Dokumen ini menggabungkan dan menyempurnakan PRD Ver 1 dan Ver 2, serta selaras dengan BRD, FRD, dan TRD BukuWarung Akuntansi. Perubahan dari Ver 2 → Ver 3: struktur modul 8.1–8.11, aturan bisnis eksplisit (BR-1 s/d BR-14), use case UC-1 s/d UC-4, tabel validasi, kriteria penerimaan per modul, dan roadmap implementasi.*
+*Dokumen ini menggabungkan dan menyempurnakan PRD Ver 1 dan Ver 2, serta selaras dengan BRD, FRD, dan TRD Appsheet Accounting Journal. Perubahan dari Ver 2 → Ver 3: struktur modul 8.1–8.11, aturan bisnis eksplisit (BR-1 s/d BR-14), use case UC-1 s/d UC-4, tabel validasi, kriteria penerimaan per modul, dan roadmap implementasi.*

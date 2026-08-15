@@ -1,4 +1,4 @@
-# Pitch Deck Outline — BukuWarung Akuntansi
+# Pitch Deck Outline — Appsheet Accounting Journal
 ### 12 Slide · Durasi ±10–12 menit · Sumber: Executive Summary & PRD Ver 3
 
 ---
@@ -9,7 +9,7 @@
 - Format: **Pesan → Bukti → Visual** (sampaikan pesan, dukung dengan data, tunjukkan visual)
 - Narasi per slide: 30–60 detik. Total pitch: 10–12 menit + 5 menit tanya jawab
 - Angka yang dipakai konsisten dengan Executive Summary dan PRD Ver 3
-- Setelah outline, buat deck di Google Slides/Canva/PowerPoint; gunakan tema hijau `#0D5C3D` + Inter
+- Setelah outline, buat deck di Google Slides/Canva/PowerPoint; gunakan tema biru `#2596BE` + Inter
 
 ---
 
@@ -42,16 +42,16 @@ Masalah  →  Solusi  →  Produk (demo)  →  Pasar  →  Kompetisi  →  Model
 **Pesan kunci:** "Pembukuan akuntansi profesional, semudah mencatat di buku tulis."
 
 **Konten:**
-- Judul: **BukuWarung Akuntansi**
+- Judul: **Appsheet Accounting Journal**
 - Subjudul: Aplikasi akuntansi double-entry untuk 65 juta UKM Indonesia
 - Tagline: "Catat jurnal. Dapat laporan. Tanpa jadi akuntan."
 - Logo + tahun (2026)
 - Nama presenter & peran (jika pitch internal: nama tim)
 
-**Visual:** Layar penuh screenshot dashboard produk (atau mockup), logo di pojok, background hijau tua `#0D5C3D`.
+**Visual:** Layar penuh screenshot dashboard produk (atau mockup), logo di pojok, background biru tua `#1A6985`.
 
 **Narasi presenter:**
-> "Indonesia punya 65 juta UMKM, tapi kurang dari 20% yang membukukan keuangan dengan benar. Kami membuat BukuWarung Akuntansi: double-entry yang otomatis, berbahasa Indonesia, dan cukup sederhana untuk pemilik toko."
+> "Indonesia punya 65 juta UMKM, tapi kurang dari 20% yang membukukan keuangan dengan benar. Kami membuat Appsheet Accounting Journal: double-entry yang otomatis, berbahasa Indonesia, dan cukup sederhana untuk pemilik toko."
 
 ---
 
@@ -138,9 +138,9 @@ Masalah  →  Solusi  →  Produk (demo)  →  Pasar  →  Kompetisi  →  Model
 | Jurnal (Mekari) | Overkill untuk UKM kecil | Rp99.000+ |
 | Zahir | Desktop-first, kurang mobile | Rp175.000+ |
 | BukuKas / BukuWarung existing | Bukan double-entry, cash basis | Gratis |
-| **BukuWarung Akuntansi** | **Double-entry + murah + mobile + Bahasa Indonesia** | **Rp50.000** |
+| **Appsheet Accounting Journal** | **Double-entry + murah + mobile + Bahasa Indonesia** | **Rp50.000** |
 
-**Visual:** Peta 2 sumbu: X = harga, Y = kelengkapan akuntansi. BukuWarung di kuadran "lengkap & terjangkau".
+**Visual:** Peta 2 sumbu: X = harga, Y = kelengkapan akuntansi. Appsheet Accounting Journal di kuadran "lengkap & terjangkau".
 
 **Narasi presenter:**
 > "Di satu sisi ada aplikasi pencatatan sederhana yang gratis tapi bukan akuntansi. Di sisi lain ada software enterprise yang lengkap tapi mahal dan rumit. Di tengahnya, kosong. Itu ruang kami."
@@ -253,7 +253,7 @@ Masalah  →  Solusi  →  Produk (demo)  →  Pasar  →  Kompetisi  →  Model
 - Kontak: nama, email, telepon/WhatsApp, website
 - Ucapan terima kasih
 
-**Visual:** Background hijau tua, logo besar di tengah, kontak di bawah. Bersih, satu fokus.
+**Visual:** Background biru tua `#1A6985`, logo besar di tengah, kontak di bawah. Bersih, satu fokus.
 
 **Narasi presenter:**
 > "65 juta UKM adalah tulang punggung ekonomi Indonesia, dan mereka mencatat dengan buku tulis. Kami mengajak Anda untuk membantu mereka membukukan dengan benar. Terima kasih. Pertanyaan, silakan."
@@ -266,7 +266,7 @@ Masalah  →  Solusi  →  Produk (demo)  →  Pasar  →  Kompetisi  →  Model
 - [ ] Angka konsisten dengan Executive Summary (65 juta, <20%, Rp50rb, 8%, 5.000 MAU)
 - [ ] Satu pesan per slide; tidak ada slide yang berisi > 6 bullet
 - [ ] Em-dash tidak dipakai di teks slide (gunakan tanda baca lain)
-- [ ] Kontras teks vs background memenuhi aksesibilitas (hijau tua + putih)
+- [ ] Kontras teks vs background memenuhi aksesibilitas (biru tua + putih)
 - [ ] Total waktu latihan ≤ 12 menit
 - [ ] Tanya jawab: siapkan jawaban untuk "Bagaimana vs BukuWarung existing?" dan "Apa moat-nya?"
 

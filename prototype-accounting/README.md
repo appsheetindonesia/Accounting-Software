@@ -23,7 +23,7 @@ Build, lint & test:
 ```bash
 npm run build
 npm run lint
-npm test          # Vitest — akuntansi, Buku Besar/Laba Rugi, migrasi persist (60 test)
+npm test          # Vitest — unit (akuntansi, Buku Besar/Laba Rugi, migrasi persist, refresh token) + integration MSW (80 test)
 ```
 
 ## Yang Bisa Dicoba
@@ -41,10 +41,10 @@ npm test          # Vitest — akuntansi, Buku Besar/Laba Rugi, migrasi persist 
 
 ## Lapisan API (async fetch — `API - Accounting.md`)
 
-- `src/api/client.ts` — wrapper `fetch`: envelope `{ data }` / `{ error: { code, message } }`, bearer JWT, header `X-Entity-Id`, `ApiError`, deteksi gagal jaringan
-- `src/api/index.ts` — endpoint typed: auth (login), akun, jurnal (create/post/reverse/delete), dashboard (summary/trend/recent/alerts), buku besar, laba rugi, neraca lajur, neraca + normalisasi ke tipe lokal
+- `src/api/client.ts` — wrapper `fetch`: envelope `{ data }` / `{ error: { code, message } }`, bearer JWT, header `X-Entity-Id`, `ApiError`, deteksi gagal jaringan, **refresh token otomatis** (401 → POST /auth/refresh, dedupe paralel → retry; refresh gagal → handler sesi berakhir)
+- `src/api/index.ts` — endpoint typed: auth (login, logout), akun, jurnal (create/post/reverse/delete), dashboard (summary/trend/recent/alerts), buku besar, laba rugi, neraca lajur, neraca + normalisasi ke tipe lokal
 - `src/hooks/useApiFetch.ts` — fetch async dengan gate koneksi (hindari 401 saat token belum siap), loading, fallback offline
-- `src/store/useStore.ts` — `init()` auto-login demo (rina@bukuwarung.com) lalu muat akun & jurnal; semua mutasi (save/post/reverse/delete) memanggil API saat online, fallback lokal saat offline; persist localStorage untuk ketahanan offline
+- `src/store/useStore.ts` — halaman login sungguhan: `login(email, password)` → `POST /auth/login` (token + user dipersist, reload tidak login ulang), `logout()`, `loginOffline()` (data demo tanpa server); `init()` hanya memulihkan sesi tersimpan; semua mutasi (save/post/reverse/delete) memanggil API saat online, fallback lokal saat offline
 - Dashboard, Buku Besar, Laba Rugi, Neraca Lajur & Neraca memakai endpoint masing-masing (bukan hitung lokal) dengan fallback lokal saat offline
 
 ## Stack

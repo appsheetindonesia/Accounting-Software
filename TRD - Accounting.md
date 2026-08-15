@@ -1,4 +1,4 @@
-# TRD: BukuWarung Akuntansi — Technical Requirements
+# TRD: Appsheet Accounting Journal — Technical Requirements
 
 ## 1. Technical Strategy
 
@@ -179,9 +179,9 @@ User Action → Form (React Hook Form + Zod)
 /* styles/theme.css */
 :root {
   /* Primary palette */
-  --color-primary: #0D5C3D;
-  --color-primary-light: #1A8C5E;
-  --color-primary-dark: #083A26;
+  --color-primary: #2596BE;
+  --color-primary-light: #4FB3D8;
+  --color-primary-dark: #1A6985;
   --color-primary-foreground: #FFFFFF;
   
   /* Accent */
@@ -318,7 +318,7 @@ docker push {{REGISTRY}}/bukuwarung-akuntansi:latest
 
 # Environment Variables
 VITE_API_URL=https://api.bukuwarung.com/v1
-VITE_APP_NAME=BukuWarung Akuntansi
+VITE_APP_NAME=Appsheet Accounting Journal
 VITE_SENTRY_DSN={{SENTRY_DSN}}
 VITE_GA_ID={{GA_TRACKING_ID}}
 

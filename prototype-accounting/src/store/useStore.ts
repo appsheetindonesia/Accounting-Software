@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import type { Account, JournalEntry, NewJournalInput, PageKey } from '../types'
 import { mockAccounts, mockJournals, SEED_JOURNAL_IDS, SEED_VERSION } from '../data/mock'
 import { api, ApiError, isNetworkError, toJournalEntry } from '../api'
+import { setAuth, setRefreshToken, setSessionExpiredHandler, setTokensRefreshedHandler } from '../api/client'
 import type { AuthUser } from '../api'
 import { isEffectJournal } from '../lib/ledger'
 import { CURRENT_VERSION, migratePersistedState, type PersistedShape } from './persist'
@@ -34,7 +35,15 @@ interface AccountingState {
   // Lapisan API (API - Accounting.md)
   apiStatus: ApiStatus
   user: Pick<AuthUser, 'id' | 'name' | 'email' | 'role'> | null
+  accessToken: string | null
+  refreshToken: string | null
+  authLoading: boolean
+  authError: string | null
   init: () => Promise<void>
+  login: (email: string, password: string) => Promise<void>
+  loginOffline: () => void
+  logout: () => void
+  handleSessionExpired: () => void
 
   saveJournal: (input: NewJournalInput, action: 'draft' | 'post') => Promise<void>
   postJournal: (id: string) => Promise<void>
@@ -64,12 +73,12 @@ const persistOptions: PersistOptions<AccountingState, PersistedShape> = {
     activePeriod: s.activePeriod,
     seedVersion: SEED_VERSION,
     seedJournalIds: SEED_JOURNAL_IDS,
+    accessToken: s.accessToken,
+    refreshToken: s.refreshToken,
+    user: s.user,
   }),
   migrate: (persisted) => migratePersistedState(persisted),
 }
-
-// Kredensial demo mock API (mock-api/README.md)
-const DEMO = { email: 'rina@bukuwarung.com', password: 'password123' }
 
 // Ganti createdBy user id (mis. "user-001") dengan nama untuk tampilan UI
 const enrichCreatedBy = <T extends JournalEntry>(j: T, user: AccountingState['user']): T =>
@@ -185,21 +194,27 @@ export const useStore = create<AccountingState>()(
 
         apiStatus: 'idle',
         user: null,
+        accessToken: null,
+        refreshToken: null,
+        authLoading: false,
+        authError: null,
+        // Reconnect sesi tersimpan (reload) — TANPA auto-login demo.
+        // Dipanggil App saat mount & tombol "Coba lagi" (OfflineBanner).
         init: async () => {
+          const token = get().accessToken
+          if (!token) return
+          if (token !== 'local.demo') setAuth(token, undefined, get().refreshToken)
           const status = get().apiStatus
           if (status === 'connecting' || status === 'online') return
           set({ apiStatus: 'connecting' })
           try {
-            const auth = await api.login(DEMO)
             const [accRes, jrnRes] = await Promise.all([api.getAccounts(), api.getJournals()])
-            const journals = jrnRes.journals.map((j) => enrichCreatedBy(toJournalEntry(j), auth.user))
+            const journals = jrnRes.journals.map((j) => enrichCreatedBy(toJournalEntry(j), get().user))
             set({
               apiStatus: 'online',
-              user: { id: auth.user.id, name: auth.user.name, email: auth.user.email, role: auth.user.role },
               accounts: accRes.accounts,
               journals,
-              activePeriod: auth.activePeriod?.id ?? get().activePeriod,
-              toast: { message: `Terhubung ke mock API · ${auth.user.name}`, kind: 'success' },
+              activePeriod: get().activePeriod,
             })
           } catch {
             set({
@@ -207,6 +222,84 @@ export const useStore = create<AccountingState>()(
               toast: { message: 'Mock API tidak terhubung — menampilkan data lokal', kind: 'error' },
             })
           }
+        },
+
+        // Login sungguhan: POST /auth/login dengan email/password dari form.
+        login: async (email, password) => {
+          set({ authLoading: true, authError: null })
+          try {
+            const auth = await api.login({ email, password })
+            const [accRes, jrnRes] = await Promise.all([api.getAccounts(), api.getJournals()])
+            const journals = jrnRes.journals.map((j) => enrichCreatedBy(toJournalEntry(j), auth.user))
+            set({
+              apiStatus: 'online',
+              accessToken: auth.accessToken,
+              refreshToken: auth.refreshToken ?? null,
+              user: { id: auth.user.id, name: auth.user.name, email: auth.user.email, role: auth.user.role },
+              accounts: accRes.accounts,
+              journals,
+              activePeriod: auth.activePeriod?.id ?? get().activePeriod,
+              authLoading: false,
+              toast: { message: `Selamat datang, ${auth.user.name}`, kind: 'success' },
+            })
+          } catch (e) {
+            const message = isNetworkError(e)
+              ? 'Mock API tidak terhubung — pastikan server berjalan (npm start di mock-api, port 4000)'
+              : e instanceof ApiError
+                ? e.message
+                : 'Gagal login'
+            set({ authLoading: false, authError: message })
+          }
+        },
+
+        // Masuk offline: lanjut dengan data demo lokal (tanpa server).
+        loginOffline: () => {
+          set({
+            apiStatus: 'offline',
+            accessToken: 'local.demo',
+            refreshToken: null,
+            user: null,
+            accounts: mockAccounts,
+            journals: mockJournals,
+            authLoading: false,
+            authError: null,
+            toast: { message: 'Masuk offline — menampilkan data demo lokal', kind: 'error' },
+          })
+        },
+
+        // Keluar: hapus sesi & kembali ke halaman login.
+        logout: () => {
+          const rt = get().refreshToken
+          if (rt) api.logout(rt).catch(() => {}) // best-effort, jangan blokir logout
+          setAuth(null, null, null)
+          setRefreshToken(null)
+          set({
+            apiStatus: 'idle',
+            accessToken: null,
+            refreshToken: null,
+            user: null,
+            authLoading: false,
+            authError: null,
+            accounts: mockAccounts,
+            journals: mockJournals,
+            activePeriod: '2026-03',
+            page: 'dashboard',
+            modalOpen: false,
+            toast: { message: 'Anda telah keluar', kind: 'success' },
+          })
+        },
+
+        // Dipanggil client saat refresh token gagal (401 berulang) → login ulang.
+        handleSessionExpired: () => {
+          setAuth(null, null, null)
+          setRefreshToken(null)
+          set({
+            apiStatus: 'idle',
+            accessToken: null,
+            refreshToken: null,
+            user: null,
+            authError: 'Sesi berakhir. Silakan login kembali.',
+          })
         },
 
         saveJournal: async (input, action) => {
@@ -335,6 +428,14 @@ export const useStore = create<AccountingState>()(
     persistOptions,
   ),
 )
+
+// Wire callback dari klien API ke store:
+// - token berhasil di-refresh (401) → store ikut update + persist
+// - refresh gagal (sesi habis) → kembali ke halaman login
+setTokensRefreshedHandler(({ accessToken, refreshToken }) => {
+  useStore.setState({ accessToken, refreshToken })
+})
+setSessionExpiredHandler(() => useStore.getState().handleSessionExpired())
 
 // Hitung saldo live: saldo awal + efek jurnal posted (BR-6, BR-7)
 export const computeBalances = (accounts: Account[], journals: JournalEntry[]) => {
