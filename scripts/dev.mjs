@@ -158,7 +158,7 @@ async function resetSeed(viteUrl) {
       console.log(`\n[dev] 🚀 Siap dipakai:`)
       console.log(`[dev]    Prototipe : ${viteUrl}`)
       console.log(`[dev]    Mock API  : http://localhost:${API_PORT}/health`)
-      console.log(`[dev]    Login demo: rina@bukuwarung.com / password123`)
+      console.log(`[dev]    Login demo: rina@estetikakreasi.co.id / password123`)
       console.log(`[dev] Tekan Ctrl+C untuk menghentikan keduanya.\n`)
       return true
     } catch (err) {
@@ -204,7 +204,7 @@ async function main() {
     console.log(`\n[dev] 🚀 Siap dipakai:`)
     console.log(`[dev]    Prototipe : ${viteUrl}`)
     console.log(`[dev]    Mock API  : http://localhost:${API_PORT}/health`)
-    console.log(`[dev]    Login demo: rina@bukuwarung.com / password123`)
+    console.log(`[dev]    Login demo: rina@estetikakreasi.co.id / password123`)
     console.log('[dev] Tekan Ctrl+C untuk menghentikan keduanya.\n')
   } else {
     await resetSeed(viteUrl)

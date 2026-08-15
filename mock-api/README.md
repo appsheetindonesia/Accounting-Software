@@ -129,7 +129,7 @@ Multi-tenant: jurnal kini membawa `entityId` (dari `X-Entity-Id`, default entita
 
 | Peran | Email | Password |
 |-------|-------|----------|
-| Admin | `rina@bukuwarung.com` | `password123` |
+| Admin | `rina@estetikakreasi.co.id` | `password123` |
 | Akuntan | `dimas@estetikakreasi.co.id` | `password123` |
 | Viewer | `budi@estetikakreasi.co.id` | `password123` |
 
@@ -141,7 +141,7 @@ Multi-tenant: header `X-Entity-Id` (default dari profil user).
 # Contoh alur cepat
 curl -X POST http://localhost:4000/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"rina@bukuwarung.com","password":"password123"}'
+  -d '{"email":"rina@estetikakreasi.co.id","password":"password123"}'
 # → { "data": { "accessToken": "mock.user-001...", ... } }
 
 curl http://localhost:4000/journals?status=posted \

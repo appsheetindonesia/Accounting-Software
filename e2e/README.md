@@ -33,7 +33,7 @@ npm run report      # buka laporan HTML (playwright-report/)
 
 Playwright otomatis menyalakan mock API + Vite (atau memakai instance yang
 sudah berjalan). Setiap test me-reset state server ke seed (`POST /admin/reset`)
-dan **login demo melalui UI** (`rina@bukuwarung.com` / `password123`, wajib sejak
+dan **login demo melalui UI** (`rina@estetikakreasi.co.id` / `password123`, wajib sejak
 fitur login) → selalu mulai dari baseline terverifikasi
 (Aset 557jt = Utang 150 + Modal 363 + Laba 44).
 

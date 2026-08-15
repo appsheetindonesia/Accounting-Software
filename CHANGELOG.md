@@ -64,7 +64,7 @@ npm run dev
 #      cd prototype-accounting && npm run dev
 
 # 3) Buka prototipe
-#    http://localhost:5173  → login demo: rina@bukuwarung.com / password123
+#    http://localhost:5173  → login demo: rina@estetikakreasi.co.id / password123
 
 # Test — satu perintah menjalankan KETIGA suite sekaligus (paralel)
 npm test                      # mock-api Supertest (83) + prototype unit/MSW (168) + E2E RG-01..RG-19 (38)
@@ -74,7 +74,7 @@ npm run test:prototype        # unit + integration MSW (Vitest)
 npm run test:e2e              # E2E Playwright RG-01..RG-19
 ```
 
-**Cara login demo** (mock API): akun admin tersedia di seed — email `rina@bukuwarung.com`, password `password123` (lihat `mock-api/src/data.js`).
+**Cara login demo** (mock API): akun admin tersedia di seed — email `rina@estetikakreasi.co.id`, password `password123` (lihat `mock-api/src/data.js`).
 
 **Reset data**: tombol *"Reset ke data demo"* (Pengaturan atau dropdown avatar) mereset localStorage **dan** server mock (`POST /admin/reset`) sekaligus; atau `cd mock-api && npm run reset` untuk server saja.
 
