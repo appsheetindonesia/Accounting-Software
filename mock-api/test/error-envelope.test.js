@@ -152,9 +152,14 @@ describe('403 — Forbidden (role tanpa izin, API §13)', () => {
     expectError(res, 403, 'FORBIDDEN')
   })
 
-  it('accountant approve → FORBIDDEN (tidak punya journal.approve)', async () => {
+  it('accountant approve → NO_APPROVAL_RIGHTS (tidak punya journal.approve)', async () => {
     const res = await request(app).post('/journals/JNL-2026-03-006/approve').set(auth('accountant'))
-    expectError(res, 403, 'FORBIDDEN')
+    expectError(res, 403, 'NO_APPROVAL_RIGHTS')
+  })
+
+  it('viewer reject → NO_APPROVAL_RIGHTS (tidak punya journal.approve)', async () => {
+    const res = await request(app).post('/journals/JNL-2026-03-006/reject').set(auth('viewer')).send({ reason: 'x' })
+    expectError(res, 403, 'NO_APPROVAL_RIGHTS')
   })
 })
 
@@ -454,6 +459,89 @@ describe('404 — Not Found (API §13)', () => {
 })
 
 // ------------------------------------------------------------
+describe('Kode error katalog yang baru terimplementasi (API §13)', () => {
+  it('refresh dengan sesi kedaluwarsa → SESSION_EXPIRED (modal "Sesi berakhir")', async () => {
+    // TTL refresh = 0 → expiresAt = waktu login → sesi langsung kedaluwarsa
+    process.env.MOCK_REFRESH_TTL_MS = '0'
+    try {
+      const login = await request(app).post('/auth/login').send(USERS.admin)
+      expect(login.status).toBe(200)
+      const res = await request(app).post('/auth/refresh')
+        .send({ refreshToken: login.body.data.refreshToken })
+      expectError(res, 401, 'SESSION_EXPIRED')
+    } finally {
+      delete process.env.MOCK_REFRESH_TTL_MS
+    }
+  })
+
+  it('refresh dengan token tak dikenal → INVALID_REFRESH_TOKEN', async () => {
+    const res = await request(app).post('/auth/refresh')
+      .send({ refreshToken: 'bukan-token-yang-ada' })
+    expectError(res, 401, 'INVALID_REFRESH_TOKEN')
+  })
+
+  it('upload lampiran > 5 MB → FILE_TOO_LARGE', async () => {
+    const res = await request(app).post('/journals/JNL-2026-03-006/attachments').set(auth()).send({
+      fileName: 'bukti-besar.pdf',
+      size: 6 * 1024 * 1024, // 6 MB
+      mimeType: 'application/pdf',
+    })
+    expectError(res, 422, 'FILE_TOO_LARGE')
+  })
+
+  it('upload lampiran tipe tak didukung → UNSUPPORTED_FILE_TYPE', async () => {
+    const res = await request(app).post('/journals/JNL-2026-03-006/attachments').set(auth()).send({
+      fileName: 'catatan.txt',
+      size: 1024,
+      mimeType: 'text/plain',
+    })
+    expectError(res, 422, 'UNSUPPORTED_FILE_TYPE')
+  })
+
+  it('upload lampiran VALID → 201 (jpg/png/pdf ≤ 5 MB)', async () => {
+    const res = await request(app).post('/journals/JNL-2026-03-006/attachments').set(auth()).send({
+      fileName: 'bukti.png',
+      size: 245_760,
+      mimeType: 'image/png',
+    })
+    expect(res.status).toBe(201)
+    expect(res.body.data.mimeType).toBe('image/png')
+  })
+
+  it('melebihi ambang request → RATE_LIMITED (429)', async () => {
+    process.env.MOCK_RATE_MAX = '3'
+    try {
+      let last
+      for (let i = 0; i < 5; i++) last = await request(app).get('/health')
+      expectError(last, 429, 'RATE_LIMITED')
+    } finally {
+      delete process.env.MOCK_RATE_MAX
+    }
+  })
+
+  it('approve tanpa izin approve → NO_APPROVAL_RIGHTS', async () => {
+    const create = await request(app).post('/journals').set(auth()).send({
+      date: '2026-03-15',
+      description: 'jurnal untuk uji izin approve',
+      submitForApproval: true,
+      lines: [
+        { accountId: '1-1100', debit: 2_000_000, credit: 0 },
+        { accountId: '4-1000', debit: 0, credit: 2_000_000 },
+      ],
+    })
+    expect(create.status).toBe(201)
+    const res = await request(app).post(`/journals/${create.body.data.id}/approve`).set(auth('viewer'))
+    expectError(res, 403, 'NO_APPROVAL_RIGHTS')
+  })
+
+  it('error server tak terduga → INTERNAL_ERROR (500) dengan kode', async () => {
+    const res = await request(app).post('/admin/debug/error')
+    expectError(res, 500, 'INTERNAL_ERROR')
+    expect(res.body.error.message).toMatch(/Kode: E\d{5}/)
+  })
+})
+
+// ------------------------------------------------------------
 describe('Cakupan katalog error (API §13)', () => {
   // Kode katalog yang TERIMPLEMENTASI di mock — harus bisa dipicu minimal 1×
   const IMPLEMENTED = [
@@ -464,26 +552,12 @@ describe('Cakupan katalog error (API §13)', () => {
     'TRANSACTION_NUMBER_DUPLICATE', 'ACCOUNT_CODE_EXISTS', 'ACCOUNT_HAS_CHILDREN',
     'ACCOUNT_HAS_BALANCE', 'PERIOD_CLOSED', 'PERIOD_ALREADY_CLOSED', 'PERIOD_EXISTS',
     'DRAFT_ACTION_REQUIRED', 'DATA_CONFLICT',
+    'SESSION_EXPIRED', 'FILE_TOO_LARGE', 'UNSUPPORTED_FILE_TYPE',
+    'RATE_LIMITED', 'NO_APPROVAL_RIGHTS', 'INTERNAL_ERROR',
   ]
-  // Gap terdokumentasi — kode §13 yang belum terimplementasi di mock
-  const GAPS = {
-    SESSION_EXPIRED: 'token mock tidak expire; semua 401 memakai UNAUTHORIZED',
-    FILE_TOO_LARGE: 'endpoint attachment mock tanpa multipart nyata',
-    UNSUPPORTED_FILE_TYPE: 'endpoint attachment mock tanpa multipart nyata',
-    RATE_LIMITED: 'belum ada middleware rate limit di mock',
-    NO_APPROVAL_RIGHTS: 'server memakai FORBIDDEN generik via requirePermission',
-    INTERNAL_ERROR: 'tidak ada pemicu 500 di mock',
-  }
 
   it('setiap kode katalog terimplementasi dapat dipicu minimal 1×', () => {
     const missing = IMPLEMENTED.filter((code) => !TRIGGERED.has(code))
     expect(missing).toEqual([])
-  })
-
-  it('kode katalog yang belum terimplementasi terdokumentasi sebagai gap', () => {
-    expect(Object.keys(GAPS).sort()).toEqual([
-      'FILE_TOO_LARGE', 'INTERNAL_ERROR', 'NO_APPROVAL_RIGHTS', 'RATE_LIMITED',
-      'SESSION_EXPIRED', 'UNSUPPORTED_FILE_TYPE',
-    ])
   })
 })

@@ -54,12 +54,12 @@ Cakupan (`test/`):
   Neraca 557 = 150 + 363 + 44 (isBalanced); Trial balance 668 = 668;
   Laba Rugi 155 − 111 = 44jt; dashboard 4 kartu; alert 2 draft; posting 10jt →
   saldo live (87→97, 155→165, 557→567); reverse → kembali ke baseline.
-- `error-envelope.test.js` (40) — **error envelope semua endpoint** terhadap
+- `error-envelope.test.js` (56) — **error envelope semua endpoint** terhadap
   katalog kode error `API - Accounting.md` §13: format
   `{ error: { code, message, details? } }` tanpa field `data`; status
-  401/403/409/422/404 per kategori (23 kode katalog terimplementasi terpicu;
-  6 gap terdokumentasi: SESSION_EXPIRED, FILE_TOO_LARGE, UNSUPPORTED_FILE_TYPE,
-  RATE_LIMITED, NO_APPROVAL_RIGHTS, INTERNAL_ERROR).
+  401/403/409/422/429/500 per kategori (**29 kode katalog terimplementasi
+  terpicu** — termasuk 6 yang dulu gap: SESSION_EXPIRED, FILE_TOO_LARGE,
+  UNSUPPORTED_FILE_TYPE, RATE_LIMITED, NO_APPROVAL_RIGHTS, INTERNAL_ERROR).
 - `extra-seed.test.js` (12) — seed:extra (`withExtra: true`): muatan 15 jurnal
   (3 Jan + 4 Feb + 8 Mar), **saldo berantai Kas 60→40→64→91jt** lintas periode
   (akhir bulan N = awal bulan N+1), dan blokade periode tertutup Jan/Feb
@@ -174,13 +174,22 @@ curl http://localhost:4000/journals?status=posted \
              "details": [ { "field": "lines", "message": "Selisih: Rp10.000" } ] } }
 ```
 
-Katalog error: `VALIDATION_ERROR`, `INVALID_CREDENTIALS`, `UNAUTHORIZED`, `FORBIDDEN`,
-`NOT_FOUND`, `JOURNAL_UNBALANCED`, `JOURNAL_NO_LINES`, `LINE_NEGATIVE_AMOUNT`,
-`LINE_NO_ACCOUNT`, `LINE_HEADER_ACCOUNT`, `JOURNAL_ALREADY_POSTED`, `ALREADY_REVERSED`,
-`INVALID_STATUS_TRANSITION`, `TRANSACTION_NUMBER_DUPLICATE`, `ACCOUNT_CODE_EXISTS`,
-`ACCOUNT_HAS_CHILDREN`, `ACCOUNT_HAS_BALANCE`, `INVALID_CODE_FORMAT`, `PERIOD_CLOSED`,
-`PERIOD_ALREADY_CLOSED`, `PERIOD_EXISTS`, `DRAFT_ACTION_REQUIRED`, `DATA_CONFLICT`,
-`NO_APPROVAL_RIGHTS`, `EMAIL_EXISTS`, `UNSUPPORTED_FORMAT`, `NO_DATA`, dll.
+Katalog error: `VALIDATION_ERROR`, `INVALID_CREDENTIALS`, `UNAUTHORIZED`, `SESSION_EXPIRED`,
+`FORBIDDEN`, `NO_APPROVAL_RIGHTS`, `NOT_FOUND`, `JOURNAL_UNBALANCED`, `JOURNAL_NO_LINES`,
+`LINE_NEGATIVE_AMOUNT`, `LINE_NO_ACCOUNT`, `LINE_HEADER_ACCOUNT`, `JOURNAL_ALREADY_POSTED`,
+`ALREADY_REVERSED`, `INVALID_STATUS_TRANSITION`, `TRANSACTION_NUMBER_DUPLICATE`,
+`ACCOUNT_CODE_EXISTS`, `ACCOUNT_HAS_CHILDREN`, `ACCOUNT_HAS_BALANCE`, `INVALID_CODE_FORMAT`,
+`PERIOD_CLOSED`, `PERIOD_ALREADY_CLOSED`, `PERIOD_EXISTS`, `DRAFT_ACTION_REQUIRED`,
+`DATA_CONFLICT`, `FILE_TOO_LARGE`, `UNSUPPORTED_FILE_TYPE`, `RATE_LIMITED`,
+`INTERNAL_ERROR`, `EMAIL_EXISTS`, `UNSUPPORTED_FORMAT`, `NO_DATA`, dll.
+
+Catatan: `SESSION_EXPIRED` (401) muncul saat refresh token kedaluwarsa (TTL
+refresh default 7 hari, override `MOCK_REFRESH_TTL_MS`); `RATE_LIMITED` (429)
+aktif per-IP dengan ambang `MOCK_RATE_MAX` (default 10.000/window 60s);
+`FILE_TOO_LARGE`/`UNSUPPORTED_FILE_TYPE` (422) pada upload lampiran
+(≤ 5 MB, tipe jpg/png/pdf); `NO_APPROVAL_RIGHTS` (403) pada approve/reject
+oleh role tanpa izin; `INTERNAL_ERROR` (500) dari error handler global
+(pemicu test: `POST /admin/debug/error`).
 
 ## Data mock (konsisten dengan prototipe & PRD Ver 3 §16)
 

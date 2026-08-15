@@ -17,7 +17,7 @@ const fakeDb = () => ({
   accounts: [{ id: '1-1100', name: 'Kas Besar' }],
   journals: [{ id: 'JNL-TEST-001', status: 'posted' }],
   periods: [{ id: 'fp-2026-03' }],
-  sessions: new Map([['rt-1', 'user-001']]),
+  sessions: new Map([['rt-1', { userId: 'user-001', expiresAt: 0 }]]),
   seq: { journal: 101, line: 101, attachment: 101, user: 101, entity: 101 },
 })
 
@@ -61,7 +61,8 @@ describe('saveState / loadState — roundtrip', () => {
     expect(loaded.accounts[0].name).toBe('Kas Besar')
     expect(loaded.seq.journal).toBe(101)
     // Sesi disimpan sebagai [k, v] array → dimuat kembali jadi Map di server
-    expect(loaded.sessions).toEqual([['rt-1', 'user-001']])
+    // (v = { userId, expiresAt } — API §13 SESSION_EXPIRED)
+    expect(loaded.sessions).toEqual([['rt-1', { userId: 'user-001', expiresAt: 0 }]])
     expect(fs.existsSync(file)).toBe(true)
   })
 

@@ -99,6 +99,37 @@ const ok = (res, data, meta, status = 200) => {
 const fail = (res, status, code, message, details) =>
   res.status(status).json({ error: { code, message, ...(details ? { details } : {}) } })
 
+// ------------------------------------------------------------
+// Rate limit (API §13 RATE_LIMITED) — window per IP.
+// Ambang dibaca PER-REQUEST dari env MOCK_RATE_MAX (default 10000) &
+// MOCK_RATE_WINDOW_MS (default 60s) agar test bisa menurunkan ambang
+// tanpa me-restart server. Default sengaja longgar (mock): cukup besar
+// agar suite E2E (banyak request per run) tidak terganggu.
+// ------------------------------------------------------------
+const rateBuckets = new Map() // ip -> { count, resetAt }
+const rateLimit = (req, res, next) => {
+  const max = Number(process.env.MOCK_RATE_MAX) || 10000
+  const windowMs = Number(process.env.MOCK_RATE_WINDOW_MS) || 60_000
+  const key = req.ip || 'unknown'
+  const now = Date.now()
+  const bucket = rateBuckets.get(key) ?? { count: 0, resetAt: now + windowMs }
+  if (now >= bucket.resetAt) {
+    bucket.count = 0
+    bucket.resetAt = now + windowMs
+  }
+  bucket.count += 1
+  rateBuckets.set(key, bucket)
+  if (bucket.count > max) return fail(res, 429, 'RATE_LIMITED', 'Terlalu banyak permintaan')
+  next()
+}
+
+// Ukuran & tipe lampiran yang didukung (API §13 FILE_TOO_LARGE / UNSUPPORTED_FILE_TYPE)
+const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024 // 5 MB
+const ALLOWED_ATTACHMENT_MIME = new Set(['image/jpeg', 'image/png', 'application/pdf'])
+
+// Rate limit aktif untuk semua route (harus terpasang sebelum routes)
+app.use(rateLimit)
+
 // Saldo live per akun: baseBalance + efek jurnal posted (BR-6, BR-7)
 // Jurnal yang memengaruhi saldo: posted DAN bukan jurnal pembalik.
 // Jurnal asli yang di-reverse berstatus 'reversed' (tidak dihitung),
@@ -245,6 +276,13 @@ const DEFAULT_ACCESS_TTL_MS = (Number(process.env.MOCK_ACCESS_TTL) || 3600) * 10
 let accessTtlMs = DEFAULT_ACCESS_TTL_MS
 let tokenEpoch = 0
 
+// TTL refresh token (default 7 hari). Dibaca per panggilan agar test bisa
+// menyetel MOCK_REFRESH_TTL_MS kecil untuk memicu SESSION_EXPIRED.
+const refreshTtlMs = () => {
+  const v = Number(process.env.MOCK_REFRESH_TTL_MS)
+  return Number.isFinite(v) ? v : 7 * 24 * 3600 * 1000
+}
+
 const requireAuth = (req, res, next) => {
   const header = req.headers.authorization || ''
   const token = header.startsWith('Bearer ') ? header.slice(7) : null
@@ -275,6 +313,15 @@ const requirePermission = (...perms) => (req, res, next) => {
   const allowed = rolePermissions[req.user.role] ?? []
   if (!perms.some((p) => allowed.includes(p)))
     return fail(res, 403, 'FORBIDDEN', 'Tidak memiliki akses')
+  next()
+}
+
+// Izin khusus approve/reject: kegagalan izin → NO_APPROVAL_RIGHTS (API §13),
+// bukan FORBIDDEN generik — klien menampilkan pesan "role tidak punya izin".
+const requireApprovalRights = (req, res, next) => {
+  const allowed = rolePermissions[req.user.role] ?? []
+  if (!allowed.includes('journal.approve'))
+    return fail(res, 403, 'NO_APPROVAL_RIGHTS', 'Role Anda tidak memiliki izin approve')
   next()
 }
 
@@ -369,7 +416,7 @@ app.post('/auth/login', (req, res) => {
   const user = db.users.find((u) => u.email === email && u.password === password && u.isActive)
   if (!user) return fail(res, 401, 'INVALID_CREDENTIALS', 'Email atau password salah')
   const refreshToken = randomUUID()
-  db.sessions.set(refreshToken, user.id)
+  db.sessions.set(refreshToken, { userId: user.id, expiresAt: Date.now() + refreshTtlMs() })
   const { password: _pw, ...safeUser } = user
   ok(res, {
     accessToken: `mock.${user.id}.${Date.now()}`,
@@ -381,12 +428,18 @@ app.post('/auth/login', (req, res) => {
 
 app.post('/auth/refresh', (req, res) => {
   const { refreshToken } = req.body ?? {}
-  const userId = db.sessions.get(refreshToken)
-  if (!userId) return fail(res, 401, 'INVALID_REFRESH_TOKEN', 'Refresh token tidak valid')
+  const entry = db.sessions.get(refreshToken)
+  if (!entry) return fail(res, 401, 'INVALID_REFRESH_TOKEN', 'Refresh token tidak valid')
+  // Sesi kedaluwarsa: refresh token melewati TTL → hapus + SESSION_EXPIRED
+  // (klien tampilkan modal "Sesi berakhir"), berbeda dari token tak dikenal.
+  if (entry.expiresAt <= Date.now()) {
+    db.sessions.delete(refreshToken)
+    return fail(res, 401, 'SESSION_EXPIRED', 'Sesi berakhir. Silakan login kembali.')
+  }
   const newRefresh = randomUUID()
   db.sessions.delete(refreshToken)
-  db.sessions.set(newRefresh, userId)
-  ok(res, { accessToken: `mock.${userId}.${Date.now()}`, refreshToken: newRefresh, expiresIn: Math.round(accessTtlMs / 1000) })
+  db.sessions.set(newRefresh, { userId: entry.userId, expiresAt: Date.now() + refreshTtlMs() })
+  ok(res, { accessToken: `mock.${entry.userId}.${Date.now()}`, refreshToken: newRefresh, expiresIn: Math.round(accessTtlMs / 1000) })
 })
 
 app.post('/auth/logout', (req, res) => {
@@ -800,7 +853,7 @@ app.post('/journals/:id/submit', requireAuth, requirePermission('journal.write')
   ok(res, { id: journal.id, status: 'pending-approval' })
 })
 
-app.post('/journals/:id/approve', requireAuth, requirePermission('journal.approve'), (req, res) => {
+app.post('/journals/:id/approve', requireAuth, requireApprovalRights, (req, res) => {
   const journal = db.journals.find((j) => j.id === req.params.id)
   if (!journal) return fail(res, 404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
   if (journal.status !== 'pending-approval') return fail(res, 409, 'INVALID_STATUS_TRANSITION', 'Hanya jurnal pending-approval yang dapat di-approve')
@@ -813,7 +866,7 @@ app.post('/journals/:id/approve', requireAuth, requirePermission('journal.approv
   ok(res, { status: 'posted', approvedBy: req.user.id, approvedAt: journal.approvedAt })
 })
 
-app.post('/journals/:id/reject', requireAuth, requirePermission('journal.approve'), (req, res) => {
+app.post('/journals/:id/reject', requireAuth, requireApprovalRights, (req, res) => {
   const journal = db.journals.find((j) => j.id === req.params.id)
   if (!journal) return fail(res, 404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
   if (journal.status !== 'pending-approval') return fail(res, 409, 'INVALID_STATUS_TRANSITION', 'Hanya jurnal pending-approval yang dapat di-reject')
@@ -830,7 +883,13 @@ app.post('/journals/:id/attachments', requireAuth, requirePermission('journal.wr
   const journal = db.journals.find((j) => j.id === req.params.id)
   if (!journal) return fail(res, 404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
   if (journal.status === 'posted') return fail(res, 409, 'JOURNAL_ALREADY_POSTED', 'Lampiran tidak dapat ditambah pada jurnal posted')
-  const attachment = { id: `att-${pad(db.seq.attachment++)}`, fileName: req.body?.fileName ?? 'bukti.pdf', size: req.body?.size ?? 245760, mimeType: req.body?.mimeType ?? 'application/pdf', uploadedAt: nowIso() }
+  const size = Number(req.body?.size ?? 245760)
+  if (!Number.isFinite(size) || size > MAX_ATTACHMENT_BYTES)
+    return fail(res, 422, 'FILE_TOO_LARGE', 'Ukuran file maksimal 5 MB')
+  const mimeType = req.body?.mimeType ?? 'application/pdf'
+  if (!ALLOWED_ATTACHMENT_MIME.has(mimeType))
+    return fail(res, 422, 'UNSUPPORTED_FILE_TYPE', 'Tipe file tidak didukung (jpg/png/pdf)')
+  const attachment = { id: `att-${pad(db.seq.attachment++)}`, fileName: req.body?.fileName ?? 'bukti.pdf', size, mimeType, uploadedAt: nowIso() }
   journal.attachments = journal.attachments ?? []
   journal.attachments.push(attachment)
   ok(res, attachment, null, 201)
@@ -1257,6 +1316,33 @@ app.get('/search', requireAuth, (req, res) => {
 // ------------------------------------------------------------
 app.get('/health', (req, res) => ok(res, { status: 'ok', time: nowIso(), journals: db.journals.length, accounts: db.accounts.length }))
 
+// Hook pengujian (API §13 INTERNAL_ERROR): route ini sengaja melempar error
+// agar error handler global (500 INTERNAL_ERROR) bisa divalidasi. Konsisten
+// dengan endpoint /admin/* lain yang tanpa auth (alat development).
+app.post('/admin/debug/error', (req, res) => {
+  throw new Error('pemicu INTERNAL_ERROR untuk test')
+})
+
 app.use((req, res) => fail(res, 404, 'NOT_FOUND', `Endpoint ${req.method} ${req.path} tidak ditemukan`))
+
+// ------------------------------------------------------------
+// Error handler global (harus 4 argumen) — mengubah error tak terduga
+// menjadi envelope INTERNAL_ERROR 500 (API §13):
+//   { error: { code: 'INTERNAL_ERROR', message: 'Terjadi kesalahan
+//     server. Kode: E12345' } }
+// Error ber-status < 500 (mis. body JSON malformed) dibalas dengan
+// status & pesan aslinya (VALIDATION_ERROR).
+// ------------------------------------------------------------
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err)
+  const status = Number(err?.status) || 500
+  if (status < 500) {
+    return fail(res, status, 'VALIDATION_ERROR', err?.message || 'Data tidak valid')
+  }
+  const errorCode = `E${Math.abs(Math.floor(Math.random() * 90_000)) + 10_000}`
+  console.error('[INTERNAL_ERROR]', err?.message || err)
+  return fail(res, 500, 'INTERNAL_ERROR', `Terjadi kesalahan server. Kode: ${errorCode}`)
+})
 
 export default app
