@@ -23,10 +23,11 @@ Status TestRail (default): 1=Passed, 2=Blocked, 3=Untested (default,
 TIDAK bisa dikirim sebagai hasil), 4=Retest, 5=Failed. Nama status di CSV
 impor harus persis: Passed, Failed, Blocked, Retest, Skipped, Untested.
 
-Status yang SUDAH diisi di output sebelumnya (`qa-test-cases.xlsx`, fallback
-`qa-test-cases-tracker.csv`) dipertahankan saat regenerasi — hanya test case
-baru / yang masih kosong yang di-set 'Not Run'. Jadi QA bisa mengisi hasil
-eksekusi lalu menjalankan ulang generator tanpa kehilangan data.
+Status, Tanggal Run, dan Environment yang SUDAH diisi di output sebelumnya
+(`qa-test-cases.xlsx`, fallback `qa-test-cases-tracker.csv`) dipertahankan
+per baris saat regenerasi — hanya test case baru / kolom yang masih kosong
+yang jatuh ke default ('Not Run', RUN_DATE, ENVIRONMENT). Jadi QA bisa mengisi
+hasil eksekusi per baris lalu menjalankan ulang generator tanpa kehilangan data.
 
 `--sample`: hasilkan CONTOH run dengan status acak-deterministik ke file
 `qa-test-cases-sample-tracker.csv`, `qa-test-cases-sample.xlsx`,
@@ -245,15 +246,17 @@ def precond_of(rec: dict) -> str:
     return DEFAULT_PRECOND
 
 
-def load_existing_statuses() -> dict[str, str]:
-    """Baca Status yang sudah diisi QA dari output sebelumnya, agar regenerasi
-    tidak me-reset hasil eksekusi ke 'Not Run'.
+def load_existing_metadata() -> dict[str, dict[str, str]]:
+    """Baca Status / Tanggal Run / Environment yang sudah diisi QA dari output
+    sebelumnya, agar regenerasi TIDAK me-reset hasil eksekusi ke default
+    (Status → 'Not Run', Tanggal Run/Environment → nilai default run).
 
     Prioritas: `qa-test-cases.xlsx` (sheet 'Test Cases') — file paling baru
     karena ditulis setelah tracker CSV. Fallback: `qa-test-cases-tracker.csv`
-    (mis. XLSX belum pernah dibuat / korup). Nilai sel kosong diabaikan.
+    (mis. XLSX belum pernah dibuat / korup). Nilai sel kosong diabaikan
+    (kolom yang kosong jatuh ke default saat enrich).
     """
-    existing: dict[str, str] = {}
+    existing: dict[str, dict[str, str]] = {}
 
     xlsx = ROOT / "qa-test-cases.xlsx"
     if xlsx.exists():
@@ -266,13 +269,19 @@ def load_existing_statuses() -> dict[str, str]:
             if header:
                 cols = {str(h).strip(): i for i, h in enumerate(header)}
                 idx_id = cols.get("ID")
-                idx_status = cols.get("Status")
-                if idx_id is not None and idx_status is not None:
+                if idx_id is not None:
                     for row in rows:
                         cid = row[idx_id]
-                        st = row[idx_status]
-                        if cid is not None and st not in (None, ""):
-                            existing[str(cid).strip()] = str(st).strip()
+                        if cid is None:
+                            continue
+                        meta = {}
+                        for col_name in ("Status", "Tanggal Run", "Environment"):
+                            idx = cols.get(col_name)
+                            val = row[idx] if idx is not None and idx < len(row) else None
+                            if val not in (None, ""):
+                                meta[col_name] = str(val).strip()
+                        if meta:
+                            existing[str(cid).strip()] = meta
             wb.close()
             return existing
         except Exception:
@@ -283,14 +292,21 @@ def load_existing_statuses() -> dict[str, str]:
         with csv_path.open(encoding="utf-8-sig", newline="") as f:
             for row in csv.DictReader(f):
                 cid = (row.get("ID") or "").strip()
-                st = (row.get("Status") or "").strip()
-                if cid and st:
-                    existing[cid] = st
+                if not cid:
+                    continue
+                meta = {}
+                for col_name in ("Status", "Tanggal Run", "Environment"):
+                    val = (row.get(col_name) or "").strip()
+                    if val:
+                        meta[col_name] = val
+                if meta:
+                    existing[cid] = meta
     return existing
 
 
-def enrich(records: list[dict], existing_statuses: dict[str, str] | None = None) -> list[dict]:
-    existing = existing_statuses or {}
+def enrich(records: list[dict],
+           existing_metadata: dict[str, dict[str, str]] | None = None) -> list[dict]:
+    existing = existing_metadata or {}
     for r in records:
         r["story"] = story_of(r["ref"])
         r["sprint"] = sprint_of(r["ref"])
@@ -298,10 +314,13 @@ def enrich(records: list[dict], existing_statuses: dict[str, str] | None = None)
         r["priority"] = SEVERITY_PRIORITY.get(r["sev"], "3 - Medium")
         r["type"] = "Regression" if r["id"].startswith("RG-") else "Functional"
         r["preconditions"] = precond_of(r)
-        # Status hasil eksekusi sebelumnya dipertahankan; sisanya Not Run
-        r["status"] = existing.get(r["id"], "Not Run")
-        r["run_date"] = RUN_DATE_DEFAULT
-        r["environment"] = ENVIRONMENT_DEFAULT
+        # Status/Tanggal Run/Environment yang sudah diisi QA per baris
+        # dipertahankan; yang kosong jatuh ke default (Not Run / RUN_DATE /
+        # ENVIRONMENT). Ini membuat regenerasi tidak menghapus data eksekusi.
+        meta = existing.get(r["id"], {})
+        r["status"] = meta.get("Status", "Not Run")
+        r["run_date"] = meta.get("Tanggal Run", RUN_DATE_DEFAULT)
+        r["environment"] = meta.get("Environment", ENVIRONMENT_DEFAULT)
         # Pembuat test — default tim QA, bisa diedit per baris di Excel
         r["author"] = TEST_AUTHOR_DEFAULT
         # Link bug/defect — diisi QA saat ada kegagalan (bisa disinkronkan ke
@@ -727,11 +746,11 @@ def main() -> None:
         print(f"\nContoh run: {len(tc)} TC + {len(rg)} RG = {len(records)} test case dengan status terisi")
         return
 
-    existing = load_existing_statuses()
+    existing = load_existing_metadata()
     records = enrich(records, existing)
     carried = sum(1 for r in records if r["id"] in existing)
     if carried:
-        print(f"[INFO] Mempertahankan status {carried} test case dari output sebelumnya")
+        print(f"[INFO] Mempertahankan status/metadata {carried} test case dari output sebelumnya")
     for f in (write_testrail_csv, write_tracker_csv, write_xlsx, write_results_csv, write_results_template_xlsx):
         print(f"[OK] {f(records)}")
     print(f"\nTotal: {len(tc)} TC + {len(rg)} RG = {len(records)} test case")
