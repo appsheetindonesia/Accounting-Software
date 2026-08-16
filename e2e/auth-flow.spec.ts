@@ -17,12 +17,21 @@
 //   RG-19 TTL terjadwal (N detik)          → access token basi SESUAI WAKTU →
 //                                          auto-refresh di sesi AKTIF tanpa reload
 //                                          (401 → POST /auth/refresh → retry → 200)
+//   RG-20 SESSION_EXPIRED                    → refresh token kedaluwarsa DI SERVER
+//                                          (POST /admin/expire-refresh-tokens) →
+//                                          refresh gagal 401 SESSION_EXPIRED →
+//                                          modal "Sesi Berakhir" + login ulang wajib
+//   RG-21 RATE_LIMITED (retry pulih)          → ambang 1 req/endpoint
+//                                          (POST /admin/set-rate-limit) → 429 →
+//                                          retry otomatis klien → sukses TANPA error
+//   RG-22 RATE_LIMITED (tetap diblokir)       → 429 ×3 → toast "Terlalu banyak
+//                                          permintaan" + jurnal TIDAK tersimpan
 //
 // Berbeda dengan regression.spec.ts (yang auto-login di beforeEach),
 // spec ini menguji halaman LOGIN — sesi dimulai kosong tiap test.
 // ============================================================
 import { test, expect } from '@playwright/test'
-import { DEMO, gotoOnline, loginViaUi, resetServer, watchPageErrors } from './helpers'
+import { DEMO, fillBalancedJournal, gotoNav, gotoOnline, loginViaUi, openJournalModal, resetServer, watchPageErrors } from './helpers'
 
 const STORAGE_KEY = 'appsheet-accounting-v1'
 const BAD_PASSWORD = 'password-salah'
@@ -257,5 +266,163 @@ test('RG-19 TTL terjadwal: access token basi setelah N detik → auto-refresh di
   // Bukti jaringan: 401 TOKEN_EXPIRED terjadi lalu retry 200 (auto-refresh)
   expect(ledgerStatuses).toContain(401)
   expect(ledgerStatuses).toContain(200)
+  expect(errors).toEqual([])
+})
+
+test('RG-20 SESSION_EXPIRED: refresh token kedaluwarsa di server → modal "Sesi Berakhir" + login ulang wajib', async ({ page }) => {
+  const errors = watchPageErrors(page)
+  await page.addInitScript(() => {
+    if (!sessionStorage.getItem('e2e-cleared')) {
+      localStorage.clear()
+      sessionStorage.setItem('e2e-cleared', '1')
+    }
+  })
+
+  // Login normal → sesi aktif (access + refresh token valid)
+  await gotoOnline(page)
+  const real = await storedTokens(page)
+  expect(real?.accessToken).toMatch(/^mock\.user-001\./)
+  expect(real?.refreshToken).toBeTruthy()
+
+  // Refresh token di-KEDALUWARSAKAN server-side secara deterministik
+  // (POST /admin/expire-refresh-tokens — tanpa restart / menunggu TTL):
+  // sesi login asli dihapus → POST /auth/refresh berikutnya → 401 SESSION_EXPIRED.
+  const exp = await page.request.post('http://localhost:4000/admin/expire-refresh-tokens')
+  expect(exp.ok()).toBeTruthy()
+
+  // Access token ikut dibasi (seperti RG-15/16) supaya request berikutnya
+  // memicu alur 401 → refresh → refresh gagal SESSION_EXPIRED.
+  await overwriteTokens(page, { access: 'mock.user-001.1', refresh: real!.refreshToken })
+
+  // Reload → /auth/me 401 TOKEN_EXPIRED → POST /auth/refresh 401 SESSION_EXPIRED
+  // → logout otomatis + modal "Sesi Berakhir" (bukan sekadar error inline)
+  await page.reload()
+
+  // Modal "Sesi Berakhir" tampil (role=dialog, aria-label="Sesi berakhir")
+  const dialog = page.getByRole('dialog', { name: 'Sesi berakhir' })
+  await expect(dialog).toBeVisible()
+  await expect(page.getByText('Sesi Berakhir', { exact: true })).toBeVisible()
+  await expect(page.getByText(/refresh token kedaluwarsa atau tidak valid/)).toBeVisible()
+
+  // Logout otomatis sudah terjadi: token sesi dibersihkan dari localStorage
+  const cleared = await storedTokens(page)
+  expect(cleared?.accessToken).toBeNull()
+
+  // "Masuk kembali" menutup modal → halaman LOGIN (login ulang wajib)
+  await page.getByRole('button', { name: 'Masuk kembali' }).click()
+  await expect(page.getByLabel('Email')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Appsheet Accounting Journal' })).toBeVisible()
+  await expect(page.getByText('Sesi berakhir. Silakan login kembali.')).toBeVisible()
+  // Dashboard TIDAK tampil sebelum login ulang
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toHaveCount(0)
+
+  // Login ulang → sesi BARU aktif (token baru, dashboard + footer Online)
+  await loginViaUi(page)
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
+  await expect(page.locator('footer')).toContainText('Online · Mock API', { timeout: 20_000 })
+  const newTokens = await storedTokens(page)
+  expect(newTokens?.accessToken).toMatch(/^mock\.user-001\./)
+  expect(newTokens?.accessToken).not.toBe(real?.accessToken)
+
+  expect(errors).toEqual([])
+})
+
+test('RG-21 RATE_LIMITED: 429 dengan ambang rendah → retry otomatis → request pulih TANPA error', async ({ page }) => {
+  const errors = watchPageErrors(page)
+  await page.addInitScript(() => localStorage.clear())
+
+  // Login normal (sesi aktif, token valid)
+  await page.goto('/')
+  await loginViaUi(page)
+  await expect(page.locator('footer')).toContainText('Online · Mock API', { timeout: 20_000 })
+
+  // Ambang SANGAT rendah: max 1 request per endpoint. set-rate-limit juga
+  // mengosongkan bucket → hitungan deterministik dimulai dari sini.
+  const setLimit = await page.request.post('http://localhost:4000/admin/set-rate-limit', {
+    data: { max: 1, windowMs: 60000 },
+  })
+  expect(setLimit.ok()).toBeTruthy()
+
+  // Pantau POST /journals (path sama tiap simpan → bucket yang sama)
+  const journalStatuses: number[] = []
+  page.on('response', (res) => {
+    if (res.url().endsWith('/journals') && res.request().method() === 'POST') journalStatuses.push(res.status())
+  })
+
+  // Simpan jurnal #1 → 200 (bucket 1) → toast sukses
+  const dialog1 = await openJournalModal(page)
+  await fillBalancedJournal(dialog1, '10000000', 'RG-21 jurnal pertama')
+  await dialog1.getByRole('button', { name: 'Simpan Draft' }).click()
+  await expect(page.getByRole('status')).toContainText('Jurnal disimpan sebagai draft')
+
+  // Simpan jurnal #2 → 429 (bucket 2 > 1) → klien retry (+800ms). Segera
+  // naikkan ambang + kosongkan bucket → retry klien berhasil (201 Created).
+  const blocked = page.waitForResponse(
+    (res) => res.url().endsWith('/journals') && res.request().method() === 'POST' && res.status() === 429,
+  )
+  const retried = page.waitForResponse(
+    (res) => res.url().endsWith('/journals') && res.request().method() === 'POST' && res.status() === 201,
+  )
+  const dialog2 = await openJournalModal(page)
+  await fillBalancedJournal(dialog2, '5000000', 'RG-21 jurnal kedua — retry')
+  await dialog2.getByRole('button', { name: 'Simpan Draft' }).click()
+  await blocked
+  const raised = await page.request.post('http://localhost:4000/admin/set-rate-limit', {
+    data: { max: 1000, windowMs: 60000 },
+  })
+  expect(raised.ok()).toBeTruthy()
+  await retried // retry klien (setelah +800ms) berhasil 201
+
+  // Retry berhasil: TANPA pesan 'Terlalu banyak permintaan'; bukti jaringan
+  // 429 terjadi lalu retry 201; kedua jurnal tersimpan (8 seed + 2 = 10).
+  await expect(page.getByText(/Terlalu banyak permintaan/)).toHaveCount(0)
+  expect(journalStatuses).toEqual([201, 429, 201]) // #1 → 429 → retry #2
+  await gotoNav(page, 'Jurnal')
+  await expect(page.getByText('10 entri jurnal')).toBeVisible({ timeout: 10_000 })
+  // Sesi tetap aktif
+  await expect(page.locator('footer')).toContainText('Online · Mock API')
+  expect(errors).toEqual([])
+})
+
+test('RG-22 RATE_LIMITED: 429 berulang (ambang rendah) → toast "Terlalu banyak permintaan" + jurnal tidak tersimpan', async ({ page }) => {
+  const errors = watchPageErrors(page)
+  await page.addInitScript(() => localStorage.clear())
+
+  await page.goto('/')
+  await loginViaUi(page)
+  await expect(page.locator('footer')).toContainText('Online · Mock API', { timeout: 20_000 })
+
+  // Ambang 1 + bucket kosong → simpan berikutnya kena 429 (retry ikut gagal)
+  const setLimit = await page.request.post('http://localhost:4000/admin/set-rate-limit', {
+    data: { max: 1, windowMs: 60000 },
+  })
+  expect(setLimit.ok()).toBeTruthy()
+
+  // Simpan #1 → 200 (bucket 1) → toast sukses
+  const dialog1 = await openJournalModal(page)
+  await fillBalancedJournal(dialog1, '10000000', 'RG-22 jurnal pertama')
+  await dialog1.getByRole('button', { name: 'Simpan Draft' }).click()
+  await expect(page.getByRole('status')).toContainText('Jurnal disimpan sebagai draft')
+
+  // Simpan #2 → 429 → retry 800ms → 429 → retry 800ms → 429 → toast error
+  const statuses: number[] = []
+  page.on('response', (res) => {
+    if (res.url().endsWith('/journals') && res.request().method() === 'POST') statuses.push(res.status())
+  })
+  const dialog2 = await openJournalModal(page)
+  await fillBalancedJournal(dialog2, '2000000', 'RG-22 jurnal kedua — diblokir')
+  await dialog2.getByRole('button', { name: 'Simpan Draft' }).click()
+
+  // Pesan 'Terlalu banyak permintaan' tampil (retry habis → ApiError RATE_LIMITED)
+  await expect(page.getByRole('status')).toContainText('Terlalu banyak permintaan', { timeout: 10_000 })
+  // Bukti jaringan: 3 percobaan (1 asli + 2 retry), semuanya 429
+  expect(statuses).toHaveLength(3)
+  expect(statuses.every((s) => s === 429)).toBe(true)
+  // Jurnal #2 TIDAK tersimpan: daftar jurnal tetap 9 entri (8 seed + jurnal #1)
+  await gotoNav(page, 'Jurnal')
+  await expect(page.getByText('9 entri jurnal')).toBeVisible()
+  await expect(page.getByText('BKM-2026-03-0010', { exact: true })).toHaveCount(0)
+  // Sesi tetap aktif (429 ≠ logout)
+  await expect(page.locator('footer')).toContainText('Online · Mock API')
   expect(errors).toEqual([])
 })

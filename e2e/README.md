@@ -1,9 +1,9 @@
 # E2E Regression — Appsheet Accounting Journal
 
-Suite **Playwright** untuk skenario regresi **RG-01 s/d RG-19** dari
-`QA Test Plan - Accounting.md` §4 (RG-13..19 = alur login, refresh token,
-reconnect offline, auto-reconnect polling & kedaluwarsa TTL terjadwal),
-dijalankan terhadap **mock API**
+Suite **Playwright** untuk skenario regresi **RG-01 s/d RG-22** dari
+`QA Test Plan - Accounting.md` §4 (RG-13..22 = alur login, refresh token,
+reconnect offline, auto-reconnect polling, kedaluwarsa TTL terjadwal,
+SESSION_EXPIRED & rate limit 429), dijalankan terhadap **mock API**
 (`mock-api/`, port 4000) dan **prototipe** (`prototype-accounting/`, Vite :5173).
 
 [![CI (Unit + Integration + E2E)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/ci.yml/badge.svg)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/ci.yml)
@@ -63,6 +63,9 @@ login bertahan saat `page.reload()` (RG-02/RG-04/RG-10).
 | RG-17 | Reconnect offline | server mati → masuk offline (banner + data lokal, token `local.demo`) → server hidup → "Coba lagi" → **auto-login demo** → online dengan token server asli |
 | RG-18 | Auto-reconnect polling | server mati → banner offline → server hidup → banner hilang **SENDIRI dalam ~10 detik** (polling `GET /health` tiap 10s) **tanpa klik "Coba lagi"**, token server asli tersimpan |
 | RG-19 | TTL terjadwal | access token basi setelah **N detik** (`POST /admin/set-token-ttl`) → **auto-refresh di sesi AKTIF tanpa reload**: 401 → refresh → retry 200, token baru tersimpan, indikator "Sesi diperbarui otomatis" tampil |
+| RG-20 | SESSION_EXPIRED | refresh token kedaluwarsa **di server** (`POST /admin/expire-refresh-tokens`) → refresh gagal 401 `SESSION_EXPIRED` → logout otomatis + **modal "Sesi Berakhir"** → "Masuk kembali" → halaman login → **login ulang wajib** (token baru) |
+| RG-21 | RATE_LIMITED (retry pulih) | ambang **1 req/endpoint** (`POST /admin/set-rate-limit`) → 429 saat simpan jurnal → **retry otomatis klien** (+800ms) → ambang dinaikkan → retry **200**, jurnal tersimpan **tanpa error** |
+| RG-22 | RATE_LIMITED (diblokir) | ambang 1 + window panjang → 429 **×3** (1 + 2 retry) → toast **"Terlalu banyak permintaan"**, jurnal **tidak tersimpan**, sesi tetap aktif |
 
 ## CI (GitHub Actions)
 
@@ -75,7 +78,7 @@ di **setiap push / pull request** (ubuntu-latest, Node 22):
    - tahap **mock API** (integration, Vitest + Supertest, `mock-api`) — 105 test
      (baseline angka §2.3, error envelope vs katalog §13, seed:extra,
      persistence, TOKEN_EXPIRED, kedaluwarsa TTL terjadwal)
-2. **`e2e`** — E2E Playwright RG-01..RG-19 (chromium + firefox) — 38 test
+2. **`e2e`** — E2E Playwright RG-01..RG-22 (chromium + firefox) — 44 test
 
 Job `test` berjalan **sekaligus** dengan `e2e` (tidak berurutan) — unit &
 integration selesai dalam hitungan detik tanpa tertahan E2E (~4 menit),
