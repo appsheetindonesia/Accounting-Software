@@ -618,6 +618,33 @@ describe('openSearchResult — fokus hasil global search', () => {
   })
 })
 
+describe('openPendingApproval — buka Jurnal dari dropdown notifikasi dengan filter Menunggu Approval', () => {
+  it('mengarahkan ke halaman Jurnal + focus jurnal + journalFilter pending-approval', () => {
+    useStore.getState().openPendingApproval('JNL-2026-03-005')
+    const s = useStore.getState()
+    expect(s.page).toBe('journal')
+    expect(s.focusJournalId).toBe('JNL-2026-03-005')
+    expect(s.journalFilter).toBe('pending-approval')
+  })
+
+  it('clearJournalFilter mengosongkan flag (transient — dipakai sekali oleh JournalPage)', () => {
+    useStore.getState().openPendingApproval('JNL-2026-03-005')
+    useStore.getState().clearJournalFilter()
+    const s = useStore.getState()
+    expect(s.journalFilter).toBeNull()
+    // Fokus jurnal tidak ikut terhapus — baris detail tetap terbuka
+    expect(s.focusJournalId).toBe('JNL-2026-03-005')
+  })
+
+  it('logout membersihkan journalFilter juga (tidak bocor ke sesi berikutnya)', () => {
+    useStore.setState({ accessToken: 'mock.t', refreshToken: 'r1' })
+    useStore.getState().openPendingApproval('JNL-2026-03-005')
+    useStore.getState().logout()
+    expect(useStore.getState().journalFilter).toBeNull()
+    expect(useStore.getState().focusJournalId).toBeNull()
+  })
+})
+
 describe('handleSessionExpired — refresh gagal → logout otomatis + modal "Sesi berakhir"', () => {
   it('menghapus token & user, mengisi authError DAN membuka modal sessionExpired', () => {
     useStore.setState({ accessToken: 'mock.t', refreshToken: 'r1', user: demoUser, apiStatus: 'online' })

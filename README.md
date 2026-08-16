@@ -25,7 +25,7 @@ agar debug cukup mengunduh satu artifact tanpa membuka ulang seluruh log.
 | `prototype-accounting/` | Prototipe web (React + TypeScript + Vite + Zustand), unit test Vitest + MSW |
 | `mock-api/` | Mock API Express (persistence, auth + refresh token, error envelope, rate limit), integration test Vitest + Supertest |
 | `e2e/` | E2E Playwright RG-01..RG-22 (chromium + firefox) |
-| `scripts/` | Skrip dev terpadu (`dev.mjs`) & agregat test (`test-all.mjs`) |
+| `scripts/` | Skrip dev terpadu (`dev.mjs` + `dev-stop.mjs`) & agregat test (`test-all.mjs`) |
 | Dokumen `*.md` | BRD, PRD, FRD, API contract, Database Schema, QA Test Plan, dll. |
 | `.github/workflows/` | CI (`ci.yml`), verifikasi manual (`e2e.yml`), deploy GitHub Pages (`pages.yml`) |
 
@@ -34,8 +34,15 @@ agar debug cukup mengunduh satu artifact tanpa membuka ulang seluruh log.
 ```bash
 npm install        # install dependensi tiap sub-proyek
 npm run dev        # mock API + Vite sekali jalan (scripts/dev.mjs)
+npm run dev:stop   # hentikan stack — baca .dev/dev.pid, kill seluruh pohon proses
 npm test           # ketiga suite: mock-api + prototype + e2e (paralel)
 ```
+
+`dev.mjs` menulis `.dev/dev.pid` (PID induk + child) saat stack hidup dan
+menghapusnya saat berhenti — jadi `npm run dev:stop` mematikan mock API + Vite
+sekaligus tanpa harus menebak PID lewat netstat/tasklist. Varian seed:
+`npm run dev:extra` (jurnal lintas bulan), `dev:reset` (seed segar walau
+persistence aktif), `dev:no-persist` (in-memory, reset tiap boot).
 
 Detail lebih lanjut ada di README masing-masing sub-proyek (`mock-api/`, `prototype-accounting/`, `e2e/`).
 

@@ -64,6 +64,13 @@ interface AccountingState {
   focusAccountId: string | null
   openSearchResult: (type: 'journal' | 'account' | 'report' | 'page', id: string) => void
   clearSearchFocus: () => void
+  // Filter status yang diminta saat membuka halaman Jurnal (transient, sekali
+  // pakai). Di-set oleh openPendingApproval (dropdown notifikasi TopBar) agar
+  // halaman Jurnal terbuka dengan filter "Menunggu Approval"; dibaca lalu
+  // dibersihkan oleh JournalPage. null = buka dengan filter default (Semua).
+  journalFilter: 'pending-approval' | null
+  openPendingApproval: (id: string) => void
+  clearJournalFilter: () => void
 
   // Lapisan API (API - Accounting.md)
   apiStatus: ApiStatus
@@ -375,8 +382,15 @@ export const useStore = create<AccountingState>()(
                 : { page: id as PageKey },
           ),
         clearSearchFocus: () => set({ focusJournalId: null, focusAccountId: null }),
+        // Dropdown notifikasi TopBar: buka halaman Jurnal dengan fokus jurnal
+        // + filter status Menunggu Approval (JournalPage membacanya lalu
+        // membersihkan lewat clearJournalFilter).
+        openPendingApproval: (id) =>
+          set({ page: 'journal', focusJournalId: id, journalFilter: 'pending-approval' }),
+        clearJournalFilter: () => set({ journalFilter: null }),
         focusJournalId: null,
         focusAccountId: null,
+        journalFilter: null,
         closePeriod,
 
         accounts: mockAccounts,
@@ -584,6 +598,7 @@ export const useStore = create<AccountingState>()(
             modalOpen: false,
             focusJournalId: null,
             focusAccountId: null,
+            journalFilter: null,
             offlineQueue: [],
             isSyncing: false,
             lastSyncedAt: null,
@@ -846,6 +861,7 @@ export const useStore = create<AccountingState>()(
             modalOpen: false,
             focusJournalId: null,
             focusAccountId: null,
+            journalFilter: null,
             offlineQueue: [],
             isSyncing: false,
             lastSyncedAt: null,

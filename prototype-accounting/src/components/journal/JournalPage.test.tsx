@@ -34,12 +34,14 @@ beforeEach(() => {
     journals: [...mockJournals, janJournal as any],
     periods: periods as any,
     activePeriod: '2026-03',
+    journalFilter: null,
+    focusJournalId: null,
     toast: null,
   })
 })
 
 afterEach(() => {
-  useStore.setState({ apiStatus: 'idle', user: null, periods: [] as any })
+  useStore.setState({ apiStatus: 'idle', user: null, periods: [] as any, journalFilter: null, focusJournalId: null })
   cleanup()
 })
 
@@ -99,6 +101,41 @@ describe('JournalPage — periode aktif & status tertutup', () => {
     expect(screen.getByText('BKM-2026-03-0001')).toBeTruthy()
     expect(screen.getByText(/Maret 2026 · \d+ entri jurnal/)).toBeTruthy()
     expect(document.querySelectorAll('.animate-pulse').length).toBe(0)
+  })
+
+  it('dibuka dari dropdown notifikasi → filter Menunggu Approval diterapkan + flag dibersihkan', () => {
+    const pendingJournal = {
+      ...mockJournals[0],
+      id: 'JNL-2026-03-020',
+      transactionNumber: 'BKM-2026-03-0020',
+      date: '2026-03-28',
+      description: 'Menunggu approval dari notifikasi',
+      status: 'pending-approval' as const,
+    }
+    // Persis apa yang dilakukan openPendingApproval saat item notifikasi diklik
+    useStore.setState({
+      journals: [...mockJournals, pendingJournal as any],
+      journalFilter: 'pending-approval',
+      focusJournalId: pendingJournal.id,
+    })
+    render(<JournalPage />)
+
+    // Hanya jurnal Menunggu Approval yang tampil — jurnal posted/draft tersaring
+    expect(screen.getByText('BKM-2026-03-0020')).toBeTruthy()
+    expect(screen.queryByText('BKM-2026-03-0001')).toBeNull()
+    expect(screen.queryByText('BKM-2026-03-0002')).toBeNull()
+    // Select Status = Menunggu Approval; flag transient sudah dibersihkan
+    expect((screen.getByLabelText('Status') as HTMLSelectElement).value).toBe('pending-approval')
+    expect(useStore.getState().journalFilter).toBeNull()
+  })
+
+  it('dibuka dari global search (tanpa journalFilter) → filter default Semua, jurnal target tidak tersaring', () => {
+    useStore.setState({ focusJournalId: 'JNL-2026-03-001' })
+    render(<JournalPage />)
+
+    expect((screen.getByLabelText('Status') as HTMLSelectElement).value).toBe('all')
+    expect(screen.getByText('BKM-2026-03-0001')).toBeTruthy()
+    expect(useStore.getState().journalFilter).toBeNull()
   })
 
   it('refetch ganti entitas (entityRefetching) → skeleton tampil walau sudah pernah sinkron, lalu data', () => {

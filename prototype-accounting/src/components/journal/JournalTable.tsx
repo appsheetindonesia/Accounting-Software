@@ -109,15 +109,26 @@ export default function JournalTable({ journals }: { journals: JournalEntry[] })
                     <td className="px-5 py-3 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         {journal.status === 'pending-approval' && canApprove && (
-                          <button
-                            type="button"
-                            onClick={() => approveJournal(journal.id)}
-                            title="Setujui langsung — tanpa buka detail"
-                            aria-label={`Setujui ${journal.transactionNumber}`}
-                            className="inline-flex items-center gap-1 rounded-lg bg-ok px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-ok/90 active:translate-y-px"
-                          >
-                            <Check size={13} /> Setujui
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => approveJournal(journal.id)}
+                              title="Setujui langsung — tanpa buka detail"
+                              aria-label={`Setujui ${journal.transactionNumber}`}
+                              className="inline-flex items-center gap-1 rounded-lg bg-ok px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-ok/90 active:translate-y-px"
+                            >
+                              <Check size={13} /> Setujui
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setRejectingJournal(journal)}
+                              title="Tolak dengan alasan wajib — tanpa buka detail"
+                              aria-label={`Tolak ${journal.transactionNumber}`}
+                              className="inline-flex items-center gap-1 rounded-lg border border-bad/40 bg-bad/5 px-2.5 py-1.5 text-xs font-medium text-bad transition hover:bg-bad/10 active:translate-y-px"
+                            >
+                              <X size={13} /> Tolak
+                            </button>
+                          </>
                         )}
                         <button
                           type="button"

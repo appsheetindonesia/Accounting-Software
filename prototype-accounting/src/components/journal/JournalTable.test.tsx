@@ -3,7 +3,7 @@
 // detail): tampil untuk admin, klik → status posted; tidak tampil untuk viewer
 // atau jurnal draft/posted.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { mockAccounts, mockJournals } from '../../data/mock'
 import { useStore } from '../../store/useStore'
 import JournalTable from './JournalTable'
@@ -61,5 +61,51 @@ describe('JournalTable — Setujui langsung di baris (tanpa buka detail)', () =>
     render(<JournalTable journals={[mockJournals[0], mockJournals[5]]} />) // posted + draft
 
     expect(screen.queryByRole('button', { name: /Setujui/ })).toBeNull()
+  })
+})
+
+describe('JournalTable — Tolak langsung di baris (dialog alasan wajib, tanpa buka detail)', () => {
+  it('admin melihat tombol Tolak di baris Menunggu Approval; klik → dialog alasan wajib muncul', () => {
+    render(<JournalTable journals={[pendingJournal]} />)
+
+    const btn = screen.getByRole('button', { name: `Tolak ${pendingJournal.transactionNumber}` })
+    expect(btn).toHaveProperty('disabled', false)
+
+    fireEvent.click(btn)
+
+    // Dialog Reject terbuka dengan tombol konfirmasi nonaktif (alasan belum diisi)
+    const dialog = screen.getByRole('dialog', { name: 'Tolak jurnal' })
+    expect(dialog).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Reject', exact: true })).toHaveProperty('disabled', true)
+  })
+
+  it('isi alasan wajib → Reject → status kembali draft + rejectionReason tersimpan + toast', async () => {
+    render(<JournalTable journals={[pendingJournal]} />)
+
+    fireEvent.click(screen.getByRole('button', { name: `Tolak ${pendingJournal.transactionNumber}` }))
+    fireEvent.change(screen.getByLabelText('Alasan penolakan'), { target: { value: 'Bukti pendukung belum lengkap' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Reject', exact: true }))
+    await act(async () => {}) // rejectJournal async → tunggu microtask sebelum asersi
+
+    const s = useStore.getState()
+    expect(s.journals[0].status).toBe('draft')
+    expect(s.journals[0].rejectionReason).toBe('Bukti pendukung belum lengkap')
+    expect(s.toast?.message).toBe('Jurnal ditolak — kembali ke draft')
+    expect(s.toast?.kind).toBe('success')
+    // Dialog tertutup setelah konfirmasi
+    expect(screen.queryByRole('dialog', { name: 'Tolak jurnal' })).toBeNull()
+  })
+
+  it('viewer TIDAK melihat tombol Tolak (tanpa izin approve)', () => {
+    useStore.setState({ user: viewer })
+    render(<JournalTable journals={[pendingJournal]} />)
+
+    expect(screen.queryByRole('button', { name: /Tolak/ })).toBeNull()
+  })
+
+  it('jurnal draft & posted TIDAK menampilkan tombol Tolak', () => {
+    render(<JournalTable journals={[mockJournals[0], mockJournals[5]]} />) // posted + draft
+
+    expect(screen.queryByRole('button', { name: /Tolak/ })).toBeNull()
   })
 })

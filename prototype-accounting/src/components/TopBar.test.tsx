@@ -1,14 +1,16 @@
 // @vitest-environment happy-dom
 // Test notifikasi approval di TopBar: badge jumlah jurnal menunggu approval di
 // tombol lonceng, dropdown daftarnya, klik item → navigasi ke Jurnal dengan
-// fokus (detail terbuka), dan state kosong.
+// fokus (detail terbuka), tombol Setujui inline (approve tanpa pindah halaman),
+// dan state kosong.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { mockAccounts, mockJournals } from '../data/mock'
 import { useStore } from '../store/useStore'
 import TopBar from './TopBar'
 
 const admin = { id: 'user-001', name: 'Rina', email: 'rina@estetikakreasi.co.id', role: 'admin' }
+const viewer = { id: 'user-003', name: 'Budi', email: 'budi@estetikakreasi.co.id', role: 'viewer' }
 
 // Dua jurnal menunggu approval (tidak ada di seed — dibuat untuk test)
 const pendingA = {
@@ -37,12 +39,13 @@ beforeEach(() => {
     page: 'dashboard',
     focusJournalId: null,
     focusAccountId: null,
+    journalFilter: null,
     toast: null,
   })
 })
 
 afterEach(() => {
-  useStore.setState({ apiStatus: 'idle', user: null, focusJournalId: null, focusAccountId: null })
+  useStore.setState({ apiStatus: 'idle', user: null, focusJournalId: null, focusAccountId: null, journalFilter: null })
   cleanup()
 })
 
@@ -75,7 +78,7 @@ describe('TopBar — notifikasi jurnal menunggu approval', () => {
     expect(screen.getByText('Penerimaan jasa — menunggu approval')).toBeTruthy()
   })
 
-  it('klik item daftar → navigasi ke halaman Jurnal + fokus jurnal tsb + dropdown tertutup', () => {
+  it('klik item daftar → navigasi ke halaman Jurnal + fokus + filter Menunggu Approval + dropdown tertutup', () => {
     render(<TopBar />)
 
     fireEvent.click(screen.getByRole('button', { name: /Notifikasi/ }))
@@ -84,8 +87,42 @@ describe('TopBar — notifikasi jurnal menunggu approval', () => {
     const s = useStore.getState()
     expect(s.page).toBe('journal')
     expect(s.focusJournalId).toBe('JNL-2026-03-012')
+    // Halaman Jurnal terbuka dengan filter status Menunggu Approval
+    expect(s.journalFilter).toBe('pending-approval')
     // Dropdown tertutup kembali
     expect(screen.queryByText('Menunggu Approval')).toBeNull()
+  })
+
+  it('admin melihat tombol Setujui INLINE di item dropdown; klik → posted + toast, tanpa navigasi', async () => {
+    render(<TopBar />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Notifikasi/ }))
+    const btn = screen.getByRole('button', { name: 'Setujui BKK-2026-03-0011' })
+    expect(btn).toHaveProperty('disabled', false)
+
+    fireEvent.click(btn)
+    await act(async () => {}) // approveJournal async → tunggu microtask
+
+    const s = useStore.getState()
+    // Status berubah posted tanpa navigasi (tetap di halaman saat ini)
+    const approved = s.journals.find((j) => j.id === 'JNL-2026-03-012')
+    expect(approved?.status).toBe('posted')
+    expect(approved?.postedAt).toBeTruthy()
+    expect(s.toast?.kind).toBe('success')
+    expect(s.page).toBe('dashboard') // tidak pindah halaman
+    // Item sudah di-approve → hilang dari dropdown, item lain tetap ada
+    expect(screen.queryByText('BKK-2026-03-0011')).toBeNull()
+    expect(screen.getByText('BKM-2026-03-0012')).toBeTruthy()
+  })
+
+  it('viewer TIDAK melihat tombol Setujui di dropdown (tanpa izin approve)', () => {
+    useStore.setState({ user: viewer })
+    render(<TopBar />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Notifikasi/ }))
+
+    expect(screen.getByText('BKK-2026-03-0011')).toBeTruthy() // item tetap tampil
+    expect(screen.queryByRole('button', { name: /Setujui/ })).toBeNull()
   })
 
   it('daftar kosong → pesan "Tidak ada jurnal menunggu approval"', () => {

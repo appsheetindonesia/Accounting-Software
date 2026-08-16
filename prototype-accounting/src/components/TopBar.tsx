@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Bell, BookMarked, LogOut, RotateCcw, Settings } from 'lucide-react'
+import { Bell, BookMarked, Check, LogOut, RotateCcw, Settings } from 'lucide-react'
 import { useStore } from '../store/useStore'
-import { ROLE_BADGE, ROLE_LABELS } from '../lib/permissions'
+import { canApproveJournal, ROLE_BADGE, ROLE_LABELS } from '../lib/permissions'
 import { formatIDR } from '../lib/format'
 import GlobalSearch from './GlobalSearch'
 import ResetDataModal from './ResetDataModal'
@@ -25,9 +25,13 @@ export default function TopBar() {
   // ---------- Notifikasi approval ----------
   // Badge jumlah jurnal menunggu approval di tombol lonceng + dropdown
   // daftarnya. Klik item → navigasi ke Jurnal dengan baris detail terbuka
-  // (fokus yang sama seperti global search) — tempat aksi Setujui/Tolak ada.
+  // (fokus yang sama seperti global search). Admin juga bisa APPROVE
+  // langsung dari dropdown (tanpa pindah halaman) lewat tombol Setujui
+  // inline — item hilang dari daftar begitu status berubah jadi posted.
   const journals = useStore((s) => s.journals)
-  const openSearchResult = useStore((s) => s.openSearchResult)
+  const approveJournal = useStore((s) => s.approveJournal)
+  const openPendingApproval = useStore((s) => s.openPendingApproval)
+  const canApprove = canApproveJournal(role)
   const pendingApprovals = useMemo(
     () => journals.filter((j) => j.status === 'pending-approval'),
     [journals],
@@ -47,7 +51,9 @@ export default function TopBar() {
 
   const openPendingJournal = (id: string) => {
     setNotifOpen(false)
-    openSearchResult('journal', id)
+    // Buka halaman Jurnal dengan fokus baris + filter status Menunggu Approval
+    // (beda dari global search yang membuka dengan filter Semua).
+    openPendingApproval(id)
   }
 
   return (
@@ -97,22 +103,35 @@ export default function TopBar() {
                     pendingApprovals.map((j) => {
                       const total = j.lines.reduce((sum, ln) => sum + ln.debit, 0)
                       return (
-                        <button
+                        <div
                           key={j.id}
-                          type="button"
-                          onClick={() => openPendingJournal(j.id)}
-                          className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-surface-hover"
-                          title={`Buka detail ${j.transactionNumber}`}
+                          className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 transition hover:bg-surface-hover"
                         >
-                          <span className="min-w-0">
+                          <button
+                            type="button"
+                            onClick={() => openPendingJournal(j.id)}
+                            className="min-w-0 flex-1 rounded-md px-1 py-1 text-left"
+                            title={`Buka detail ${j.transactionNumber}`}
+                          >
                             <span className="flex items-center gap-2">
                               <span className="num truncate text-sm font-semibold text-ink">{j.transactionNumber}</span>
                               <span className="num shrink-0 text-[10px] text-ink-faint">{j.date}</span>
                             </span>
                             <span className="block truncate text-xs text-ink-soft">{j.description}</span>
-                          </span>
-                          <span className="num shrink-0 text-xs font-semibold text-ink">{formatIDR(total)}</span>
-                        </button>
+                            <span className="num mt-0.5 block text-xs font-semibold text-ink">{formatIDR(total)}</span>
+                          </button>
+                          {canApprove && (
+                            <button
+                              type="button"
+                              onClick={() => approveJournal(j.id)}
+                              title="Setujui langsung — tanpa pindah halaman"
+                              aria-label={`Setujui ${j.transactionNumber}`}
+                              className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-ok px-2 py-1.5 text-xs font-semibold text-white transition hover:bg-ok/90 active:translate-y-px"
+                            >
+                              <Check size={13} /> Setujui
+                            </button>
+                          )}
+                        </div>
                       )
                     })
                   )}

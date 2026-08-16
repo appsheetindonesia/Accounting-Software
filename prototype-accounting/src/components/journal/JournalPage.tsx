@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, Plus, Lock } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import JournalTable from './JournalTable'
@@ -29,15 +29,34 @@ export default function JournalPage() {
   const periodLabel = periodInfo?.name ?? formatPeriodLabel(activePeriod)
   const periodOpen = periodInfo?.isOpen ?? true
 
-  // Hasil global search diklik → reset filter agar jurnal target tidak tersaring
-  // (JournalTable membuka baris detailnya lewat focusJournalId).
+  // Navigasi masuk ke halaman Jurnal menentukan filter status awal:
+  // - Dari dropdown notifikasi (openPendingApproval): journalFilter
+  //   'pending-approval' → buka dengan filter Menunggu Approval (flag
+  //   transient dibaca lalu dibersihkan).
+  // - Dari global search (focusJournalId tanpa journalFilter): reset filter
+  //   ke Semua agar jurnal target tidak tersaring (JournalTable membuka baris
+  //   detailnya lewat focusJournalId).
+  // Ref fromNotifRef menandai bahwa fokus ini berasal dari notifikasi sehingga
+  // pembersihan journalFilter (setelah diterapkan) tidak memicu reset ke
+  // 'all' pada render berikutnya.
   const focusJournalId = useStore((s) => s.focusJournalId)
+  const journalFilter = useStore((s) => s.journalFilter)
+  const clearJournalFilter = useStore((s) => s.clearJournalFilter)
+  const fromNotifRef = useRef(false)
   useEffect(() => {
+    if (journalFilter) {
+      fromNotifRef.current = true
+      setKeyword('')
+      setStatus(journalFilter)
+      clearJournalFilter()
+      return
+    }
     if (focusJournalId) {
       setKeyword('')
-      setStatus('all')
+      if (!fromNotifRef.current) setStatus('all')
+      fromNotifRef.current = false
     }
-  }, [focusJournalId])
+  }, [journalFilter, focusJournalId, clearJournalFilter])
 
   // Skeleton saat data jurnal sedang di-fetch: fetch pertama oleh init()
   // (apiStatus 'connecting' & belum pernah sinkron — lastSyncedAt null) ATAU
