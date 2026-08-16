@@ -254,9 +254,12 @@ export const api = {
   },
   // Export Buku Besar per akun (PDF/XLSX) — GET /exports/ledger/:accountId.
   // Nama file memakai kode akun, konsisten dengan penamaan server.
-  exportLedger(accountId: string, accountCode: string, format: 'pdf' | 'xlsx', period: string) {
-    const filename = `Buku-Besar-${accountCode}-${period}.${format}`
-    return download(`/exports/ledger/${accountId}`, { format, period }).then(() => filename)
+  // Rentang: default pakai `period` (YYYY-MM); bila `range` diberikan, gunakan
+  // start/end custom (YYYY-MM-DD) — nama file memakai rentang tersebut.
+  exportLedger(accountId: string, accountCode: string, format: 'pdf' | 'xlsx', period: string, range?: { start: string; end: string }) {
+    const label = range ? `${range.start}..${range.end}` : period
+    const filename = `Buku-Besar-${accountCode}-${label}.${format}`
+    return download(`/exports/ledger/${accountId}`, range ? { format, ...range } : { format, period }).then(() => filename)
   },
 
   // 12. Pencarian global — GET /search (jurnal + akun). Dipakai input search

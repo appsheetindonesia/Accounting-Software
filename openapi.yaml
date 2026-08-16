@@ -1462,6 +1462,44 @@ paths:
                 type: string
                 format: binary
 
+  /exports/ledger/{accountId}:
+    get:
+      tags: [Export]
+      summary: Export Buku Besar per akun (PDF/Excel), dukung rentang tanggal custom
+      parameters:
+        - $ref: "#/components/parameters/XEntityId"
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "1-1100"
+        - $ref: "#/components/parameters/Period"
+        - name: start
+          in: query
+          description: Rentang custom awal (YYYY-MM-DD) — wajib bersama `end`, menggantikan `period`
+          schema: { type: string, format: date }
+        - name: end
+          in: query
+          description: Rentang custom akhir (YYYY-MM-DD) — wajib bersama `start`
+          schema: { type: string, format: date }
+        - name: format
+          in: query
+          required: true
+          schema: { type: string, enum: [pdf, xlsx] }
+      responses:
+        "200":
+          description: File Buku Besar akun
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
   # ============================= SEARCH =============================
   /search:
     get:

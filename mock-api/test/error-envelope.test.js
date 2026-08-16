@@ -477,6 +477,44 @@ describe('Export Buku Besar per akun — GET /exports/ledger/:accountId', () => 
       .query({ format: 'docx', token: tokens.admin })
     expectError(res, 422, 'UNSUPPORTED_FORMAT')
   })
+
+  it('rentang custom start/end → 200 + filename memakai rentang', async () => {
+    const res = await request(app)
+      .get('/exports/ledger/1-1100')
+      .query({ format: 'pdf', start: '2026-03-01', end: '2026-03-15', token: tokens.admin })
+    expect(res.status).toBe(200)
+    expect(res.headers['content-disposition']).toContain('Buku-Besar-1-1100-2026-03-01..2026-03-15.pdf')
+    expect(res.body.toString('utf8')).toContain('period=2026-03-01..2026-03-15')
+  })
+
+  it('rentang custom tanpa period → tetap 200 (start/end menggantikan period)', async () => {
+    const res = await request(app)
+      .get('/exports/ledger/1-1100')
+      .query({ format: 'pdf', start: '2026-02-01', end: '2026-02-28', token: tokens.admin })
+    expect(res.status).toBe(200)
+    expect(res.headers['content-disposition']).toContain('Buku-Besar-1-1100-2026-02-01..2026-02-28.pdf')
+  })
+
+  it('hanya start tanpa end → INVALID_DATE_RANGE', async () => {
+    const res = await request(app)
+      .get('/exports/ledger/1-1100')
+      .query({ format: 'pdf', start: '2026-03-01', token: tokens.admin })
+    expectError(res, 422, 'INVALID_DATE_RANGE')
+  })
+
+  it('start > end → INVALID_DATE_RANGE', async () => {
+    const res = await request(app)
+      .get('/exports/ledger/1-1100')
+      .query({ format: 'pdf', start: '2026-03-31', end: '2026-03-01', token: tokens.admin })
+    expectError(res, 422, 'INVALID_DATE_RANGE')
+  })
+
+  it('format tanggal salah → INVALID_DATE_RANGE', async () => {
+    const res = await request(app)
+      .get('/exports/ledger/1-1100')
+      .query({ format: 'pdf', start: '01/03/2026', end: '2026-03-15', token: tokens.admin })
+    expectError(res, 422, 'INVALID_DATE_RANGE')
+  })
 })
 
 // ------------------------------------------------------------

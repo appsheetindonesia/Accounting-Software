@@ -44,6 +44,10 @@ export default function LedgerPage() {
   const clearSearchFocus = useStore((s) => s.clearSearchFocus)
   const [accountId, setAccountId] = useState('1-1100')
   const [periodIdx, setPeriodIdx] = useState(2) // Maret 2026
+  // Rentang export custom (opsional) — kosong → pakai periode aktif.
+  const [rangeStart, setRangeStart] = useState('')
+  const [rangeEnd, setRangeEnd] = useState('')
+  const exportRange = rangeStart && rangeEnd ? { start: rangeStart, end: rangeEnd } : undefined
 
   useEffect(() => {
     if (focusAccountId) {
@@ -96,7 +100,25 @@ export default function LedgerPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <ExportButtons accountId={account?.id ?? ''} accountCode={account?.code ?? ''} accountName={account?.name ?? ''} period={period.key} />
+          <div className="flex items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1.5 shadow-card">
+            <span className="text-[11px] font-semibold text-ink-faint">Rentang export</span>
+            <input
+              type="date"
+              value={rangeStart}
+              onChange={(e) => setRangeStart(e.target.value)}
+              aria-label="Tanggal mulai export"
+              className="text-xs text-ink focus:outline-none"
+            />
+            <span className="text-ink-faint">–</span>
+            <input
+              type="date"
+              value={rangeEnd}
+              onChange={(e) => setRangeEnd(e.target.value)}
+              aria-label="Tanggal akhir export"
+              className="text-xs text-ink focus:outline-none"
+            />
+          </div>
+          <ExportButtons accountId={account?.id ?? ''} accountCode={account?.code ?? ''} accountName={account?.name ?? ''} period={period.key} range={exportRange} />
           <label className="flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 shadow-card">
             <NotebookPen size={14} className="shrink-0 text-primary" />
             <select

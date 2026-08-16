@@ -72,4 +72,14 @@ describe('download — unduhan via navigasi anchor (export PDF/XLSX)', () => {
       `${BASE_URL}/exports/ledger/1-1100?format=pdf&period=2026-03&token=mock.t&entity=ent-001`,
     )
   })
+
+  it('endpoint Buku Besar dengan rentang custom: start & end menggantikan period', async () => {
+    setAuth('mock.t', 'ent-001', 'r1')
+
+    await download('/exports/ledger/1-1100', { format: 'xlsx', start: '2026-03-01', end: '2026-03-15' })
+
+    expect(clickedAnchor()!.href).toBe(
+      `${BASE_URL}/exports/ledger/1-1100?format=xlsx&start=2026-03-01&end=2026-03-15&token=mock.t&entity=ent-001`,
+    )
+  })
 })

@@ -167,7 +167,7 @@ curl http://localhost:4000/journals?status=posted \
 | **Laporan** | Neraca Lajur, Laba Rugi, Neraca (asOf), Arus Kas | Trial balance **isBalanced**, neraca seimbang, laba bersih = pendapatan − beban |
 | **Periode** | CRUD, activate, close | Close periode + aksi jurnal draft (`post-all`/`delete-all`/`keep`), blokir entri di periode tertutup |
 | **Dashboard** | summary, trend, recent-journals, alerts | Kartu saldo + delta, alert draft jurnal / periode belum ditutup |
-| **Export** | PDF/XLSX per laporan, **Buku Besar per akun** (`/exports/ledger/:accountId`), COA | Content-Disposition + payload placeholder |
+| **Export** | PDF/XLSX per laporan, **Buku Besar per akun** (`/exports/ledger/:accountId`, dukung `period` ATAU rentang custom `start`+`end`), COA | Content-Disposition + payload placeholder |
 | **Search** | global lintas jurnal & akun | Partial match case-insensitive |
 
 ## Konvensi respons (persis `API - Accounting.md`)

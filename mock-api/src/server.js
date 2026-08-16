@@ -1345,15 +1345,26 @@ app.get('/exports/accounts', requireAuthExport, (req, res) => {
 })
 
 // Export Buku Besar per akun — validasi sama dengan GET /ledger/accounts/:id
-// (akun & periode wajib dikenal), payload placeholder seperti export laporan.
+// (akun wajib dikenal), payload placeholder seperti export laporan.
+// Rentang: `period` (YYYY-MM) ATAU `start`+`end` (YYYY-MM-DD, keduanya wajib)
+// untuk rentang tanggal custom. Backward compatible: tanpa start/end → period.
 app.get('/exports/ledger/:accountId', requireAuthExport, (req, res) => {
   const { accountId } = req.params
   const format = req.query.format || 'pdf'
   if (!['pdf', 'xlsx'].includes(format)) return fail(res, 422, 'UNSUPPORTED_FORMAT', 'Format tidak didukung (pdf/xlsx)')
   const account = db.accounts.find((a) => a.id === accountId)
   if (!account) return fail(res, 404, 'ACCOUNT_NOT_FOUND', 'Akun tidak ditemukan')
-  const periodKey = req.query.period || '2026-03'
-  if (!periodByKey(periodKey)) return fail(res, 422, 'INVALID_PERIOD', 'Periode tidak valid')
+  const isoDate = /^\d{4}-\d{2}-\d{2}$/
+  const { start, end } = req.query
+  let periodKey = req.query.period || '2026-03'
+  if (start || end) {
+    if (!start || !end) return fail(res, 422, 'INVALID_DATE_RANGE', 'Rentang tanggal wajib lengkap (start & end)')
+    if (!isoDate.test(start) || !isoDate.test(end)) return fail(res, 422, 'INVALID_DATE_RANGE', 'Format tanggal harus YYYY-MM-DD')
+    if (start > end) return fail(res, 422, 'INVALID_DATE_RANGE', 'start tidak boleh setelah end')
+    periodKey = `${start}..${end}`
+  } else if (!periodByKey(periodKey)) {
+    return fail(res, 422, 'INVALID_PERIOD', 'Periode tidak valid')
+  }
   const filename = `Buku-Besar-${account.code}-${periodKey}.${format}`
   res.setHeader('Content-Type', format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)

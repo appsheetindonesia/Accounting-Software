@@ -66,13 +66,40 @@ describe('ExportButtons — tombol Export PDF/XLSX', () => {
 
     fireEvent.click(getByRole('button', { name: 'Export XLSX' }))
 
-    await waitFor(() => expect(mockedApi.exportLedger).toHaveBeenCalledWith('1-1100', '1-1100', 'xlsx', '2026-03'))
+    await waitFor(() => expect(mockedApi.exportLedger).toHaveBeenCalledWith('1-1100', '1-1100', 'xlsx', '2026-03', undefined))
     await waitFor(() => {
       const t = useStore.getState().toast
       expect(t?.kind).toBe('success')
       expect(t?.message).toContain('Buku-Besar-1-1100-2026-03.xlsx')
     })
     expect(mockedApi.exportReport).not.toHaveBeenCalled()
+  })
+
+  it('variant Buku Besar dengan rentang custom: range diteruskan ke api.exportLedger + filename berisi rentang', async () => {
+    mockedApi.exportLedger.mockResolvedValue('Buku-Besar-1-1100-2026-03-01..2026-03-15.xlsx')
+    const { getByRole } = render(
+      <ExportButtons
+        accountId="1-1100"
+        accountCode="1-1100"
+        accountName="Kas Besar"
+        period="2026-03"
+        range={{ start: '2026-03-01', end: '2026-03-15' }}
+      />,
+    )
+
+    fireEvent.click(getByRole('button', { name: 'Export XLSX' }))
+
+    await waitFor(() =>
+      expect(mockedApi.exportLedger).toHaveBeenCalledWith('1-1100', '1-1100', 'xlsx', '2026-03', {
+        start: '2026-03-01',
+        end: '2026-03-15',
+      }),
+    )
+    await waitFor(() => {
+      const t = useStore.getState().toast
+      expect(t?.kind).toBe('success')
+      expect(t?.message).toContain('Buku-Besar-1-1100-2026-03-01..2026-03-15.xlsx')
+    })
   })
 
   it('gagal export → toast error, tanpa crash', async () => {

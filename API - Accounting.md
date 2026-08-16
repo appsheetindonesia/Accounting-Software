@@ -623,6 +623,14 @@ Content-Disposition: attachment; filename="Laba-Rugi-Maret-2026.pdf"
 ### 11.2 GET `/exports/accounts`
 **Query:** `?format=xlsx` — export COA (dipakai juga oleh modul COA).
 
+### 11.3 GET `/exports/ledger/{accountId}` — Buku Besar per akun
+**Query:**
+- `?format=pdf|xlsx&period=2026-03` — periode aktif (default `2026-03`)
+- `?format=pdf|xlsx&start=2026-03-01&end=2026-03-15` — **rentang tanggal custom** (keduanya wajib, format `YYYY-MM-DD`, `start <= end`); menggantikan `period`
+
+**Response 200:** file binary dengan `Content-Disposition: attachment; filename="Buku-Besar-1-1100-2026-03-01..2026-03-15.xlsx"`
+**Error:** 404 `ACCOUNT_NOT_FOUND` · 422 `UNSUPPORTED_FORMAT` / `INVALID_PERIOD` / `INVALID_DATE_RANGE`
+
 ---
 
 ## 12. Pencarian Global

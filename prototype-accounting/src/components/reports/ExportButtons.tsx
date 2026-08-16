@@ -7,7 +7,7 @@ type ExportFormat = 'pdf' | 'xlsx'
 
 type ExportButtonsProps =
   | { reportType: 'trial-balance' | 'income-statement' | 'balance-sheet' | 'cash-flow'; period: string }
-  | { accountId: string; accountCode: string; accountName: string; period: string }
+  | { accountId: string; accountCode: string; accountName: string; period: string; range?: { start: string; end: string } }
 
 /**
  * Tombol Export PDF / XLSX untuk halaman laporan & Buku Besar per akun.
@@ -30,7 +30,7 @@ export default function ExportButtons(props: ExportButtonsProps) {
       const filename =
         'reportType' in props
           ? await api.exportReport(props.reportType, format, period)
-          : await api.exportLedger(props.accountId, props.accountCode, format, period)
+          : await api.exportLedger(props.accountId, props.accountCode, format, period, props.range)
       showToast(`Laporan berhasil diekspor — ${filename}`)
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Export gagal — coba lagi', 'error')
