@@ -4,6 +4,8 @@
 #   1. test — MATRIX per-tahap:
 #        • prototipe  (unit + integration, Vitest + MSW)
 #        • mock API   (integration, Vitest + Supertest)
+#        • lint       (oxlint prototipe — gagal pada error, jadi push/PR
+#                      tidak lolos bila ada pelanggaran lint)
 #      Setiap tahap menulis laporan JUnit (test-results/junit.xml) DAN
 #      cakupan Vitest coverage (coverage/, provider v8 — tabel di log +
 #      json-summary/lcov), lalu meng-upload keduanya sebagai artifact:
@@ -54,6 +56,10 @@ jobs:
             dir: mock-api
             lock: mock-api/package-lock.json
             artifact: junit-integration-mock-api
+          - tahap: lint (oxlint prototipe)
+            dir: prototype-accounting
+            lock: prototype-accounting/package-lock.json
+            lint: true
     env:
       # CI deterministik: persistence mock API dimatikan — state
       # in-memory, reset ke seed di setiap test (beforeEach).
@@ -73,11 +79,19 @@ jobs:
         working-directory: ${{ matrix.dir }}
         run: npm ci
 
+      # Lint (entry matrix dengan penanda lint:true — hanya prototipe yang
+      # punya oxlint). Gagal pada error → push/PR tidak lolos lint.
+      - name: 'Lint (oxlint) — ${{ matrix.dir }}'
+        if: matrix.lint
+        working-directory: ${{ matrix.dir }}
+        run: npm run lint
+
       # JUnit reporter bawaan Vitest + coverage (--coverage, provider v8):
       # output keduanya dipakai artifact debug (default reporter tetap tampil
       # di log). Lokasi stabil per paket: <dir>/test-results/junit.xml dan
       # <dir>/coverage/ (keduanya di-ignore, tidak pernah di-commit).
       - name: 'Test + laporan JUnit + coverage (${{ matrix.dir }})'
+        if: ${{ !matrix.lint }}
         working-directory: ${{ matrix.dir }}
         run: npx vitest run --coverage --reporter=default --reporter=junit --outputFile=test-results/junit.xml
 

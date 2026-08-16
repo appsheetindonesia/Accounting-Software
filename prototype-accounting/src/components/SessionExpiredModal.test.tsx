@@ -33,7 +33,7 @@ describe('SessionExpiredModal — refresh gagal → pemberitahuan eksplisit', ()
     expect(screen.getByRole('button', { name: 'Masuk kembali' })).toBeTruthy()
   })
 
-  it('tombol \"Masuk kembali\" menutup modal (sessionExpired → false)', () => {
+  it('tombol "Masuk kembali" menutup modal (sessionExpired → false)', () => {
     useStore.setState({ sessionExpired: true })
     render(<SessionExpiredModal />)
 
