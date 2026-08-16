@@ -401,6 +401,39 @@ test.describe('RG-05 s/d RG-08 — entitas, approval, search, periode', () => {
     for (const expected of ['create', 'submit', 'approve']) expect(actions).toContain(expected)
   })
 
+  test('RG-06b rejectionReason tampil di kartu Jurnal Terbaru Dashboard setelah reject via UI', async ({ page }) => {
+    // 1. Buat jurnal → "Simpan & Ajukan" → Menunggu Approval
+    const dialog = await openJournalModal(page)
+    await fillBalancedJournal(dialog, '4000000', 'RG-06b jurnal badge dashboard')
+    await dialog.getByRole('button', { name: 'Simpan & Ajukan' }).click()
+    await expect(page.getByRole('status')).toContainText('diajukan untuk persetujuan')
+
+    // 2. Reject via UI dengan alasan wajib → kembali Draft
+    await gotoNav(page, 'Jurnal')
+    await page.locator('tbody tr', { hasText: 'BKM-2026-03-0009' }).first().getByRole('button', { name: 'Buka detail' }).click()
+    await page.getByRole('button', { name: 'Reject', exact: true }).click()
+    const rejectDialog = page.getByRole('dialog', { name: 'Tolak jurnal' })
+    await rejectDialog.getByLabel('Alasan penolakan').fill('Bukti E2E kurang lengkap')
+    await rejectDialog.getByRole('button', { name: 'Reject', exact: true }).click()
+    await expect(page.getByRole('status')).toContainText('ditolak — kembali ke draft')
+
+    // 3. Dashboard → Jurnal Terbaru: baris jurnal yang di-reject menampilkan
+    //    badge "Ditolak — <alasan>" (bukan hanya di detail jurnal)
+    await gotoNav(page, 'Dashboard')
+    const row9 = page.locator('tbody tr', { hasText: 'BKM-2026-03-0009' }).first()
+    await expect(row9.getByText('Ditolak — Bukti E2E kurang lengkap')).toBeVisible()
+
+    // 4. Jurnal lain di kartu yang sama TIDAK punya badge Ditolak
+    const row8 = page.locator('tbody tr', { hasText: 'BKM-2026-03-0008' }).first()
+    await expect(row8.getByText('Ditolak', { exact: false })).toHaveCount(0)
+
+    // 5. Reload → badge tetap tampil (di-fetch ulang dari server, bukan state lokal)
+    await page.reload()
+    await expect(page.locator('footer')).toContainText('Online · Mock API', { timeout: 20_000 })
+    const row9Reload = page.locator('tbody tr', { hasText: 'BKM-2026-03-0009' }).first()
+    await expect(row9Reload.getByText('Ditolak — Bukti E2E kurang lengkap')).toBeVisible()
+  })
+
   test('RG-07 Filter & search: filter jurnal + pencarian global konsisten', async ({ page }) => {
     // 1. Filter teks di halaman Jurnal (UI)
     await gotoNav(page, 'Jurnal')
