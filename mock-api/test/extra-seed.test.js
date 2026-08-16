@@ -210,6 +210,56 @@ describe('Laba Rugi YTD bertingkat per periode — 57 / 59 / 26jt (seed:extra)',
 })
 
 // ------------------------------------------------------------
+describe('Neraca — konsistensi baseline Maret (delta = efek jurnal Jan–Feb)', () => {
+  it('delta Aset/Utang/Modal/Laba = efek jurnal Jan–Feb (+24 aset, +42 utang, 0 modal, −18 laba)', async () => {
+    // Baseline (tanpa extra) meng-embed saldo pre-Maret sebagai baseBalance:
+    //   Aset 557 = Utang 150 + Modal 363 + Laba berjalan 44 (api-baseline.test.js).
+    // Seed extra memuat Jan–Feb sebagai jurnal eksplisit → Neraca Maret:
+    //   Aset 581, Utang 192, Modal 363, Laba 26.
+    // Konsistensi: selisih keduanya PERSIS efek jurnal Jan–Feb:
+    //   aset  +24jt = kas +4 (30−10−40+28−4) + piutang +20 (JV-04)
+    //   utang +42jt = utang gaji Februari (BKK-03, kredit 2-1000, belum dibayar)
+    //   modal   0jt = Modal Pemilik (3-1000) tidak tersentuh
+    //   laba  −18jt = pendapatan +78 − beban +96
+    const reset = (body) => request(app).post('/admin/reset').send(body)
+    const neraca = () =>
+      request(app).get('/reports/balance-sheet').query({ asOf: '2026-03-31' }).set(auth())
+    const lineOf = (d, name) =>
+      d.body.data.sections
+        .find((s) => s.title === 'KEWAJIBAN & EKUITAS')
+        .lines.find((l) => l.accountName === name).amount
+
+    await reset({}).then((r) => expect(r.status).toBe(200))
+    const base = await neraca()
+    expect(base.body.data.totalAssets).toBe(557_000_000)
+    expect(lineOf(base, 'Utang Usaha')).toBe(150_000_000)
+    expect(lineOf(base, 'Modal Pemilik')).toBe(363_000_000)
+    expect(lineOf(base, 'Laba Ditahan (berjalan)')).toBe(44_000_000)
+    expect(base.body.data.isBalanced).toBe(true)
+
+    await reset({ withExtra: true }).then((r) => expect(r.status).toBe(200))
+    const extra = await neraca()
+    expect(extra.body.data.totalAssets).toBe(581_000_000)
+    expect(lineOf(extra, 'Utang Usaha')).toBe(192_000_000)
+    expect(lineOf(extra, 'Modal Pemilik')).toBe(363_000_000)
+    expect(lineOf(extra, 'Laba Ditahan (berjalan)')).toBe(26_000_000)
+    expect(extra.body.data.isBalanced).toBe(true)
+
+    // Delta = efek jurnal Jan–Feb; identitas akuntansi tetap terjaga
+    expect(extra.body.data.totalAssets - base.body.data.totalAssets).toBe(24_000_000)
+    expect(lineOf(extra, 'Utang Usaha') - lineOf(base, 'Utang Usaha')).toBe(42_000_000)
+    expect(lineOf(extra, 'Modal Pemilik') - lineOf(base, 'Modal Pemilik')).toBe(0)
+    expect(lineOf(extra, 'Laba Ditahan (berjalan)') - lineOf(base, 'Laba Ditahan (berjalan)')).toBe(-18_000_000)
+    // ΔAset = ΔUtang + ΔModal + ΔLaba
+    expect(extra.body.data.totalAssets - base.body.data.totalAssets).toBe(
+      (lineOf(extra, 'Utang Usaha') - lineOf(base, 'Utang Usaha')) +
+        (lineOf(extra, 'Modal Pemilik') - lineOf(base, 'Modal Pemilik')) +
+        (lineOf(extra, 'Laba Ditahan (berjalan)') - lineOf(base, 'Laba Ditahan (berjalan)')),
+    )
+  })
+})
+
+// ------------------------------------------------------------
 describe('Rantai Buku Besar Pendapatan Jasa (4-1000) — 130 → 160 → 208 → 233jt', () => {
   it('Januari: 130 → 160jt (1 entri BKM-01)', async () => {
     const res = await ledger('4-1000', '2026-01')
