@@ -33,14 +33,27 @@ Perubahan sejak tag **v0.1.0-alpha** (commit `9052bf7`).
 ## [v0.1.0-alpha] — 2026-08-15
 
 Rilis **alpha** — penanda milestone *approval UI + CI* (commit `9052bf7`).
+Catatan rilis lengkap: [releases/tag/v0.1.0-alpha](https://github.com/appsheetindonesia/Accounting-Software/releases/tag/v0.1.0-alpha).
 
-### Ditambahkan
+### Fitur
 
 - **Dokumentasi lengkap + prototipe interaktif** terintegrasi mock API (BukuWarung Akuntansi → Appsheet Accounting Journal, tema biru `#2596BE`)
-- **Modul laporan lanjutan**: Buku Besar (saldo berjalan), Laba Rugi, Neraca Lajur & Neraca (indikator seimbang), migrasi persist per-version
-- **QA tooling**: generator test case + template hasil, suite **E2E Playwright RG-01..RG-12**
-- **Autentikasi**: halaman login, refresh token, integration test MSW, sinkronisasi branding
-- **Workflow approval** (submit / approve / reject) via UI + **CI GitHub Actions** (unit → integration → E2E)
+- **Auth**: login/refresh token + **auto-refresh di sesi aktif** (tanpa reload), integration test MSW
+- **Siklus jurnal**: draft → submit → approve/reject → post → reverse
+- **Modul laporan lanjutan**: Buku Besar (saldo berjalan), Laba Rugi, Neraca Lajur & Neraca (indikator seimbang) + **persist & offline queue**
+- **Workflow approval via UI** (submit / approve / reject) + **CI GitHub Actions** (unit → integration → E2E)
+- **Branding PT. Kreasi Inovasi Estetika** (email `estetikakreasi.co.id`, tema biru)
+
+### Fix
+
+- **Sinkronisasi branding** — nama lama diganti konsisten di dokumen, prototipe, dan asersi E2E
+- **Penyempurnaan mock API** — perilaku endpoint diselaraskan dengan kontrak API
+
+### Test
+
+- **E2E Playwright RG-01..RG-12** via UI (bukan asersi API langsung)
+- **QA tooling**: generator test cases + template hasil
+- **Suite integration error-envelope** (katalog API §13) + **seed:extra** lintas bulan (Jan–Feb)
 
 ### Status
 
