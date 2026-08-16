@@ -27,7 +27,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   const res = await request(app).post('/admin/reset').send({})
   expect(res.status).toBe(200)
-  expect(res.body.data.journals).toBe(8) // seed Maret 2026
+  expect(res.body.data.journals).toBe(10) // 8 seed Maret ent-001 + 2 seed ent-002 (CV Karya Mandiri)
 })
 
 // ------------------------------------------------------------------

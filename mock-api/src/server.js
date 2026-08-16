@@ -9,7 +9,7 @@
 import express from 'express'
 import cors from 'cors'
 import { randomUUID } from 'crypto'
-import { entities, users, rolePermissions, accounts, coaTemplate, journals, periods, mockTrend, extraJournals } from './data.js'
+import { entities, users, rolePermissions, accounts, coaTemplate, journals, periods, mockTrend, extraJournals, ent2Accounts, ent2Journals } from './data.js'
 import { isEnabled as persistEnabled, getFilePath as persistFilePath, loadState as loadPersisted, saveState as savePersisted } from './persistence.js'
 
 const app = express()
@@ -31,9 +31,19 @@ const createDb = ({ withExtra = false } = {}) => ({
   // ikut mengubah objek seed → reset tidak mengembalikan kondisi awal.
   entities: structuredClone(entities),
   users: structuredClone(users),
-  accounts: structuredClone(accounts),
-  // Seed dimiliki entitas default (ent-001) — semua user seed juga ent-001
-  journals: structuredClone([...journals, ...(withExtra ? extraJournals : [])]).map((j) => ({ entityId: 'ent-001', ...j })),
+  // Akun & jurnal di-stamp entityId (multi-tenant). Seed dimiliki ent-001;
+  // ent2Accounts/ent2Journals milik ent-002 (CV Karya Mandiri). Id akun bisa
+  // sama antar entitas — isolasi via entityId + header X-Entity-Id.
+  accounts: [
+    ...structuredClone(accounts).map((a) => ({ ...a, entityId: 'ent-001' })),
+    ...structuredClone(ent2Accounts).map((a) => ({ ...a, entityId: 'ent-002' })),
+  ],
+  journals: [
+    ...structuredClone([...journals, ...(withExtra ? extraJournals : [])]).map((j) => ({ entityId: 'ent-001', ...j })),
+    // Fixture ent-002 (CV Karya Mandiri) selalu dimuat — entity switcher punya
+    // data nyata untuk dipertukarkan (mirror MSW handlers prototipe).
+    ...structuredClone(ent2Journals).map((j) => ({ entityId: 'ent-002', ...j })),
+  ],
   periods: structuredClone(periods),
   sessions: new Map(), // refreshToken -> userId
   seq: { journal: 100, line: 100, attachment: 100, user: 100, entity: 100 },
@@ -54,11 +64,22 @@ const PERSIST_FILE = persistFilePath()
 if (PERSIST) {
   const loaded = loadPersisted(PERSIST_FILE)
   if (loaded) {
+    const loadedAccounts = (loaded.accounts ?? []).map((a) => ({ ...a, entityId: a.entityId ?? 'ent-001' }))
+    const loadedJournals = (loaded.journals ?? []).map((j) => ({ ...j, entityId: j.entityId ?? 'ent-001' }))
+    // Persist dibuat SEBELUM entitas seed baru (mis. ent-002) ada → entitas itu
+    // absen dari file. Merge seed ent-002 hanya jika BELUM ADA satupun akun/
+    // jurnal ent-002 (agar hapus akun oleh user tidak di-revert di restart).
+    if (!loadedAccounts.some((a) => a.entityId === 'ent-002')) {
+      loadedAccounts.push(...structuredClone(ent2Accounts).map((a) => ({ ...a, entityId: 'ent-002' })))
+    }
+    if (!loadedJournals.some((j) => j.entityId === 'ent-002')) {
+      loadedJournals.push(...structuredClone(ent2Journals).map((j) => ({ entityId: 'ent-002', ...j })))
+    }
     db = {
       entities: loaded.entities,
       users: loaded.users,
-      accounts: loaded.accounts,
-      journals: loaded.journals,
+      accounts: loadedAccounts,
+      journals: loadedJournals,
       periods: loaded.periods,
       sessions: new Map(loaded.sessions ?? []),
       seq: loaded.seq ?? { journal: 100, line: 100, attachment: 100, user: 100, entity: 100 },
@@ -165,12 +186,18 @@ app.use((req, res, next) => {
 // jurnal pembalik punya reversalOf (tidak dihitung) → pasangan bernet 0.
 const isEffect = (j) => j.status === 'posted' && !j.reversalOf
 
-const computeBalances = () => {
-  const map = new Map(db.accounts.map((a) => [a.id, a.baseBalance]))
-  for (const j of db.journals) {
+// ---- multi-tenant: entitas yang dilayani (mirror req.entityId di requireAuth) ----
+const entityAccounts = (entityId) => db.accounts.filter((a) => a.entityId === entityId)
+const entityJournals = (entityId) => db.journals.filter((j) => j.entityId === entityId)
+
+// Saldo live per akun — PER ENTITAS: base + efek jurnal posted milik entitas itu.
+const computeBalances = (entityId) => {
+  const accounts = entityAccounts(entityId)
+  const map = new Map(accounts.map((a) => [a.id, a.baseBalance]))
+  for (const j of entityJournals(entityId)) {
     if (!isEffect(j)) continue
     for (const ln of j.lines) {
-      const account = db.accounts.find((a) => a.id === ln.accountId)
+      const account = accounts.find((a) => a.id === ln.accountId)
       if (!account) continue
       const delta = account.normalBalance === 'debit' ? ln.debit - ln.credit : ln.credit - ln.debit
       map.set(account.id, (map.get(account.id) ?? 0) + delta)
@@ -179,9 +206,9 @@ const computeBalances = () => {
   return map
 }
 
-// Bangun tree akun dari saldo live (API §4.1)
-const buildAccountTree = (balances) => {
-  const byId = new Map(db.accounts.map((a) => [a.id, { ...a, balance: balances.get(a.id) ?? 0, children: [] }]))
+// Bangun tree akun dari saldo live (API §4.1) — akun ENTITAS AKTIF saja.
+const buildAccountTree = (entityId, balances) => {
+  const byId = new Map(entityAccounts(entityId).map((a) => [a.id, { ...a, balance: balances.get(a.id) ?? 0, children: [] }]))
   const roots = []
   for (const node of byId.values()) {
     if (node.parentId && byId.has(node.parentId)) byId.get(node.parentId).children.push(node)
@@ -257,7 +284,8 @@ const validateJournal = (body, excludeJournalId, entityId) => {
       details.push({ field: `lines[${i}].accountId`, message: 'Akun wajib dipilih' })
       continue
     }
-    const account = db.accounts.find((a) => a.id === ln.accountId)
+    // Akun divalidasi terhadap COA ENTITAS AKTIF (bukan global)
+    const account = db.accounts.find((a) => a.entityId === entityId && a.id === ln.accountId)
     if (!account || !account.isActive)
       return { code: 'LINE_NO_ACCOUNT', message: 'Akun tidak aktif atau sudah dihapus', status: 422, details: [{ field: `lines[${i}].accountId`, message: `${ln.accountId}` }] }
     if (account.isHeader)
@@ -627,17 +655,19 @@ app.post('/entities/:id/activate', requireAuth, requirePermission('entity.manage
 // 4. CHART OF ACCOUNTS
 // ------------------------------------------------------------
 app.get('/accounts', requireAuth, (req, res) => {
-  const balances = computeBalances()
-  let list = db.accounts.filter((a) => a.isActive || !req.query.activeOnly)
+  const entityId = req.entityId
+  const balances = computeBalances(entityId)
+  // HANYA akun entitas aktif (X-Entity-Id)
+  let list = entityAccounts(entityId).filter((a) => a.isActive || !req.query.activeOnly)
   if (req.query.type) list = list.filter((a) => a.type === req.query.type)
   if (req.query.keyword) {
     const kw = req.query.keyword.toLowerCase()
     list = list.filter((a) => a.name.toLowerCase().includes(kw) || a.code.toLowerCase().includes(kw))
   }
   if (req.query.tree === 'true') {
-    const roots = buildAccountTree(balances).filter((n) => list.some((a) => a.id === n.id))
+    const roots = buildAccountTree(entityId, balances).filter((n) => list.some((a) => a.id === n.id))
     const totals = { asset: 0, liability: 0, equity: 0 }
-    for (const a of db.accounts) {
+    for (const a of entityAccounts(entityId)) {
       const b = balances.get(a.id) ?? 0
       if (a.type === 'asset') totals.asset += b
       else if (a.type === 'liability') totals.liability += b
@@ -656,46 +686,47 @@ app.get('/accounts', requireAuth, (req, res) => {
 app.post('/accounts', requireAuth, requirePermission('account.write'), (req, res) => {
   const { code, name, type, group, category, normalBalance, parentId, description, isActive } = req.body ?? {}
   if (!/^\d+-\d+$/.test(code ?? '')) return fail(res, 422, 'INVALID_CODE_FORMAT', 'Format kode {{GOL}}-{{NOMOR}}')
-  if (db.accounts.some((a) => a.code === code)) return fail(res, 409, 'ACCOUNT_CODE_EXISTS', 'Kode akun sudah digunakan')
+  // Kode unik PER ENTITAS — dua entitas boleh punya COA sendiri
+  if (db.accounts.some((a) => a.entityId === req.entityId && a.code === code)) return fail(res, 409, 'ACCOUNT_CODE_EXISTS', 'Kode akun sudah digunakan')
   if (parentId) {
-    const parent = db.accounts.find((a) => a.id === parentId)
+    const parent = db.accounts.find((a) => a.entityId === req.entityId && a.id === parentId)
     if (!parent || !parent.isActive) return fail(res, 422, 'INVALID_PARENT', 'Akun induk tidak ditemukan atau non-aktif')
   }
-  const account = { id: code, code, name, type, group: group ?? type, category: category ?? 'Umum', normalBalance: normalBalance ?? (type === 'asset' || type === 'expense' ? 'debit' : 'credit'), baseBalance: 0, parentId: parentId ?? null, isHeader: false, isActive: isActive ?? true, description }
+  const account = { id: code, code, name, type, group: group ?? type, category: category ?? 'Umum', normalBalance: normalBalance ?? (type === 'asset' || type === 'expense' ? 'debit' : 'credit'), baseBalance: 0, parentId: parentId ?? null, isHeader: false, isActive: isActive ?? true, description, entityId: req.entityId }
   db.accounts.push(account)
   ok(res, { ...account, balance: 0 }, null, 201)
 })
 
 app.put('/accounts/:id', requireAuth, requirePermission('account.write'), (req, res) => {
-  const account = db.accounts.find((a) => a.id === req.params.id)
+  const account = db.accounts.find((a) => a.entityId === req.entityId && a.id === req.params.id)
   if (!account) return fail(res, 404, 'ACCOUNT_NOT_FOUND', 'Akun tidak ditemukan')
   const { code, name, category, description, parentId, normalBalance, group } = req.body ?? {}
-  if (code && code !== account.code && db.accounts.some((a) => a.code === code)) return fail(res, 409, 'ACCOUNT_CODE_EXISTS', 'Kode akun sudah digunakan')
+  if (code && code !== account.code && db.accounts.some((a) => a.entityId === req.entityId && a.code === code)) return fail(res, 409, 'ACCOUNT_CODE_EXISTS', 'Kode akun sudah digunakan')
   Object.assign(account, { code: code ?? account.code, name: name ?? account.name, category: category ?? account.category, description: description ?? account.description, parentId: parentId ?? account.parentId, normalBalance: normalBalance ?? account.normalBalance, group: group ?? account.group })
-  ok(res, { ...account, balance: computeBalances().get(account.id) ?? 0 })
+  ok(res, { ...account, balance: computeBalances(req.entityId).get(account.id) ?? 0 })
 })
 
 app.delete('/accounts/:id', requireAuth, requirePermission('account.write'), (req, res) => {
-  const account = db.accounts.find((a) => a.id === req.params.id)
+  const account = db.accounts.find((a) => a.entityId === req.entityId && a.id === req.params.id)
   if (!account) return fail(res, 404, 'ACCOUNT_NOT_FOUND', 'Akun tidak ditemukan')
-  const children = db.accounts.filter((a) => a.parentId === account.id && a.isActive)
+  const children = db.accounts.filter((a) => a.entityId === req.entityId && a.parentId === account.id && a.isActive)
   if (children.length) return fail(res, 409, 'ACCOUNT_HAS_CHILDREN', 'Akun induk tidak bisa dihapus jika memiliki sub-akun aktif')
-  const balance = computeBalances().get(account.id) ?? 0
+  const balance = computeBalances(req.entityId).get(account.id) ?? 0
   if (balance !== 0) return fail(res, 409, 'ACCOUNT_HAS_BALANCE', 'Akun memiliki saldo; non-aktifkan saja')
   account.isActive = false
   res.status(204).end()
 })
 
 app.patch('/accounts/:id/activate', requireAuth, requirePermission('account.write'), (req, res) => {
-  const account = db.accounts.find((a) => a.id === req.params.id)
+  const account = db.accounts.find((a) => a.entityId === req.entityId && a.id === req.params.id)
   if (!account) return fail(res, 404, 'ACCOUNT_NOT_FOUND', 'Akun tidak ditemukan')
   account.isActive = true
   ok(res, { id: account.id, isActive: true })
 })
 app.patch('/accounts/:id/deactivate', requireAuth, requirePermission('account.write'), (req, res) => {
-  const account = db.accounts.find((a) => a.id === req.params.id)
+  const account = db.accounts.find((a) => a.entityId === req.entityId && a.id === req.params.id)
   if (!account) return fail(res, 404, 'ACCOUNT_NOT_FOUND', 'Akun tidak ditemukan')
-  const balance = computeBalances().get(account.id) ?? 0
+  const balance = computeBalances(req.entityId).get(account.id) ?? 0
   if (balance !== 0) return fail(res, 409, 'ACCOUNT_HAS_BALANCE', 'Akun memiliki saldo; non-aktifkan saja')
   account.isActive = false
   ok(res, { id: account.id, isActive: false })
@@ -705,17 +736,17 @@ app.post('/accounts/template', requireAuth, requirePermission('account.write'), 
   const { templateId, mode } = req.body ?? {}
   const template = coaTemplate.id === templateId ? coaTemplate : null
   if (!template) return fail(res, 404, 'NOT_FOUND', 'Template tidak ditemukan')
-  const existing = db.accounts.length
+  const existing = entityAccounts(req.entityId).length
   if (mode === 'replace' && existing > 0) return fail(res, 409, 'ACCOUNTS_EXIST', 'COA sudah memiliki akun; mode replace perlu konfirmasi')
   let created = 0
   let skipped = 0
   const createdAccounts = []
   for (const t of template.accounts) {
-    if (db.accounts.some((a) => a.code === t.code)) {
+    if (db.accounts.some((a) => a.entityId === req.entityId && a.code === t.code)) {
       skipped++
       continue
     }
-    const account = { ...t, id: t.code, baseBalance: 0, isActive: true, description: 'Dari template ' + template.name }
+    const account = { ...t, id: t.code, baseBalance: 0, isActive: true, description: 'Dari template ' + template.name, entityId: req.entityId }
     db.accounts.push(account)
     created++
     createdAccounts.push(account)
@@ -731,8 +762,8 @@ app.post('/accounts/import', requireAuth, requirePermission('account.write'), (r
 app.get('/accounts/export', requireAuth, (req, res) => {
   res.setHeader('Content-Type', 'text/csv; charset=utf-8')
   res.setHeader('Content-Disposition', 'attachment; filename="chart-of-accounts.csv"')
-  const balances = computeBalances()
-  const rows = db.accounts.map((a) => `${a.code},${a.name},${a.type},${a.normalBalance},${balances.get(a.id) ?? 0}`)
+  const balances = computeBalances(req.entityId)
+  const rows = entityAccounts(req.entityId).map((a) => `${a.code},${a.name},${a.type},${a.normalBalance},${balances.get(a.id) ?? 0}`)
   res.send(['code,name,type,normalBalance,balance', ...rows].join('\n'))
 })
 
@@ -792,7 +823,8 @@ app.post('/journals', requireAuth, requirePermission('journal.write'), (req, res
     date,
     description: description?.trim() || 'Tanpa keterangan',
     lines: lines.map((ln, i) => {
-      const account = db.accounts.find((a) => a.id === ln.accountId)
+      // Akun dari COA ENTITAS AKTIF
+      const account = db.accounts.find((a) => a.entityId === req.entityId && a.id === ln.accountId)
       return {
         id: `line-${pad(db.seq.line++)}`,
         accountId: ln.accountId,
@@ -816,13 +848,13 @@ app.post('/journals', requireAuth, requirePermission('journal.write'), (req, res
 })
 
 app.get('/journals/:id', requireAuth, (req, res) => {
-  const journal = db.journals.find((j) => j.id === req.params.id)
+  const journal = db.journals.find((j) => j.entityId === req.entityId && j.id === req.params.id)
   if (!journal) return fail(res, 404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
   ok(res, journal)
 })
 
 app.put('/journals/:id', requireAuth, requirePermission('journal.write'), (req, res) => {
-  const journal = db.journals.find((j) => j.id === req.params.id)
+  const journal = db.journals.find((j) => j.entityId === req.entityId && j.id === req.params.id)
   if (!journal) return fail(res, 404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
   if (journal.status === 'posted') return fail(res, 409, 'JOURNAL_ALREADY_POSTED', 'Jurnal sudah diposting, tidak dapat diedit')
   if (journal.status === 'reversed') return fail(res, 409, 'ALREADY_REVERSED', 'Jurnal sudah dibatalkan')
@@ -831,12 +863,12 @@ app.put('/journals/:id', requireAuth, requirePermission('journal.write'), (req, 
   if (ifMatch && Number(ifMatch) !== journal.version) return fail(res, 409, 'DATA_CONFLICT', 'Data sudah diubah oleh pengguna lain. Muat ulang halaman.')
   const err = validateJournal(req.body, journal.id, req.entityId)
   if (err) return fail(res, err.status, err.code, err.message, err.details)
-  const accountName = (accountId) => db.accounts.find((a) => a.id === accountId)?.name ?? ''
+  const accountName = (accountId) => db.accounts.find((a) => a.entityId === req.entityId && a.id === accountId)?.name ?? ''
   journal.date = req.body.date
   journal.transactionNumber = req.body.transactionNumber ?? journal.transactionNumber
   journal.description = req.body.description?.trim() || journal.description
   journal.lines = req.body.lines.map((ln, i) => {
-    const account = db.accounts.find((a) => a.id === ln.accountId)
+    const account = db.accounts.find((a) => a.entityId === req.entityId && a.id === ln.accountId)
     return { id: `line-${pad(db.seq.line++)}`, accountId: ln.accountId, accountCode: account.code, accountName: account.name, debit: Number(ln.debit ?? 0), credit: Number(ln.credit ?? 0), description: ln.description }
   })
   journal.version++
@@ -845,7 +877,7 @@ app.put('/journals/:id', requireAuth, requirePermission('journal.write'), (req, 
 })
 
 app.delete('/journals/:id', requireAuth, requirePermission('journal.write'), (req, res) => {
-  const idx = db.journals.findIndex((j) => j.id === req.params.id)
+  const idx = db.journals.findIndex((j) => j.entityId === req.entityId && j.id === req.params.id)
   if (idx === -1) return fail(res, 404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
   if (db.journals[idx].status !== 'draft' && db.journals[idx].status !== 'pending-approval') return fail(res, 409, 'JOURNAL_ALREADY_POSTED', 'Hanya jurnal draft yang dapat dihapus')
   db.journals.splice(idx, 1)
@@ -853,23 +885,23 @@ app.delete('/journals/:id', requireAuth, requirePermission('journal.write'), (re
 })
 
 app.post('/journals/:id/post', requireAuth, requirePermission('journal.write'), (req, res) => {
-  const journal = db.journals.find((j) => j.id === req.params.id)
+  const journal = db.journals.find((j) => j.entityId === req.entityId && j.id === req.params.id)
   if (!journal) return fail(res, 404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
   if (journal.status === 'posted') return fail(res, 409, 'ALREADY_POSTED', 'Jurnal sudah diposting')
   if (journal.status === 'reversed') return fail(res, 409, 'ALREADY_REVERSED', 'Jurnal sudah dibatalkan')
-  const err = validateJournal({ ...journal, transactionNumber: undefined }) // balance & periode
+  const err = validateJournal({ ...journal, transactionNumber: undefined }, undefined, req.entityId) // balance & periode
   if (err) return fail(res, err.status, err.code, err.message, err.details)
   journal.status = 'posted'
   journal.postedAt = nowIso()
   journal.version++
   journal.auditTrail.push({ userId: req.user.id, action: 'post', timestamp: nowIso() })
-  const balances = computeBalances()
+  const balances = computeBalances(req.entityId)
   const affectedAccounts = [...new Set(journal.lines.map((ln) => ln.accountId))].map((accountId) => ({ accountId, newBalance: balances.get(accountId) ?? 0 }))
   ok(res, { id: journal.id, status: 'posted', postedAt: journal.postedAt, affectedAccounts })
 })
 
 app.post('/journals/:id/reverse', requireAuth, requirePermission('journal.write'), (req, res) => {
-  const journal = db.journals.find((j) => j.id === req.params.id)
+  const journal = db.journals.find((j) => j.entityId === req.entityId && j.id === req.params.id)
   if (!journal) return fail(res, 404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
   if (journal.status === 'reversed') return fail(res, 409, 'ALREADY_REVERSED', 'Jurnal sudah dibatalkan')
   if (journal.status !== 'posted') return fail(res, 409, 'INVALID_STATUS_TRANSITION', 'Hanya jurnal posted yang dapat dibalik')
@@ -906,7 +938,7 @@ app.post('/journals/:id/reverse', requireAuth, requirePermission('journal.write'
 
 // Approval workflow (P1)
 app.post('/journals/:id/submit', requireAuth, requirePermission('journal.write'), (req, res) => {
-  const journal = db.journals.find((j) => j.id === req.params.id)
+  const journal = db.journals.find((j) => j.entityId === req.entityId && j.id === req.params.id)
   if (!journal) return fail(res, 404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
   if (journal.status !== 'draft') return fail(res, 409, 'INVALID_STATUS_TRANSITION', 'Hanya jurnal draft yang dapat disubmit')
   journal.status = 'pending-approval'
@@ -915,7 +947,7 @@ app.post('/journals/:id/submit', requireAuth, requirePermission('journal.write')
 })
 
 app.post('/journals/:id/approve', requireAuth, requireApprovalRights, (req, res) => {
-  const journal = db.journals.find((j) => j.id === req.params.id)
+  const journal = db.journals.find((j) => j.entityId === req.entityId && j.id === req.params.id)
   if (!journal) return fail(res, 404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
   if (journal.status !== 'pending-approval') return fail(res, 409, 'INVALID_STATUS_TRANSITION', 'Hanya jurnal pending-approval yang dapat di-approve')
   journal.status = 'posted'
@@ -928,7 +960,7 @@ app.post('/journals/:id/approve', requireAuth, requireApprovalRights, (req, res)
 })
 
 app.post('/journals/:id/reject', requireAuth, requireApprovalRights, (req, res) => {
-  const journal = db.journals.find((j) => j.id === req.params.id)
+  const journal = db.journals.find((j) => j.entityId === req.entityId && j.id === req.params.id)
   if (!journal) return fail(res, 404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
   if (journal.status !== 'pending-approval') return fail(res, 409, 'INVALID_STATUS_TRANSITION', 'Hanya jurnal pending-approval yang dapat di-reject')
   const reason = req.body?.reason?.trim?.()
@@ -941,7 +973,7 @@ app.post('/journals/:id/reject', requireAuth, requireApprovalRights, (req, res) 
 
 // Lampiran (P1) — mock tanpa multipart asli
 app.post('/journals/:id/attachments', requireAuth, requirePermission('journal.write'), (req, res) => {
-  const journal = db.journals.find((j) => j.id === req.params.id)
+  const journal = db.journals.find((j) => j.entityId === req.entityId && j.id === req.params.id)
   if (!journal) return fail(res, 404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
   if (journal.status === 'posted') return fail(res, 409, 'JOURNAL_ALREADY_POSTED', 'Lampiran tidak dapat ditambah pada jurnal posted')
   const size = Number(req.body?.size ?? 245760)
@@ -957,7 +989,7 @@ app.post('/journals/:id/attachments', requireAuth, requirePermission('journal.wr
 })
 
 app.delete('/journals/:id/attachments/:attId', requireAuth, requirePermission('journal.write'), (req, res) => {
-  const journal = db.journals.find((j) => j.id === req.params.id)
+  const journal = db.journals.find((j) => j.entityId === req.entityId && j.id === req.params.id)
   if (!journal) return fail(res, 404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
   journal.attachments = (journal.attachments ?? []).filter((a) => a.id !== req.params.attId)
   res.status(204).end()
@@ -967,14 +999,14 @@ app.delete('/journals/:id/attachments/:attId', requireAuth, requirePermission('j
 // 6. BUKU BESAR (General Ledger)
 // ------------------------------------------------------------
 app.get('/ledger/accounts/:accountId', requireAuth, (req, res) => {
-  const account = db.accounts.find((a) => a.id === req.params.accountId)
+  const account = entityAccounts(req.entityId).find((a) => a.id === req.params.accountId)
   if (!account) return fail(res, 404, 'ACCOUNT_NOT_FOUND', 'Akun tidak ditemukan')
   const periodKey = req.query.period || '2026-03'
   const p = periodByKey(periodKey)
   if (!p) return fail(res, 422, 'INVALID_PERIOD', 'Periode tidak valid')
   const start = p.startDate
   const end = p.endDate
-  const relevant = db.journals.filter((j) => isEffect(j) && j.lines.some((ln) => ln.accountId === account.id))
+  const relevant = entityJournals(req.entityId).filter((j) => isEffect(j) && j.lines.some((ln) => ln.accountId === account.id))
   const before = relevant.filter((j) => j.date < start)
   const within = relevant
     .filter((j) => j.date >= start && j.date <= end)
@@ -1001,9 +1033,9 @@ app.get('/ledger', requireAuth, (req, res) => {
   const start = p.startDate
   const end = p.endDate
   const rows = []
-  for (const account of db.accounts) {
+  for (const account of entityAccounts(req.entityId)) {
     if (account.isHeader) continue
-    const relevant = db.journals.filter((j) => j.status === 'posted' && j.lines.some((ln) => ln.accountId === account.id))
+    const relevant = entityJournals(req.entityId).filter((j) => j.status === 'posted' && j.lines.some((ln) => ln.accountId === account.id))
     let opening = account.baseBalance
     let debitTotal = 0
     let creditTotal = 0
@@ -1028,13 +1060,13 @@ app.get('/reports/trial-balance', requireAuth, (req, res) => {
   const periodKey = req.query.period || '2026-03'
   const p = periodByKey(periodKey)
   if (!p) return fail(res, 422, 'INVALID_PERIOD', 'Periode tidak valid')
-  const ledgerRes = { ...(awaitLedger(periodKey)) }
+  const ledgerRes = { ...(awaitLedger(periodKey, req.entityId)) }
   let totalDebit = 0
   let totalCredit = 0
   const lines = []
   for (const row of ledgerRes.accounts) {
     if (row.closingBalance === 0) continue
-    const account = db.accounts.find((a) => a.id === row.accountId)
+    const account = entityAccounts(req.entityId).find((a) => a.id === row.accountId)
     if (account.normalBalance === 'debit') {
       const amount = Math.abs(row.closingBalance)
       if (row.closingBalance >= 0) {
@@ -1065,14 +1097,14 @@ app.get('/reports/trial-balance', requireAuth, (req, res) => {
   })
 })
 
-const awaitLedger = (periodKey) => {
+const awaitLedger = (periodKey, entityId) => {
   const p = periodByKey(periodKey)
   const start = p.startDate
   const end = p.endDate
   const rows = []
-  for (const account of db.accounts) {
+  for (const account of entityAccounts(entityId)) {
     if (account.isHeader) continue
-    const relevant = db.journals.filter((j) => isEffect(j) && j.lines.some((ln) => ln.accountId === account.id))
+    const relevant = entityJournals(entityId).filter((j) => isEffect(j) && j.lines.some((ln) => ln.accountId === account.id))
     let opening = account.baseBalance
     let debitTotal = 0
     let creditTotal = 0
@@ -1091,13 +1123,13 @@ const awaitLedger = (periodKey) => {
 }
 
 // Saldo per akun pada periode (untuk laporan laba rugi / neraca)
-const balancesByPeriod = (periodKey) => {
+const balancesByPeriod = (periodKey, entityId) => {
   const p = periodByKey(periodKey)
   const start = p.startDate
   const end = p.endDate
   const map = new Map()
-  for (const account of db.accounts) {
-    const relevant = db.journals.filter((j) => isEffect(j) && j.lines.some((ln) => ln.accountId === account.id))
+  for (const account of entityAccounts(entityId)) {
+    const relevant = entityJournals(entityId).filter((j) => isEffect(j) && j.lines.some((ln) => ln.accountId === account.id))
     let opening = account.baseBalance
     for (const j of relevant) {
       const ln = j.lines.find((l) => l.accountId === account.id)
@@ -1118,9 +1150,9 @@ app.get('/reports/income-statement', requireAuth, (req, res) => {
   const periodKey = req.query.period || '2026-03'
   const p = periodByKey(periodKey)
   if (!p) return fail(res, 422, 'INVALID_PERIOD', 'Periode tidak valid')
-  const map = balancesByPeriod(periodKey)
-  const revenueAccounts = db.accounts.filter((a) => a.type === 'revenue')
-  const expenseAccounts = db.accounts.filter((a) => a.type === 'expense')
+  const map = balancesByPeriod(periodKey, req.entityId)
+  const revenueAccounts = entityAccounts(req.entityId).filter((a) => a.type === 'revenue')
+  const expenseAccounts = entityAccounts(req.entityId).filter((a) => a.type === 'expense')
   const revenueTotal = revenueAccounts.reduce((s, a) => s + (map.get(a.id)?.closing ?? 0), 0)
   const expenseTotal = expenseAccounts.reduce((s, a) => s + (map.get(a.id)?.closing ?? 0), 0)
   const mkSection = (title, accounts) => ({
@@ -1156,10 +1188,10 @@ app.get('/reports/income-statement', requireAuth, (req, res) => {
 app.get('/reports/balance-sheet', requireAuth, (req, res) => {
   const asOf = req.query.asOf || '2026-03-31'
   const periodKey = asOf.slice(0, 7)
-  const map = balancesByPeriod(periodKey)
-  const assetAccounts = db.accounts.filter((a) => a.type === 'asset' && !a.isHeader)
-  const liabAccounts = db.accounts.filter((a) => a.type === 'liability' && !a.isHeader)
-  const equityAccounts = db.accounts.filter((a) => a.type === 'equity' && !a.isHeader)
+  const map = balancesByPeriod(periodKey, req.entityId)
+  const assetAccounts = entityAccounts(req.entityId).filter((a) => a.type === 'asset' && !a.isHeader)
+  const liabAccounts = entityAccounts(req.entityId).filter((a) => a.type === 'liability' && !a.isHeader)
+  const equityAccounts = entityAccounts(req.entityId).filter((a) => a.type === 'equity' && !a.isHeader)
   const totalAssets = assetAccounts.reduce((s, a) => s + (map.get(a.id)?.closing ?? 0), 0)
   const totalLiab = liabAccounts.reduce((s, a) => s + (map.get(a.id)?.closing ?? 0), 0)
   const totalEquity = equityAccounts.reduce((s, a) => s + (map.get(a.id)?.closing ?? 0), 0)
@@ -1193,11 +1225,11 @@ app.get('/reports/balance-sheet', requireAuth, (req, res) => {
 app.get('/reports/cash-flow', requireAuth, (req, res) => {
   const periodKey = req.query.period || '2026-03'
   const p = periodByKey(periodKey)
-  const map = balancesByPeriod(periodKey)
-  const cashAccounts = db.accounts.filter((a) => a.type === 'asset' && (a.category === 'Kas & Bank'))
+  const map = balancesByPeriod(periodKey, req.entityId)
+  const cashAccounts = entityAccounts(req.entityId).filter((a) => a.type === 'asset' && (a.category === 'Kas & Bank'))
   const beginningCash = cashAccounts.reduce((s, a) => s + (map.get(a.id)?.opening ?? 0), 0)
   const endingCash = cashAccounts.reduce((s, a) => s + (map.get(a.id)?.closing ?? 0), 0)
-  const netIncome = [...db.accounts].filter((a) => a.type === 'revenue').reduce((s, a) => s + (map.get(a.id)?.closing ?? 0), 0) - [...db.accounts].filter((a) => a.type === 'expense').reduce((s, a) => s + (map.get(a.id)?.closing ?? 0), 0)
+  const netIncome = [...entityAccounts(req.entityId)].filter((a) => a.type === 'revenue').reduce((s, a) => s + (map.get(a.id)?.closing ?? 0), 0) - [...entityAccounts(req.entityId)].filter((a) => a.type === 'expense').reduce((s, a) => s + (map.get(a.id)?.closing ?? 0), 0)
   const sections = [
     { title: 'ARUS KAS DARI AKTIVITAS OPERASI', subtotal: netIncome, lines: [{ accountCode: '', accountName: 'Laba bersih', amount: netIncome, indentLevel: 1, isBold: false, isTotal: false }] },
     { title: 'ARUS KAS DARI AKTIVITAS INVESTASI', subtotal: 0, lines: [] },
@@ -1216,7 +1248,8 @@ app.get('/reports/cash-flow', requireAuth, (req, res) => {
 
 app.get('/reports/:id', requireAuth, (req, res) => {
   // Laporan tersimpan — mock: cari di katalog statis
-  const report = { id: req.params.id, type: 'income-statement', entity: { id: req.entityId, name: 'PT. Kreasi Inovasi Estetika' }, generatedAt: nowIso(), note: 'Laporan tersimpan (mock)' }
+  const entity = db.entities.find((e) => e.id === req.entityId)
+  const report = { id: req.params.id, type: 'income-statement', entity: { id: req.entityId, name: entity?.name ?? '' }, generatedAt: nowIso(), note: 'Laporan tersimpan (mock)' }
   ok(res, report)
 })
 
@@ -1261,7 +1294,7 @@ app.patch('/periods/:id/close', requireAuth, requirePermission('period.manage'),
   const period = db.periods.find((p) => p.id === req.params.id)
   if (!period) return fail(res, 404, 'PERIOD_NOT_FOUND', 'Periode tidak ditemukan')
   if (!period.isOpen) return fail(res, 409, 'PERIOD_ALREADY_CLOSED', 'Periode sudah ditutup')
-  const drafts = db.journals.filter((j) => j.date >= period.startDate && j.date <= period.endDate && j.status === 'draft')
+  const drafts = entityJournals(req.entityId).filter((j) => j.date >= period.startDate && j.date <= period.endDate && j.status === 'draft')
   const { confirmDraftAction } = req.body ?? {}
   if (drafts.length && !confirmDraftAction) return fail(res, 422, 'DRAFT_ACTION_REQUIRED', 'Masih ada jurnal draft; pilih aksi terlebih dahulu')
   const handled = { posted: 0, deleted: 0, kept: 0 }
@@ -1285,10 +1318,10 @@ app.patch('/periods/:id/close', requireAuth, requirePermission('period.manage'),
 // ------------------------------------------------------------
 app.get('/dashboard/summary', requireAuth, (req, res) => {
   const periodKey = req.query.period || '2026-03'
-  const map = balancesByPeriod(periodKey)
-  const sum = (type) => db.accounts.filter((a) => a.type === type && !a.isHeader).reduce((s, a) => s + (map.get(a.id)?.closing ?? 0), 0)
-  const revenue = db.accounts.filter((a) => a.type === 'revenue').reduce((s, a) => s + (map.get(a.id)?.closing ?? 0), 0)
-  const expenses = db.accounts.filter((a) => a.type === 'expense').reduce((s, a) => s + (map.get(a.id)?.closing ?? 0), 0)
+  const map = balancesByPeriod(periodKey, req.entityId)
+  const sum = (type) => entityAccounts(req.entityId).filter((a) => a.type === type && !a.isHeader).reduce((s, a) => s + (map.get(a.id)?.closing ?? 0), 0)
+  const revenue = entityAccounts(req.entityId).filter((a) => a.type === 'revenue').reduce((s, a) => s + (map.get(a.id)?.closing ?? 0), 0)
+  const expenses = entityAccounts(req.entityId).filter((a) => a.type === 'expense').reduce((s, a) => s + (map.get(a.id)?.closing ?? 0), 0)
   ok(res, {
     cards: [
       { key: 'totalAssets', label: 'Total Aset', value: sum('asset'), deltaPercent: 12.5, deltaDirection: 'up', compareLabel: 'dari bulan lalu' },
@@ -1306,16 +1339,16 @@ app.get('/dashboard/trend', requireAuth, (req, res) => {
 
 app.get('/dashboard/recent-journals', requireAuth, (req, res) => {
   const limit = Number(req.query.limit || 5)
-  ok(res, { journals: [...db.journals].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit).map(journalBrief) })
+  ok(res, { journals: [...entityJournals(req.entityId)].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit).map(journalBrief) })
 })
 
 app.get('/dashboard/alerts', requireAuth, (req, res) => {
-  const drafts = db.journals.filter((j) => j.status === 'draft' || j.status === 'pending-approval')
+  const drafts = entityJournals(req.entityId).filter((j) => j.status === 'draft' || j.status === 'pending-approval')
   const alerts = []
   if (drafts.length) alerts.push({ severity: 'warning', type: 'draft_journals', message: `${drafts.length} jurnal draft belum diposting`, count: drafts.length })
   const openPeriods = db.periods.filter((p) => p.isOpen && !p.isActive)
   if (openPeriods.length) alerts.push({ severity: 'info', type: 'period_not_closed', message: `Periode ${openPeriods[0].name} belum ditutup` })
-  const unbalanced = db.journals.filter((j) => (j.status === 'draft' || j.status === 'pending-approval') && totalsOf(j).difference !== 0)
+  const unbalanced = entityJournals(req.entityId).filter((j) => (j.status === 'draft' || j.status === 'pending-approval') && totalsOf(j).difference !== 0)
   if (unbalanced.length) alerts.push({ severity: 'danger', type: 'unbalanced', message: `Terdapat jurnal draft tidak balance`, count: unbalanced.length })
   ok(res, { alerts })
 })
@@ -1341,7 +1374,7 @@ app.get('/exports/reports/:reportType', requireAuthExport, (req, res) => {
 app.get('/exports/accounts', requireAuthExport, (req, res) => {
   res.setHeader('Content-Type', 'text/csv; charset=utf-8')
   res.setHeader('Content-Disposition', 'attachment; filename="chart-of-accounts.csv"')
-  res.send(db.accounts.map((a) => `${a.code},${a.name},${a.type}`).join('\n'))
+  res.send(entityAccounts(req.entityId).map((a) => `${a.code},${a.name},${a.type}`).join('\n'))
 })
 
 // Export Buku Besar per akun — validasi sama dengan GET /ledger/accounts/:id
@@ -1352,7 +1385,7 @@ app.get('/exports/ledger/:accountId', requireAuthExport, (req, res) => {
   const { accountId } = req.params
   const format = req.query.format || 'pdf'
   if (!['pdf', 'xlsx'].includes(format)) return fail(res, 422, 'UNSUPPORTED_FORMAT', 'Format tidak didukung (pdf/xlsx)')
-  const account = db.accounts.find((a) => a.id === accountId)
+  const account = entityAccounts(req.entityId).find((a) => a.id === accountId)
   if (!account) return fail(res, 404, 'ACCOUNT_NOT_FOUND', 'Akun tidak ditemukan')
   const isoDate = /^\d{4}-\d{2}-\d{2}$/
   const { start, end } = req.query
@@ -1382,7 +1415,7 @@ app.get('/search', requireAuth, (req, res) => {
   const limit = Number(req.query.limit || 10)
   const results = []
   if (types.includes('journal') && q) {
-    for (const j of db.journals) {
+    for (const j of entityJournals(req.entityId)) {
       if (results.length >= limit) break
       if (j.transactionNumber.toLowerCase().includes(q) || j.description.toLowerCase().includes(q)) {
         results.push({ type: 'journal', id: j.id, title: j.transactionNumber, subtitle: `${j.description} · ${new Date(j.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`, metadata: { status: j.status } })
@@ -1390,8 +1423,8 @@ app.get('/search', requireAuth, (req, res) => {
     }
   }
   if (types.includes('account') && q) {
-    const balances = computeBalances()
-    for (const a of db.accounts) {
+    const balances = computeBalances(req.entityId)
+    for (const a of entityAccounts(req.entityId)) {
       if (results.length >= limit) break
       if (a.name.toLowerCase().includes(q) || a.code.toLowerCase().includes(q)) {
         results.push({ type: 'account', id: a.id, title: a.name, subtitle: `${a.code} · ${a.type}`, metadata: { balance: balances.get(a.id) ?? 0 } })

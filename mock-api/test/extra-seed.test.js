@@ -35,7 +35,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   const res = await request(app).post('/admin/reset').send({ withExtra: true })
   expect(res.status).toBe(200)
-  expect(res.body.data.journals).toBe(15) // 8 base Maret + 7 extra Jan–Feb
+  expect(res.body.data.journals).toBe(17) // 15 base+extra ent-001 + 2 seed ent-002
   expect(res.body.data.seed).toBe('extra')
 })
 

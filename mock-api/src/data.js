@@ -7,7 +7,66 @@
 
 export const entities = [
   { id: 'ent-001', name: 'PT. Kreasi Inovasi Estetika', code: 'KI-001', address: 'Jl. Sudirman No. 45, Jakarta', isActive: true, createdAt: '2025-01-01T00:00:00Z' },
-  { id: 'ent-002', name: 'CV Karya Mandiri', code: 'KM-002', address: 'Jl. Diponegoro No. 12, Bandung', isActive: false, createdAt: '2025-06-01T00:00:00Z' },
+  { id: 'ent-002', name: 'CV Karya Mandiri', code: 'KM-002', address: 'Jl. Diponegoro No. 12, Bandung', isActive: true, createdAt: '2025-06-01T00:00:00Z' },
+]
+
+// ============================================================
+// ENTITAS KEDUA — CV Karya Mandiri (ent-002)
+// Data demo multi-tenant untuk entity switcher: COA + jurnal KECIL
+// tapi bisa dibedakan (nama akun & deskripsi ber-label CV/ent-002).
+// Id akun SAMA dengan ent-001 (1-1100, 4-1000, 5-1000) — dua entitas
+// boleh punya COA sendiri; isolasi via entityId (server memfilter
+// account/jurnal per X-Entity-Id), bukan via id unik global.
+// Konsisten dengan fixture ent-002 di MSW handlers prototipe.
+// ============================================================
+export const ent2Accounts = [
+  { id: '1-1100', code: '1-1100', name: 'Kas CV Karya Mandiri', type: 'asset', group: 'current_asset', category: 'Kas & Bank', normalBalance: 'debit', baseBalance: 25_000_000, parentId: null, isHeader: false, isActive: true, description: 'Kas tunai operasional CV Karya Mandiri' },
+  { id: '4-1000', code: '4-1000', name: 'Pendapatan Jasa CV', type: 'revenue', group: 'revenue', category: 'Pendapatan', normalBalance: 'credit', baseBalance: 10_000_000, parentId: null, isHeader: false, isActive: true, description: 'Pendapatan jasa konsultasi CV Karya Mandiri' },
+  { id: '5-1000', code: '5-1000', name: 'Beban Gaji CV', type: 'expense', group: 'operating_expense', category: 'Beban Operasional', normalBalance: 'debit', baseBalance: 5_000_000, parentId: null, isHeader: false, isActive: true, description: 'Gaji karyawan CV Karya Mandiri' },
+]
+
+const ent2Line = (id, accountId, debit, credit, description) => {
+  const account = ent2Accounts.find((a) => a.id === accountId)
+  return {
+    id,
+    accountId,
+    accountCode: account.code,
+    accountName: account.name,
+    debit,
+    credit,
+    description,
+  }
+}
+
+export const ent2Journals = [
+  {
+    id: 'JNL-2026-03-001', transactionNumber: 'BKM-2026-03-0001', date: '2026-03-06',
+    description: 'Penerimaan jasa CV Karya Mandiri (ent-002)',
+    lines: [
+      ent2Line('e2-1', '1-1100', 8_000_000, 0, 'Penerimaan tunai'),
+      ent2Line('e2-2', '4-1000', 0, 8_000_000, 'Pendapatan jasa'),
+    ],
+    status: 'posted', version: 1, createdBy: 'user-001', createdAt: '2026-03-06T09:00:00Z', postedAt: '2026-03-06T09:02:00Z',
+    auditTrail: [
+      { userId: 'user-001', action: 'create', timestamp: '2026-03-06T09:00:00Z' },
+      { userId: 'user-001', action: 'post', timestamp: '2026-03-06T09:02:00Z' },
+    ],
+    attachments: [],
+  },
+  {
+    id: 'JNL-2026-03-002', transactionNumber: 'BKK-2026-03-0002', date: '2026-03-11',
+    description: 'Pembayaran gaji CV Karya Mandiri (ent-002)',
+    lines: [
+      ent2Line('e2-3', '5-1000', 3_000_000, 0, 'Gaji karyawan'),
+      ent2Line('e2-4', '1-1100', 0, 3_000_000, 'Pembayaran tunai'),
+    ],
+    status: 'posted', version: 1, createdBy: 'user-001', createdAt: '2026-03-11T10:00:00Z', postedAt: '2026-03-11T10:02:00Z',
+    auditTrail: [
+      { userId: 'user-001', action: 'create', timestamp: '2026-03-11T10:00:00Z' },
+      { userId: 'user-001', action: 'post', timestamp: '2026-03-11T10:02:00Z' },
+    ],
+    attachments: [],
+  },
 ]
 
 export const users = [

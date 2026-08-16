@@ -178,10 +178,11 @@ describe('409 — Conflict (API §13)', () => {
   })
 
   it('nomor bukti sama di entitas lain TIDAK duplikat (multi-tenant, scoped per entityId)', async () => {
-    // ent-002 tidak punya jurnal — nomor BKM-2026-03-0001 (dipakai ent-001) sah di sini
+    // ent-002 punya seed sendiri (BKM-2026-03-0001 & BKK-2026-03-0002);
+    // nomor BKM-2026-03-0004 (dipakai seed ent-001) sah di ent-002
     const res = await request(app).post('/journals').set({ ...auth(), 'X-Entity-Id': 'ent-002' }).send({
       date: '2026-03-15',
-      transactionNumber: 'BKM-2026-03-0001',
+      transactionNumber: 'BKM-2026-03-0004',
       lines: [
         { accountId: '1-1100', debit: 1_000_000, credit: 0 },
         { accountId: '4-1000', debit: 0, credit: 1_000_000 },
