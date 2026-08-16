@@ -518,6 +518,31 @@ describe('Export Buku Besar per akun — GET /exports/ledger/:accountId', () => 
 })
 
 // ------------------------------------------------------------
+describe('Pencarian global — GET /search (jurnal, akun, laporan, halaman)', () => {
+  it('query laporan → hasil tipe report (Arus Kas, Neraca, Laba Rugi)', async () => {
+    const res = await request(app).get('/search').query({ q: 'arus kas' }).set(auth())
+    expect(res.status).toBe(200)
+    const results = res.body.data.results
+    expect(results.some((r) => r.type === 'report' && r.id === 'arus-kas')).toBe(true)
+    expect(results.some((r) => r.type === 'report' && r.title === 'Arus Kas')).toBe(true)
+  })
+
+  it('query halaman → hasil tipe page (Jurnal, Pengaturan, Dashboard)', async () => {
+    const res = await request(app).get('/search').query({ q: 'pengaturan' }).set(auth())
+    expect(res.status).toBe(200)
+    const results = res.body.data.results
+    expect(results.some((r) => r.type === 'page' && r.id === 'pengaturan')).toBe(true)
+  })
+
+  it('hasil laporan & halaman masih digabung dengan jurnal/akun dalam satu respons', async () => {
+    const res = await request(app).get('/search').query({ q: 'kas' }).set(auth())
+    expect(res.status).toBe(200)
+    const types = new Set(res.body.data.results.map((r) => r.type))
+    expect(types.has('report')).toBe(true) // Arus Kas (judul mengandung 'kas')
+  })
+})
+
+// ------------------------------------------------------------
 describe('404 — Not Found (API §13)', () => {
   it('jurnal tidak ada → JOURNAL_NOT_FOUND', async () => {
     const res = await request(app).get('/journals/JNL-2026-03-999').set(auth())

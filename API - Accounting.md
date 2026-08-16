@@ -636,7 +636,16 @@ Content-Disposition: attachment; filename="Laba-Rugi-Maret-2026.pdf"
 ## 12. Pencarian Global
 
 ### 12.1 GET `/search`
-**Query:** `?q=bkm&types=journal,account&entityId=ent-001&limit=10`
+**Query:** `?q=bkm&types=journal,account,report,page&entityId=ent-001&limit=10`
+`types` default: `journal,account,report,page` — pencarian mencakup **semua menu navigasi**:
+
+| type | Dicari dari | id hasil |
+|------|-------------|----------|
+| `journal` | no. bukti & deskripsi jurnal | `JNL-2026-03-001` |
+| `account` | kode & nama akun | `1-1100` |
+| `report` | judul laporan (Neraca Lajur, Laba Rugi, Neraca, Arus Kas) | `neraca-lajur` / `laba-rugi` / `neraca` / `arus-kas` |
+| `page` | judul halaman (Dashboard, Jurnal, Buku Besar, Laporan Lain, Pengaturan) | `dashboard` / `journal` / `buku-besar` / `laporan-lain` / `pengaturan` |
+
 **Response 200:**
 ```json
 { "data": { "results": [
@@ -644,7 +653,11 @@ Content-Disposition: attachment; filename="Laba-Rugi-Maret-2026.pdf"
       "subtitle": "Penerimaan pembayaran dari PT ABC · 15 Maret 2026",
       "metadata": { "status": "posted" } },
     { "type": "account", "id": "1-1100", "title": "Kas Besar",
-      "subtitle": "1-1100 · Aset", "metadata": { "balance": 58000000 } }
+      "subtitle": "1-1100 · Aset", "metadata": { "balance": 58000000 } },
+    { "type": "report", "id": "arus-kas", "title": "Arus Kas",
+      "subtitle": "Laporan · arus kas operasi/investasi/pendanaan" },
+    { "type": "page", "id": "pengaturan", "title": "Pengaturan",
+      "subtitle": "Halaman · periode, entitas & preferensi" }
   ] } }
 ```
 

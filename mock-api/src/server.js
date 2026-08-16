@@ -1378,7 +1378,7 @@ app.get('/exports/ledger/:accountId', requireAuthExport, (req, res) => {
 // ------------------------------------------------------------
 app.get('/search', requireAuth, (req, res) => {
   const q = (req.query.q || '').toLowerCase()
-  const types = (req.query.types || 'journal,account').split(',')
+  const types = (req.query.types || 'journal,account,report,page').split(',')
   const limit = Number(req.query.limit || 10)
   const results = []
   if (types.includes('journal') && q) {
@@ -1395,6 +1395,37 @@ app.get('/search', requireAuth, (req, res) => {
       if (results.length >= limit) break
       if (a.name.toLowerCase().includes(q) || a.code.toLowerCase().includes(q)) {
         results.push({ type: 'account', id: a.id, title: a.name, subtitle: `${a.code} · ${a.type}`, metadata: { balance: balances.get(a.id) ?? 0 } })
+      }
+    }
+  }
+  // Laporan (menu navigasi laporan) — setiap laporan bisa dicari dan dibuka
+  if (types.includes('report') && q) {
+    const reports = [
+      { id: 'neraca-lajur', title: 'Neraca Lajur', subtitle: 'Laporan · trial balance per periode' },
+      { id: 'laba-rugi', title: 'Laba Rugi', subtitle: 'Laporan · pendapatan & beban per periode' },
+      { id: 'neraca', title: 'Neraca', subtitle: 'Laporan · posisi keuangan (aset, utang, modal)' },
+      { id: 'arus-kas', title: 'Arus Kas', subtitle: 'Laporan · arus kas operasi/investasi/pendanaan' },
+    ]
+    for (const r of reports) {
+      if (results.length >= limit) break
+      if (r.title.toLowerCase().includes(q) || r.subtitle.toLowerCase().includes(q)) {
+        results.push({ type: 'report', id: r.id, title: r.title, subtitle: r.subtitle, metadata: {} })
+      }
+    }
+  }
+  // Halaman / menu navigasi lain (dashboard, jurnal, buku besar, pengaturan)
+  if (types.includes('page') && q) {
+    const pages = [
+      { id: 'dashboard', title: 'Dashboard', subtitle: 'Halaman utama · ringkasan keuangan' },
+      { id: 'journal', title: 'Jurnal', subtitle: 'Halaman · daftar & entri jurnal' },
+      { id: 'buku-besar', title: 'Buku Besar', subtitle: 'Halaman · saldo berjalan per akun' },
+      { id: 'laporan-lain', title: 'Laporan Lain', subtitle: 'Halaman · modul laporan tambahan' },
+      { id: 'pengaturan', title: 'Pengaturan', subtitle: 'Halaman · periode, entitas & preferensi' },
+    ]
+    for (const p of pages) {
+      if (results.length >= limit) break
+      if (p.title.toLowerCase().includes(q) || p.subtitle.toLowerCase().includes(q)) {
+        results.push({ type: 'page', id: p.id, title: p.title, subtitle: p.subtitle, metadata: {} })
       }
     }
   }

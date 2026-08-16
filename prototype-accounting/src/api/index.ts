@@ -262,10 +262,11 @@ export const api = {
     return download(`/exports/ledger/${accountId}`, range ? { format, ...range } : { format, period }).then(() => filename)
   },
 
-  // 12. Pencarian global — GET /search (jurnal + akun). Dipakai input search
-  //     di TopBar; hasil diklik → navigasi + fokus (detail jurnal / akun).
+  // 12. Pencarian global — GET /search (jurnal, akun, laporan, halaman).
+  //     Dipakai input search di TopBar; hasil diklik → navigasi + fokus
+  //     (detail jurnal, akun di Buku Besar, atau langsung ke halaman laporan).
   search(q: string) {
-    return request<{ results: SearchResult[] }>('/search', { query: { q } })
+    return request<{ results: SearchResult[] }>('/search', { query: { q, types: 'journal,account,report,page' } })
   },
 
   // Admin (dev-only, tanpa auth) — reset state server ke seed awal (Maret 2026).
@@ -291,9 +292,9 @@ export interface PeriodInfo {
   closedAt: string | null
 }
 
-// Hasil pencarian global (GET /search) — jurnal atau akun.
+// Hasil pencarian global (GET /search) — jurnal, akun, laporan, atau halaman.
 export interface SearchResult {
-  type: 'journal' | 'account'
+  type: 'journal' | 'account' | 'report' | 'page'
   id: string
   title: string
   subtitle: string

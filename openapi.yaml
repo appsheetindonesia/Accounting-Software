@@ -1504,7 +1504,7 @@ paths:
   /search:
     get:
       tags: [Search]
-      summary: Pencarian global jurnal & akun
+      summary: Pencarian global jurnal, akun, laporan & halaman
       parameters:
         - $ref: "#/components/parameters/XEntityId"
         - name: q
@@ -1515,8 +1515,8 @@ paths:
           in: query
           schema:
             type: string
-            description: Jenis hasil, comma-separated
-            example: journal,account
+            description: Jenis hasil, comma-separated (default journal,account,report,page)
+            example: journal,account,report,page
         - name: limit
           in: query
           schema: { type: integer, maximum: 50, default: 10 }
@@ -2031,7 +2031,7 @@ components:
     SearchResult:
       type: object
       properties:
-        type: { type: string, enum: [journal, account] }
+        type: { type: string, enum: [journal, account, report, page] }
         id: { type: string }
         title: { type: string }
         subtitle: { type: string }

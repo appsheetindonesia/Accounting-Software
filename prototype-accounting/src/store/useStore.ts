@@ -62,7 +62,7 @@ interface AccountingState {
   // Transient — tidak dipersist (tidak ada di partialize).
   focusJournalId: string | null
   focusAccountId: string | null
-  openSearchResult: (type: 'journal' | 'account', id: string) => void
+  openSearchResult: (type: 'journal' | 'account' | 'report' | 'page', id: string) => void
   clearSearchFocus: () => void
 
   // Lapisan API (API - Accounting.md)
@@ -364,12 +364,15 @@ export const useStore = create<AccountingState>()(
         setPage: (page) => set({ page }),
 
         // Hasil global search diklik → navigasi + tandai target untuk fokus.
-        // JournalTable membuka baris detail; LedgerPage memilih akun tsb.
+        // journal → Jurnal (buka detail); account → Buku Besar (pilih akun);
+        // report/page → langsung ke halaman tsb (id = PageKey).
         openSearchResult: (type, id) =>
           set(
             type === 'journal'
               ? { page: 'journal', focusJournalId: id }
-              : { page: 'buku-besar', focusAccountId: id },
+              : type === 'account'
+                ? { page: 'buku-besar', focusAccountId: id }
+                : { page: id as PageKey },
           ),
         clearSearchFocus: () => set({ focusJournalId: null, focusAccountId: null }),
         focusJournalId: null,

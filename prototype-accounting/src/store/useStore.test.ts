@@ -579,6 +579,27 @@ describe('openSearchResult — fokus hasil global search', () => {
     expect(s.focusJournalId).toBeNull()
   })
 
+  it('hasil laporan (report) → pindah ke halaman laporan tanpa focus akun/jurnal', () => {
+    useStore.getState().openSearchResult('report', 'arus-kas')
+    const s = useStore.getState()
+    expect(s.page).toBe('arus-kas')
+    expect(s.focusAccountId).toBeNull()
+    expect(s.focusJournalId).toBeNull()
+
+    useStore.getState().openSearchResult('report', 'neraca-lajur')
+    expect(useStore.getState().page).toBe('neraca-lajur')
+  })
+
+  it('hasil halaman (page) → pindah ke halaman tsb (menu navigasi bisa dicari)', () => {
+    useStore.getState().openSearchResult('page', 'dashboard')
+    expect(useStore.getState().page).toBe('dashboard')
+
+    useStore.getState().openSearchResult('page', 'pengaturan')
+    expect(useStore.getState().page).toBe('pengaturan')
+    expect(useStore.getState().focusJournalId).toBeNull()
+    expect(useStore.getState().focusAccountId).toBeNull()
+  })
+
   it('clearSearchFocus mengosongkan kedua fokus (transient — tidak persist)', () => {
     useStore.getState().openSearchResult('journal', 'JNL-2026-03-005')
     useStore.getState().clearSearchFocus()
