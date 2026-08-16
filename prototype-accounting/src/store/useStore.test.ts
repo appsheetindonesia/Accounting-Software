@@ -36,6 +36,7 @@ vi.mock('../api', () => {
       deleteJournal: vi.fn(),
       resetServerData: vi.fn(),
       closePeriod: vi.fn(),
+      getPeriods: vi.fn(),
       health: vi.fn(),
     },
   }
@@ -97,6 +98,7 @@ beforeEach(() => {
   mockedApi.reverseJournal.mockReset()
   mockedApi.deleteJournal.mockReset()
   mockedApi.closePeriod.mockReset()
+  mockedApi.getPeriods.mockReset()
   mockedApi.health.mockReset()
   mockedApi.health.mockRejectedValue(new TypeError('fetch failed'))
   // Default: gagal jaringan agar path lokal (fallback) yang teruji
@@ -104,6 +106,7 @@ beforeEach(() => {
   mockedApi.logout.mockResolvedValue(undefined)
   mockedApi.getAccounts.mockRejectedValue(new TypeError('fetch failed'))
   mockedApi.getJournals.mockRejectedValue(new TypeError('fetch failed'))
+  mockedApi.getPeriods.mockRejectedValue(new TypeError('fetch failed'))
   mockedApi.createJournal.mockRejectedValue(new TypeError('fetch failed'))
   mockedApi.postJournal.mockRejectedValue(new TypeError('fetch failed'))
   mockedApi.submitJournal.mockRejectedValue(new TypeError('fetch failed'))
@@ -167,6 +170,26 @@ describe('login — POST /auth/login (bukan auto-login demo)', () => {
     expect(s.journals).toHaveLength(mockJournals.length)
     expect(s.authError).toBeNull()
     expect(s.lastSyncedAt).toBeTruthy() // sinkron berhasil tercatat
+  })
+
+  it('login memuat status periode (isOpen) — UI tahu periode mana yang tertutup', async () => {
+    mockedApi.login.mockResolvedValue({ accessToken: 'mock.user-001.1', refreshToken: 'x', expiresIn: 86400, user: demoUser, activePeriod: { id: '2026-03', name: 'Maret 2026', isOpen: true } } as any)
+    mockedApi.getAccounts.mockResolvedValue({ accounts: mockAccounts })
+    mockedApi.getJournals.mockResolvedValue({ journals: mockJournals, totals: { debit: 0, credit: 0, difference: 0 } })
+    mockedApi.getPeriods.mockResolvedValue({
+      periods: [
+        { id: 'fp-2026-01', name: 'Januari 2026', month: 1, year: 2026, startDate: '2026-01-01', endDate: '2026-01-31', isOpen: false, isActive: false, closedAt: '2026-02-01T00:00:00Z' },
+        { id: 'fp-2026-02', name: 'Februari 2026', month: 2, year: 2026, startDate: '2026-02-01', endDate: '2026-02-28', isOpen: false, isActive: false, closedAt: '2026-03-01T00:00:00Z' },
+        { id: 'fp-2026-03', name: 'Maret 2026', month: 3, year: 2026, startDate: '2026-03-01', endDate: '2026-03-31', isOpen: true, isActive: true, closedAt: null },
+      ],
+    })
+
+    await useStore.getState().login('rina@estetikakreasi.co.id', 'password123')
+
+    const s = useStore.getState()
+    expect(s.periods).toHaveLength(3)
+    expect(s.periods.find((p) => p.id === 'fp-2026-01')?.isOpen).toBe(false)
+    expect(s.periods.find((p) => p.id === 'fp-2026-03')?.isOpen).toBe(true)
   })
 
   it('setAuth dipanggil dengan entitas aktif → X-Entity-Id terkirim SEJAK login (bukan menunggu ganti entitas)', async () => {
@@ -397,6 +420,17 @@ describe('closePeriod — tutup periode fiskal', () => {
     expect(s.toast?.kind).toBe('success')
     expect(s.toast?.message).toContain('2 draft diposting')
     expect(s.lastSyncedAt).toBeTruthy()
+  })
+
+  it('sukses: periode ditandai isOpen=false di state → UI bisa tampilkan "tertutup" tanpa refetch', async () => {
+    useStore.setState({ apiStatus: 'online', periods: [{ id: 'fp-2026-03', name: 'Maret 2026', month: 3, year: 2026, startDate: '2026-03-01', endDate: '2026-03-31', isOpen: true, isActive: true, closedAt: null }] })
+    mockedApi.closePeriod.mockResolvedValue({ id: 'fp-2026-03', isOpen: false, handledDrafts: { posted: 0, deleted: 0, kept: 0 } })
+    mockedApi.getJournals.mockResolvedValue({ journals: mockJournals, totals: { debit: 0, credit: 0, difference: 0 } })
+
+    await useStore.getState().closePeriod('fp-2026-03')
+
+    const p = useStore.getState().periods.find((x) => x.id === 'fp-2026-03')
+    expect(p?.isOpen).toBe(false)
   })
 
   it('dengan draftAction → confirmDraftAction ikut dikirim ke server', async () => {

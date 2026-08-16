@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Search, Plus } from 'lucide-react'
+import { Search, Plus, Lock } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import JournalTable from './JournalTable'
-import { formatIDR } from '../../lib/format'
+import { formatIDR, formatPeriodLabel } from '../../lib/format'
 import { canWriteJournal } from '../../lib/permissions'
 import { SkeletonLines, SkeletonTable } from '../Skeleton'
 
@@ -14,9 +14,19 @@ export default function JournalPage() {
   const user = useStore((s) => s.user)
   const apiStatus = useStore((s) => s.apiStatus)
   const lastSyncedAt = useStore((s) => s.lastSyncedAt)
+  const activePeriod = useStore((s) => s.activePeriod)
+  const periods = useStore((s) => s.periods)
   const canWrite = canWriteJournal(user?.role)
   const [keyword, setKeyword] = useState('')
   const [status, setStatus] = useState<StatusFilter>('all')
+
+  // Periode aktif (dari Sidebar): label + status tertutup/terbuka. id periode
+  // API berbentuk 'fp-2026-03' sedangkan activePeriod '2026-03' — samakan via
+  // prefiks. Saat daftar belum termuat (offline/loading), anggap terbuka agar
+  // demo tetap jalan.
+  const periodInfo = periods.find((p) => p.id === `fp-${activePeriod}`)
+  const periodLabel = periodInfo?.name ?? formatPeriodLabel(activePeriod)
+  const periodOpen = periodInfo?.isOpen ?? true
 
   // Hasil global search diklik → reset filter agar jurnal target tidak tersaring
   // (JournalTable membuka baris detailnya lewat focusJournalId).
@@ -37,6 +47,7 @@ export default function JournalPage() {
   const filtered = useMemo(() => {
     const kw = keyword.trim().toLowerCase()
     return [...journals]
+      .filter((j) => j.date.startsWith(activePeriod)) // hanya jurnal periode aktif
       .filter((j) => {
         const matchStatus = status === 'all' || j.status === status
         const matchKw =
@@ -49,7 +60,7 @@ export default function JournalPage() {
         return matchStatus && matchKw
       })
       .sort((a, b) => b.date.localeCompare(a.date) || b.transactionNumber.localeCompare(a.transactionNumber))
-  }, [journals, keyword, status])
+  }, [journals, keyword, status, activePeriod])
 
   const totals = useMemo(() => {
     let debit = 0
@@ -69,14 +80,21 @@ export default function JournalPage() {
         <div>
           <h1 className="text-xl font-bold text-ink lg:text-2xl">Jurnal Umum</h1>
           <p className="mt-0.5 text-sm text-ink-soft">
-            Maret 2026 · {filtered.length} entri jurnal ({journals.filter((j) => j.status === 'draft').length} draft)
+            {periodLabel} · {filtered.length} entri jurnal ({journals.filter((j) => j.status === 'draft' && j.date.startsWith(activePeriod)).length} draft)
           </p>
+          {!periodOpen && (
+            <p className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-ink-faint/10 px-2.5 py-0.5 text-xs font-semibold text-ink-soft">
+              <Lock size={12} /> Periode tertutup — mutasi diblokir
+            </p>
+          )}
         </div>
         {canWrite && (
           <button
             type="button"
             onClick={openModal}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-primary-light active:translate-y-px"
+            disabled={!periodOpen}
+            title={!periodOpen ? 'Periode tertutup — tidak dapat membuat jurnal' : 'Buat jurnal baru'}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-primary-light active:translate-y-px disabled:cursor-not-allowed disabled:bg-ink-faint/30 disabled:text-ink-faint disabled:shadow-none"
           >
             <Plus size={16} /> Buat Jurnal
           </button>

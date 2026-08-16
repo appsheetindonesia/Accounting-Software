@@ -3,7 +3,7 @@ import { persist, type PersistOptions } from 'zustand/middleware'
 import { useMemo } from 'react'
 import type { Account, JournalEntry, JournalStatus, NewJournalInput, OfflineJournalOp, OfflineOpInput, PageKey } from '../types'
 import { mockAccounts, mockJournals, SEED_JOURNAL_IDS, SEED_VERSION } from '../data/mock'
-import { api, ApiError, isNetworkError, toJournalEntry, type Entity } from '../api'
+import { api, ApiError, isNetworkError, toJournalEntry, type Entity, type PeriodInfo } from '../api'
 import { setAuth, setRefreshToken, setSessionExpiredHandler, setTokensRefreshedHandler } from '../api/client'
 import type { AuthUser } from '../api'
 import { isEffectJournal } from '../lib/ledger'
@@ -44,6 +44,10 @@ interface AccountingState {
   entities: Entity[]
   activeEntityId: string
   setActiveEntity: (id: string) => Promise<void>
+
+  // Periode fiskal (GET /periods) — status isOpen dipakai UI untuk menandai
+  // periode tertutup (badge + blokir buat jurnal). Dimuat saat login/init.
+  periods: PeriodInfo[]
 
   modalOpen: boolean
   openModal: () => void
@@ -150,6 +154,7 @@ const persistOptions: PersistOptions<AccountingState, PersistedShape> = {
     accounts: s.accounts,
     journals: s.journals,
     activePeriod: s.activePeriod,
+    periods: s.periods,
     seedVersion: SEED_VERSION,
     seedJournalIds: SEED_JOURNAL_IDS,
     accessToken: s.accessToken,
@@ -177,6 +182,18 @@ export const useStore = create<AccountingState>()(
           return list.length ? list : DEFAULT_ENTITIES
         } catch {
           return DEFAULT_ENTITIES
+        }
+      }
+
+      // ---------- Periode fiskal ----------
+      // Fetch status periode (isOpen) — dipakai UI untuk menandai periode
+      // tertutup. Aman gagal: offline → pertahankan daftar yang sudah ada.
+      const fetchPeriods = async (): Promise<PeriodInfo[]> => {
+        try {
+          const res = await api.getPeriods()
+          return res.periods
+        } catch {
+          return get().periods
         }
       }
 
@@ -312,6 +329,9 @@ export const useStore = create<AccountingState>()(
           const { posted, deleted, kept } = res.handledDrafts
           set({
             journals: jrn.journals.map((j) => enrichCreatedBy(toJournalEntry(j), get().user)),
+            // Tandai periode tertutup di state agar UI langsung menampilkan
+            // indikator (tanpa menunggu refetch berikutnya).
+            periods: get().periods.map((p) => (p.id === id ? { ...p, isOpen: false } : p)),
             lastSyncedAt: nowIso(),
             toast: {
               message: `Periode ditutup — ${posted} draft diposting, ${kept} dipertahankan, ${deleted} dihapus`,
@@ -359,6 +379,7 @@ export const useStore = create<AccountingState>()(
 
         entities: DEFAULT_ENTITIES,
         activeEntityId: 'ent-001',
+        periods: [],
         // Ganti entitas aktif: sinkronkan header X-Entity-Id client (setAuth)
         // lalu re-fetch journals/accounts dari server (online) agar semua
         // halaman menampilkan data entitas baru. Saat offline, hanya ganti
@@ -409,6 +430,7 @@ export const useStore = create<AccountingState>()(
             const [accRes, jrnRes] = await Promise.all([api.getAccounts(), api.getJournals()])
             const journals = jrnRes.journals.map((j) => enrichCreatedBy(toJournalEntry(j), auth?.user ?? get().user))
             const entities = await fetchEntities()
+            const periods = await fetchPeriods()
             // Reconnect offline→online: auto-login demo juga harus menyinkronkan
             // entityId client agar header X-Entity-Id ikut terkirim.
             if (auth) setAuth(auth.accessToken, get().activeEntityId, auth.refreshToken ?? null)
@@ -424,6 +446,7 @@ export const useStore = create<AccountingState>()(
               accounts: accRes.accounts,
               journals,
               entities,
+              periods,
               activePeriod: get().activePeriod,
               lastSyncedAt: nowIso(),
               ...(auth && !opts?.silent
@@ -473,6 +496,7 @@ export const useStore = create<AccountingState>()(
             const [accRes, jrnRes] = await Promise.all([api.getAccounts(), api.getJournals()])
             const journals = jrnRes.journals.map((j) => enrichCreatedBy(toJournalEntry(j), auth.user))
             const entities = await fetchEntities()
+            const periods = await fetchPeriods()
             // Sinkronkan entityId client dengan entitas aktif → header X-Entity-Id
             // terkirim SEJAK login (bukan hanya saat ganti entitas eksplisit).
             setAuth(auth.accessToken, get().activeEntityId, auth.refreshToken)
@@ -484,6 +508,7 @@ export const useStore = create<AccountingState>()(
               accounts: accRes.accounts,
               journals,
               entities,
+              periods,
               activePeriod: auth.activePeriod?.id ?? get().activePeriod,
               lastSyncedAt: nowIso(),
               authLoading: false,
@@ -538,6 +563,7 @@ export const useStore = create<AccountingState>()(
             activePeriod: '2026-03',
             entities: DEFAULT_ENTITIES,
             activeEntityId: 'ent-001',
+            periods: [],
             page: 'dashboard',
             modalOpen: false,
             focusJournalId: null,

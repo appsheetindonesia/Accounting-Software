@@ -28,6 +28,12 @@ export const formatDateLong = (iso: string) => {
   return `${d} ${MONTHS_ID[m - 1]} ${y}`
 }
 
+// "2026-03" -> "Maret 2026" (id periode YYYY-MM)
+export const formatPeriodLabel = (periodId: string) => {
+  const [y, m] = periodId.split('-').map(Number)
+  return `${MONTHS_ID[m - 1]} ${y}`
+}
+
 // "2026-03-15" -> "15/03"
 export const formatDateShort = (iso: string) => {
   const [, m, d] = iso.split('-')
