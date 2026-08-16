@@ -4,6 +4,9 @@
 // Refresh token: saat respons 401 (access token kedaluwarsa) dan ada refresh
 // token, klien otomatis memanggil POST /auth/refresh, mengganti token, lalu
 // mengulang request asli (sekali). Refresh paralel di-dedupe jadi satu panggilan.
+// Rate limit (API §1.5): respons 429 RATE_LIMITED di-retry otomatis (maks 2x,
+// jeda 800ms / hormati Retry-After); bila tetap 429 → ApiError RATE_LIMITED
+// dengan pesan "Terlalu banyak permintaan" yang jelas.
 
 export class ApiError extends Error {
   status: number
@@ -58,6 +61,11 @@ interface RequestOptions {
   auth?: boolean
 }
 
+// 429 RATE_LIMITED: jumlah retry & jeda antar percobaan (API §1.5).
+const RATE_LIMIT_RETRIES = 2
+const RATE_LIMIT_DELAY_MS = 800
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
 // Dedupe: satu refresh untuk banyak request 401 yang datang bersamaan
 let refreshPromise: Promise<boolean> | null = null
 
@@ -103,11 +111,24 @@ const doRequest = async <T>(path: string, opts: RequestOptions, allowRefresh: bo
   }
   const qs = params.toString() ? `?${params.toString()}` : ''
 
-  const res = await fetch(`${BASE_URL}${path}${qs}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
+  const attempt = () =>
+    fetch(`${BASE_URL}${path}${qs}`, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+
+  let res = await attempt()
+
+  // 429 RATE_LIMITED → retry otomatis dengan jeda (hormati Retry-After bila
+  // server mengirimnya, default 800ms). Maksimal RATE_LIMIT_RETRIES percobaan
+  // ulang; bila masih 429 → jatuh ke ApiError RATE_LIMITED di bawah.
+  for (let retry = 0; res.status === 429 && retry < RATE_LIMIT_RETRIES; retry++) {
+    const retryAfter = Number(res.headers?.get?.('retry-after'))
+    const delay = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : RATE_LIMIT_DELAY_MS
+    await sleep(delay)
+    res = await attempt()
+  }
 
   // Access token kedaluwarsa → refresh sekali, lalu ulangi request asli.
   // (Jangan refresh endpoint auth itu sendiri atau request tanpa token.)
@@ -127,7 +148,14 @@ const doRequest = async <T>(path: string, opts: RequestOptions, allowRefresh: bo
 
   if (!res.ok || !json || json.error) {
     const err = json?.error
-    throw new ApiError(res.status, err?.code ?? 'HTTP_ERROR', err?.message ?? `HTTP ${res.status}`)
+    const code = err?.code ?? 'HTTP_ERROR'
+    // 429 setelah retry habis → pesan konsisten ("Terlalu banyak permintaan"),
+    // bukan sekadar "HTTP 429" — store menampilkannya sebagai toast error.
+    const message =
+      res.status === 429
+        ? 'Terlalu banyak permintaan. Silakan coba lagi beberapa saat lagi.'
+        : (err?.message ?? `HTTP ${res.status}`)
+    throw new ApiError(res.status, code, message)
   }
   return json.data
 }

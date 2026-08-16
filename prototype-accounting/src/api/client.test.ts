@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { request, setAuth, setSessionExpiredHandler, setTokensRefreshedHandler } from './client'
 
 const json = (status: number, body: unknown) =>
-  ({ ok: status >= 200 && status < 300, status, json: async () => body }) as Response
+  ({
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+    headers: { get: () => null }, // tanpa Retry-After → jeda default 800ms
+  }) as Response
 
 const refreshCall = (calls: unknown[][]) => calls.find((c) => String(c[0]).includes('/auth/refresh'))
 
@@ -104,6 +109,94 @@ describe('request — refresh token otomatis saat 401', () => {
 
     await expect(request('/journals', { method: 'POST', body: {} })).rejects.toThrow('Data tidak valid')
     expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('request — retry 429 RATE_LIMITED (API §1.5)', () => {
+  beforeEach(() => {
+    setAuth(null, null, null)
+    setSessionExpiredHandler(null)
+    setTokensRefreshedHandler(null)
+    vi.unstubAllGlobals()
+  })
+
+  it('429 → retry otomatis setelah jeda → request berhasil (tanpa error)', async () => {
+    vi.useFakeTimers()
+    try {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json(429, { error: { code: 'RATE_LIMITED', message: 'Terlalu banyak permintaan' } }))
+        .mockResolvedValueOnce(json(200, { data: { ok: true } }))
+      vi.stubGlobal('fetch', fetchMock)
+      setAuth('mock.user-001.1', undefined, 'r1')
+
+      const pending = request<{ ok: boolean }>('/journals')
+      await vi.advanceTimersByTimeAsync(1000) // lewati jeda 800ms
+      const result = await pending
+
+      expect(result).toEqual({ ok: true })
+      expect(fetchMock).toHaveBeenCalledTimes(2) // 429 + retry
+    } finally {
+      vi.useRealTimers()
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('429 berulang (3x) → ApiError RATE_LIMITED dengan pesan "Terlalu banyak permintaan"', async () => {
+    vi.useFakeTimers()
+    try {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json(429, { error: { code: 'RATE_LIMITED', message: 'Terlalu banyak permintaan' } }))
+        .mockResolvedValueOnce(json(429, { error: { code: 'RATE_LIMITED', message: 'Terlalu banyak permintaan' } }))
+        .mockResolvedValueOnce(json(429, { error: { code: 'RATE_LIMITED', message: 'Terlalu banyak permintaan' } }))
+      vi.stubGlobal('fetch', fetchMock)
+      setAuth('mock.user-001.1', undefined, 'r1')
+
+      const pending = request('/journals')
+      // Handler rejection dipasang SEGERA (hindari unhandled rejection saat
+      // fake timers dimajukan), lalu tunggu jeda retry.
+      const settled = pending.then(
+        () => {
+          throw new Error('request seharusnya gagal (429)')
+        },
+        (e: unknown) => e,
+      )
+      await vi.advanceTimersByTimeAsync(2000) // 2 × jeda 800ms
+
+      const err = await settled
+      expect(err).toMatchObject({ status: 429, code: 'RATE_LIMITED' })
+      expect((err as Error).message).toContain('Terlalu banyak permintaan')
+      expect(fetchMock).toHaveBeenCalledTimes(3) // 1 asli + 2 retry
+    } finally {
+      vi.useRealTimers()
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('429 TIDAK memicu refresh token & TIDAK memanggil handler sesi', async () => {
+    vi.useFakeTimers()
+    try {
+      const expired = vi.fn()
+      setSessionExpiredHandler(expired)
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json(429, { error: { code: 'RATE_LIMITED', message: 'Terlalu banyak permintaan' } }))
+        .mockResolvedValueOnce(json(200, { data: { ok: true } }))
+      vi.stubGlobal('fetch', fetchMock)
+      setAuth('mock.user-001.1', undefined, 'r1')
+
+      const pending = request('/journals')
+      await vi.advanceTimersByTimeAsync(1000)
+      await pending
+
+      const refreshes = fetchMock.mock.calls.filter((c) => String(c[0]).includes('/auth/refresh'))
+      expect(refreshes).toHaveLength(0)
+      expect(expired).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+      vi.unstubAllGlobals()
+    }
   })
 })
 
