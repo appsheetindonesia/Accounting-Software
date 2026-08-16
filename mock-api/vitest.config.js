@@ -8,5 +8,11 @@ export default defineConfig({
     env: {
       MOCK_API_PERSIST: '0',
     },
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json-summary', 'lcov'],
+      reportsDirectory: 'coverage',
+      include: ['src/**/*.js'],
+    },
   },
 })

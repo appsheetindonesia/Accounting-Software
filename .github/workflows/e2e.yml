@@ -44,17 +44,39 @@ jobs:
             mock-api/package-lock.json
             prototype-accounting/package-lock.json
 
-      - name: 'Install dependencies + test prototipe (Vitest: unit + MSW)'
+      # JUnit reporter bawaan Vitest — konsisten dengan ci.yml: laporan
+      # per paket di <dir>/test-results/junit.xml (di-ignore, tidak pernah
+      # di-commit), di-upload sebagai artifact saat gagal dengan nama yang
+      # sama (junit-unit-prototipe / junit-integration-mock-api).
+      - name: 'Install dependencies + test prototipe (Vitest: unit + MSW, laporan JUnit)'
         working-directory: prototype-accounting
         run: |
           npm ci
-          npm test
+          npx vitest run --reporter=default --reporter=junit --outputFile=test-results/junit.xml
 
-      - name: Install dependencies + test mock API (Vitest + Supertest)
+      - name: Upload hasil test JUnit prototipe (saat gagal)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-unit-prototipe
+          path: prototype-accounting/test-results/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Install dependencies + test mock API (Vitest + Supertest, laporan JUnit)
         working-directory: mock-api
         run: |
           npm ci
-          npm test
+          npx vitest run --reporter=default --reporter=junit --outputFile=test-results/junit.xml
+
+      - name: Upload hasil test JUnit mock API (saat gagal)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-integration-mock-api
+          path: mock-api/test-results/
+          if-no-files-found: warn
+          retention-days: 7
 
   e2e:
     name: RG-01..RG-19 (chromium + firefox)

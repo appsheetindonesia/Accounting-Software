@@ -10,3 +10,6 @@ nohup.out
 
 # Laporan test JUnit (dihasilkan CI saat gagal; tidak pernah di-commit)
 test-results/
+
+# Laporan Vitest coverage (dihasilkan CI; tidak pernah di-commit)
+coverage/

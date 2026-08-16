@@ -4,9 +4,13 @@
 #   1. test — MATRIX per-tahap:
 #        • prototipe  (unit + integration, Vitest + MSW)
 #        • mock API   (integration, Vitest + Supertest)
-#      Setiap tahap menulis laporan JUnit (test-results/junit.xml)
-#      dan meng-upload-nya sebagai artifact saat GAGAL — debug CI
-#      lebih mudah (nama artifact per tahap, mis. junit-unit-prototipe).
+#      Setiap tahap menulis laporan JUnit (test-results/junit.xml) DAN
+#      cakupan Vitest coverage (coverage/, provider v8 — tabel di log +
+#      json-summary/lcov), lalu meng-upload keduanya sebagai artifact:
+#      JUnit saat GAGAL, coverage SELALU (nama per tahap, mis.
+#      junit-unit-prototipe / junit-unit-prototipe-coverage).
+#      ANGKA TEST SAAT INI (update bila berubah): mock API 112 test,
+#      prototipe 229 test, E2E RG-01..RG-22 × 2 browser = 44 test.
 #   2. e2e     — E2E Playwright RG-01..RG-19 (chromium + firefox)
 #   3. qa-sync — gate sinkronisasi artefak QA: CSV/XLSX harus sinkron
 #                dengan QA Test Plan (scripts/check-qa-sync.py)
@@ -69,12 +73,13 @@ jobs:
         working-directory: ${{ matrix.dir }}
         run: npm ci
 
-      # JUnit reporter bawaan Vitest: output dipakai artifact debug saat gagal
-      # (default reporter tetap tampil di log). Lokasi stabil per paket:
-      # <dir>/test-results/junit.xml (di-ignore, tidak pernah di-commit).
-      - name: 'Test + laporan JUnit (${{ matrix.dir }})'
+      # JUnit reporter bawaan Vitest + coverage (--coverage, provider v8):
+      # output keduanya dipakai artifact debug (default reporter tetap tampil
+      # di log). Lokasi stabil per paket: <dir>/test-results/junit.xml dan
+      # <dir>/coverage/ (keduanya di-ignore, tidak pernah di-commit).
+      - name: 'Test + laporan JUnit + coverage (${{ matrix.dir }})'
         working-directory: ${{ matrix.dir }}
-        run: npx vitest run --reporter=default --reporter=junit --outputFile=test-results/junit.xml
+        run: npx vitest run --coverage --reporter=default --reporter=junit --outputFile=test-results/junit.xml
 
       - name: Upload hasil test JUnit (saat gagal)
         if: failure()
@@ -82,6 +87,15 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.dir }}/test-results/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload laporan coverage (${{ matrix.dir }})
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}-coverage
+          path: ${{ matrix.dir }}/coverage/
           if-no-files-found: warn
           retention-days: 7
 
