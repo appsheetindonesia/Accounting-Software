@@ -2,7 +2,7 @@
 // Test komponen Jurnal Terbaru (Dashboard): badge rejectionReason tampil saat
 // jurnal ditolak, tidak tampil saat tidak ada alasan.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { mockAccounts, mockJournals } from '../../data/mock'
 import { useStore } from '../../store/useStore'
 import RecentJournals from './RecentJournals'
@@ -67,5 +67,28 @@ describe('RecentJournals — Jurnal Terbaru di Dashboard', () => {
     // Tunggu render fallback offline selesai (deskripsi jurnal terbaru tampil)
     await screen.findByText(topRecent(mockJournals)[0].description)
     expect(screen.queryAllByText(/Ditolak —/)).toHaveLength(0)
+  })
+
+  it('klik baris jurnal → store: pindah ke halaman Jurnal + focusJournalId (buka detail)', async () => {
+    render(<RecentJournals />)
+
+    // Baris terbaru = rejectedJournal (BKM-2026-03-0010, tanggal paling baru)
+    const row = await screen.findByRole('button', { name: 'Buka detail BKM-2026-03-0010' })
+    fireEvent.click(row)
+
+    const s = useStore.getState()
+    expect(s.page).toBe('journal')
+    expect(s.focusJournalId).toBe('JNL-2026-03-011')
+  })
+
+  it('Enter pada baris → sama (aksesibilitas keyboard)', async () => {
+    render(<RecentJournals />)
+
+    const row = await screen.findByRole('button', { name: 'Buka detail BKM-2026-03-0010' })
+    fireEvent.keyDown(row, { key: 'Enter' })
+
+    const s = useStore.getState()
+    expect(s.page).toBe('journal')
+    expect(s.focusJournalId).toBe('JNL-2026-03-011')
   })
 })

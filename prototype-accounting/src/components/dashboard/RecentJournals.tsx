@@ -1,4 +1,4 @@
-import { ArrowRight, X } from 'lucide-react'
+import { ArrowRight, ChevronRight, X } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import { api, toJournalEntry } from '../../api'
 import { useApiFetch } from '../../hooks/useApiFetch'
@@ -9,8 +9,13 @@ import type { JournalEntry } from '../../types'
 export default function RecentJournals() {
   const journals = useStore((s) => s.journals)
   const setPage = useStore((s) => s.setPage)
+  const openSearchResult = useStore((s) => s.openSearchResult)
   const apiStatus = useStore((s) => s.apiStatus)
   const activeEntityId = useStore((s) => s.activeEntityId)
+
+  // Baris diklik → buka detail jurnal di halaman Jurnal (mirip "Buka detail":
+  // store mengarahkan ke halaman + focusJournalId, JournalTable membuka barisnya).
+  const openDetail = (journal: JournalEntry) => openSearchResult('journal', journal.id)
 
   const localRecent = (): JournalEntry[] =>
     [...journals]
@@ -46,13 +51,28 @@ export default function RecentJournals() {
               <th className="px-3 py-2.5">Keterangan</th>
               <th className="px-3 py-2.5 text-right">Nominal</th>
               <th className="px-5 py-2.5">Status</th>
+              <th className="px-5 py-2.5" />
             </tr>
           </thead>
           <tbody>
             {recent.map((j) => (
-              <tr key={j.id} className="border-b border-line/70 last:border-0 hover:bg-surface-hover/60">
+              <tr
+                key={j.id}
+                role="button"
+                tabIndex={0}
+                aria-label={`Buka detail ${j.transactionNumber}`}
+                onClick={() => openDetail(j)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    openDetail(j)
+                  }
+                }}
+                title={`Buka detail ${j.transactionNumber}`}
+                className="cursor-pointer border-b border-line/70 last:border-0 hover:bg-surface-hover/60 focus-visible:bg-surface-hover/60 focus-visible:outline-none"
+              >
                 <td className="px-5 py-3 text-sm text-ink-soft">{formatDateShort(j.date)}</td>
-                <td className="num px-3 py-3 text-xs text-ink">{j.transactionNumber}</td>
+                <td className="num px-3 py-3 text-xs font-semibold text-primary">{j.transactionNumber}</td>
                 <td className="max-w-[240px] px-3 py-3">
                   <p className="truncate text-sm text-ink">{j.description}</p>
                   {j.rejectionReason && (
@@ -64,6 +84,9 @@ export default function RecentJournals() {
                 </td>
                 <td className="num px-3 py-3 text-right text-sm font-semibold text-ink">{formatIDR(j.lines.reduce((s, l) => s + l.debit, 0))}</td>
                 <td className="px-5 py-3"><StatusBadge status={j.status} /></td>
+                <td className="px-5 py-3 text-right">
+                  <ChevronRight size={15} className="ml-auto text-ink-faint" />
+                </td>
               </tr>
             ))}
           </tbody>
