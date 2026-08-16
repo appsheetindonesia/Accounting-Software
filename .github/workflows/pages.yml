@@ -51,6 +51,10 @@ jobs:
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
+        with:
+          # Aktifkan fitur Pages bila sebelumnya nonaktif (default true,
+          # eksplisit di sini agar langkah tidak bergantung pada default).
+          enablement: true
 
       - name: Install dependencies
         working-directory: prototype-accounting
