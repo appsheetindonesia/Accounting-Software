@@ -2,14 +2,18 @@
 // Halaman Arus Kas mengikuti pola laporan lain: skeleton saat fetch pertama,
 // data dari GET /reports/cash-flow, dan fallback offline ke data lokal.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { mockAccounts, mockJournals } from '../../data/mock'
 import { useStore } from '../../store/useStore'
 import { api } from '../../api'
 import CashFlowPage from './CashFlowPage'
 
 vi.mock('../../api', () => ({
-  api: { getCashFlow: vi.fn() },
+  api: {
+    getCashFlow: vi.fn(),
+    exportReport: vi.fn(),
+    exportLedger: vi.fn(),
+  },
 }))
 
 const admin = { id: 'user-001', name: 'Rina', email: 'rina@estetikakreasi.co.id', role: 'admin' }
@@ -42,11 +46,34 @@ beforeEach(() => {
     toast: null,
   })
   vi.mocked(api.getCashFlow).mockReset()
+  vi.mocked(api.exportReport).mockReset()
 })
 
 afterEach(() => {
   useStore.setState({ apiStatus: 'idle', user: null })
   cleanup()
+})
+
+describe('CashFlowPage — ExportButtons variant reportType', () => {
+  it('ExportButtons ter-render saat online, klik PDF → exportReport(cash-flow) + toast', async () => {
+    vi.mocked(api.getCashFlow).mockResolvedValue(cashFlowFixture as any)
+    vi.mocked(api.exportReport).mockResolvedValue('Arus-Kas-2026-03.pdf')
+    render(<CashFlowPage />)
+    await screen.findByText('ARUS KAS DARI AKTIVITAS OPERASI')
+
+    expect(screen.getByRole('button', { name: 'Export PDF' })).toHaveProperty('disabled', false)
+    expect(screen.getByRole('button', { name: 'Export XLSX' })).toHaveProperty('disabled', false)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export PDF' }))
+
+    await waitFor(() => expect(api.exportReport).toHaveBeenCalledWith('cash-flow', 'pdf', '2026-03'))
+    expect(api.exportLedger).not.toHaveBeenCalled() // variant laporan, bukan per akun
+    await waitFor(() => {
+      const t = useStore.getState().toast
+      expect(t?.kind).toBe('success')
+      expect(t?.message).toContain('Arus-Kas-2026-03.pdf')
+    })
+  })
 })
 
 describe('CashFlowPage — arus kas dengan skeleton & fallback', () => {

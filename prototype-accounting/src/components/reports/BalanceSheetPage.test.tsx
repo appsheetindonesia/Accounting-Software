@@ -4,14 +4,18 @@
 // skeleton tampil; begitu online, GET /reports/balance-sheet dijalankan dan
 // skeleton diganti data laporan.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { mockAccounts, mockJournals } from '../../data/mock'
 import { useStore } from '../../store/useStore'
 import { api } from '../../api'
 import BalanceSheetPage from './BalanceSheetPage'
 
 vi.mock('../../api', () => ({
-  api: { getBalanceSheet: vi.fn() },
+  api: {
+    getBalanceSheet: vi.fn(),
+    exportReport: vi.fn(),
+    exportLedger: vi.fn(),
+  },
 }))
 
 const admin = { id: 'user-001', name: 'Rina', email: 'rina@estetikakreasi.co.id', role: 'admin' }
@@ -56,11 +60,35 @@ beforeEach(() => {
     toast: null,
   })
   vi.mocked(api.getBalanceSheet).mockReset()
+  vi.mocked(api.exportReport).mockReset()
 })
 
 afterEach(() => {
   useStore.setState({ apiStatus: 'idle', user: null })
   cleanup()
+})
+
+describe('BalanceSheetPage — ExportButtons variant reportType', () => {
+  it('ExportButtons ter-render (PDF & XLSX) saat online, klik PDF → exportReport(balance-sheet) + toast', async () => {
+    vi.mocked(api.getBalanceSheet).mockResolvedValue(bsFixture as any)
+    vi.mocked(api.exportReport).mockResolvedValue('Neraca-2026-03.pdf')
+    useStore.setState({ apiStatus: 'online', lastSyncedAt: '2026-08-16T00:00:00Z' })
+    render(<BalanceSheetPage />)
+    await screen.findByText('✓ Seimbang (Aset = Kewajiban + Ekuitas)', { exact: true })
+
+    expect(screen.getByRole('button', { name: 'Export PDF' })).toHaveProperty('disabled', false)
+    expect(screen.getByRole('button', { name: 'Export XLSX' })).toHaveProperty('disabled', false)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export PDF' }))
+
+    await waitFor(() => expect(api.exportReport).toHaveBeenCalledWith('balance-sheet', 'pdf', '2026-03'))
+    expect(api.exportLedger).not.toHaveBeenCalled() // variant laporan, bukan per akun
+    await waitFor(() => {
+      const t = useStore.getState().toast
+      expect(t?.kind).toBe('success')
+      expect(t?.message).toContain('Neraca-2026-03.pdf')
+    })
+  })
 })
 
 describe('BalanceSheetPage — skeleton saat connecting, diganti data', () => {

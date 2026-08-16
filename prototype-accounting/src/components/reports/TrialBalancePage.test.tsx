@@ -3,14 +3,18 @@
 // 'connecting', useApiFetch belum fetch → skeleton; begitu online,
 // GET /reports/trial-balance dijalankan dan skeleton diganti data tabel.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { mockAccounts, mockJournals } from '../../data/mock'
 import { useStore } from '../../store/useStore'
 import { api } from '../../api'
 import TrialBalancePage from './TrialBalancePage'
 
 vi.mock('../../api', () => ({
-  api: { getTrialBalance: vi.fn() },
+  api: {
+    getTrialBalance: vi.fn(),
+    exportReport: vi.fn(),
+    exportLedger: vi.fn(),
+  },
 }))
 
 const admin = { id: 'user-001', name: 'Rina', email: 'rina@estetikakreasi.co.id', role: 'admin' }
@@ -35,11 +39,35 @@ beforeEach(() => {
     toast: null,
   })
   vi.mocked(api.getTrialBalance).mockReset()
+  vi.mocked(api.exportReport).mockReset()
 })
 
 afterEach(() => {
   useStore.setState({ apiStatus: 'idle', user: null })
   cleanup()
+})
+
+describe('TrialBalancePage — ExportButtons variant reportType', () => {
+  it('ExportButtons ter-render saat online, klik XLSX → exportReport(trial-balance) + toast', async () => {
+    vi.mocked(api.getTrialBalance).mockResolvedValue(tbFixture as any)
+    vi.mocked(api.exportReport).mockResolvedValue('Neraca-Lajur-2026-03.xlsx')
+    useStore.setState({ apiStatus: 'online', lastSyncedAt: '2026-08-16T00:00:00Z' })
+    render(<TrialBalancePage />)
+    await screen.findByText('✓ Seimbang (Debit = Kredit)', { exact: true })
+
+    expect(screen.getByRole('button', { name: 'Export PDF' })).toHaveProperty('disabled', false)
+    expect(screen.getByRole('button', { name: 'Export XLSX' })).toHaveProperty('disabled', false)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export XLSX' }))
+
+    await waitFor(() => expect(api.exportReport).toHaveBeenCalledWith('trial-balance', 'xlsx', '2026-03'))
+    expect(api.exportLedger).not.toHaveBeenCalled() // variant laporan, bukan per akun
+    await waitFor(() => {
+      const t = useStore.getState().toast
+      expect(t?.kind).toBe('success')
+      expect(t?.message).toContain('Neraca-Lajur-2026-03.xlsx')
+    })
+  })
 })
 
 describe('TrialBalancePage — skeleton saat connecting, diganti data', () => {
