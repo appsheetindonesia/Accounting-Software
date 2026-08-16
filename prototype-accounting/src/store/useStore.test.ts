@@ -327,13 +327,15 @@ describe('logout — kembali ke halaman login', () => {
     expect(mockedApi.logout).toHaveBeenCalledWith('r1')
   })
 
-  it('memanggil POST /auth/logout DAN membersihkan state sesi lengkap (accessToken, refreshToken, user, apiStatus)', () => {
+  it('memanggil POST /auth/logout DAN membersihkan state sesi lengkap (accessToken, refreshToken, user, apiStatus, entityId)', () => {
+    const setAuthSpy = vi.spyOn(clientApi, 'setAuth')
     // Sesi penuh: user terautentikasi, terhubung online, pernah sinkron & refresh
     useStore.setState({
       accessToken: 'mock.user-001.1',
       refreshToken: 'r1',
       user: demoUser,
       apiStatus: 'online',
+      activeEntityId: 'ent-002',
       lastSyncedAt: '2026-03-25T08:00:00Z',
       lastRefreshedAt: '2026-03-25T08:05:00Z',
     })
@@ -344,14 +346,21 @@ describe('logout — kembali ke halaman login', () => {
     expect(mockedApi.logout).toHaveBeenCalledTimes(1)
     expect(mockedApi.logout).toHaveBeenCalledWith('r1')
 
+    // 1b) Client layer: setAuth(null, null, null) → entityId API-layer ikut
+    //     dibersihkan — request tenant berikutnya TIDAK membawa X-Entity-Id
+    //     ent-002 yang basi (kebocoran lintas tenant)
+    expect(setAuthSpy).toHaveBeenCalledWith(null, null, null)
+
     // 2) State sesi dibersihkan lengkap — tidak ada sisa sesi yang bocor
     const s = useStore.getState()
     expect(s.accessToken).toBeNull()
     expect(s.refreshToken).toBeNull()
     expect(s.user).toBeNull()
     expect(s.apiStatus).toBe('idle')
+    expect(s.activeEntityId).toBe('ent-001')
     expect(s.lastSyncedAt).toBeNull()
     expect(s.lastRefreshedAt).toBeNull()
+    setAuthSpy.mockRestore()
   })
 })
 
@@ -520,10 +529,15 @@ describe('handleSessionExpired — refresh gagal → logout otomatis + modal "Se
     expect(s.accessToken).toBeNull()
     expect(s.refreshToken).toBeNull()
     expect(s.user).toBeNull()
+    // Konsisten dengan logout: status kembali idle, bukan offline/connecting
     expect(s.apiStatus).toBe('idle')
     expect(s.authError).toContain('Sesi berakhir')
     // Modal "Sesi berakhir" terbuka — user tahu kenapa dilempar ke login
     expect(s.sessionExpired).toBe(true)
+    // Toast konsisten dengan logout ('Anda telah keluar'): user dapat umpan
+    // balik eksplisit sesi berakhir, bukan cuma halaman login yang kosong
+    expect(s.toast?.kind).toBe('error')
+    expect(s.toast?.message).toContain('Sesi berakhir')
   })
 
   it('dismissSessionExpired menutup modal (user siap login lagi)', () => {

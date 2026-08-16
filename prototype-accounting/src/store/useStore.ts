@@ -563,6 +563,9 @@ export const useStore = create<AccountingState>()(
             entities: DEFAULT_ENTITIES,
             activeEntityId: 'ent-001',
             sessionExpired: true,
+            // Toast konsisten dengan logout — user tahu sesi berakhir, bukan
+            // sekadar dilempar ke halaman login tanpa penjelasan.
+            toast: { message: 'Sesi berakhir. Silakan login kembali.', kind: 'error' },
           })
         },
         dismissSessionExpired: () => set({ sessionExpired: false }),
