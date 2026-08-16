@@ -112,14 +112,19 @@ const fail = (res, status, code, message, details) =>
 //     agar suite regresi & klik manual tidak kena throttle.
 // ------------------------------------------------------------
 const rateBuckets = new Map() // "ip|endpoint" -> { count, resetAt }
+// Override ambang via POST /admin/set-rate-limit (SAAT RUNTIME, tanpa restart) —
+// dipakai E2E RG-21/22 & test ambang rendah. null = ikuti env/default.
+let rateOverride = null
 const rateLimit = (req, res, next) => {
   let max
-  if (process.env.MOCK_RATE_MAX !== undefined && process.env.MOCK_RATE_MAX !== '') {
+  if (rateOverride) {
+    max = rateOverride.max
+  } else if (process.env.MOCK_RATE_MAX !== undefined && process.env.MOCK_RATE_MAX !== '') {
     max = Number(process.env.MOCK_RATE_MAX)
   } else {
     max = process.env.NODE_ENV === 'test' ? Infinity : 30 // API §1.5
   }
-  const windowMs = Number(process.env.MOCK_RATE_WINDOW_MS) || 60_000
+  const windowMs = (rateOverride && rateOverride.windowMs) || Number(process.env.MOCK_RATE_WINDOW_MS) || 60_000
   const key = `${req.ip || 'unknown'}|${req.baseUrl}${req.path}`
   const now = Date.now()
   const bucket = rateBuckets.get(key) ?? { count: 0, resetAt: now + windowMs }
@@ -137,8 +142,13 @@ const rateLimit = (req, res, next) => {
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024 // 5 MB
 const ALLOWED_ATTACHMENT_MIME = new Set(['image/jpeg', 'image/png', 'application/pdf'])
 
-// Rate limit aktif untuk semua route (harus terpasang sebelum routes)
-app.use(rateLimit)
+// Rate limit aktif untuk semua route KECUALI /admin/* (harus terpasang sebelum
+// routes). Endpoint admin adalah alat dev/test — harus SELALU bisa diakses,
+// termasuk mengubah ambang via /admin/set-rate-limit saat limit sedang rendah.
+app.use((req, res, next) => {
+  if (req.path.startsWith('/admin/')) return next()
+  rateLimit(req, res, next)
+})
 
 // Saldo live per akun: baseBalance + efek jurnal posted (BR-6, BR-7)
 // Jurnal yang memengaruhi saldo: posted DAN bukan jurnal pembalik.
@@ -359,6 +369,9 @@ app.post('/admin/reset', (req, res) => {
   tokenEpoch = 0
   // Kembalikan TTL ke nilai default (env MOCK_ACCESS_TTL atau 3600 detik)
   accessTtlMs = DEFAULT_ACCESS_TTL_MS
+  // Rate limit kembali ke env/default + bucket dikosongkan (deterministik)
+  rateOverride = null
+  rateBuckets.clear()
   ok(res, {
     status: 'reset',
     seed: withExtra ? 'extra' : 'base',
@@ -374,6 +387,35 @@ app.post('/admin/reset', (req, res) => {
 app.post('/admin/expire-tokens', (req, res) => {
   tokenEpoch = Date.now()
   ok(res, { status: 'expired', message: 'Semua access token yang diterbitkan sebelumnya kini kedaluwarsa' })
+})
+
+// Paksa SEMUA refresh token kedaluwarsa (alat development) — memicu alur
+// SESSION_EXPIRED di klien secara deterministik TANPA restart / menunggu TTL:
+// setiap sesi login di-set expiresAt ke masa lalu, sehingga POST /auth/refresh
+// berikutnya mengembalikan 401 SESSION_EXPIRED (dan menghapus sesi tsb).
+// Dipakai E2E RG-20: refresh gagal → modal "Sesi berakhir" + login ulang wajib.
+app.post('/admin/expire-refresh-tokens', (req, res) => {
+  for (const [, entry] of db.sessions) entry.expiresAt = Date.now() - 1
+  ok(res, { status: 'expired', message: 'Semua refresh token kini kedaluwarsa — refresh berikutnya → SESSION_EXPIRED' })
+})
+
+// Ubah ambang rate limit SAAT RUNTIME (tanpa restart) — uji alur RATE_LIMITED
+// (E2E RG-21/22): ambang rendah memicu 429, lalu naikkan kembali agar retry
+// klien sukses. Bucket dikosongkan saat dipanggil → hitungan deterministik
+// dimulai dari titik ini. Override ini menang atas env MOCK_RATE_MAX;
+// POST /admin/reset mengembalikan ke env/default.
+app.post('/admin/set-rate-limit', (req, res) => {
+  const max = Number(req.body?.max)
+  if (!Number.isFinite(max) || max < 1)
+    return fail(res, 422, 'VALIDATION_ERROR', 'max wajib angka >= 1', [{ field: 'max', message: 'Angka >= 1' }])
+  const windowMs = Number(req.body?.windowMs)
+  rateOverride = { max, windowMs: Number.isFinite(windowMs) && windowMs >= 100 ? windowMs : 60_000 }
+  rateBuckets.clear()
+  ok(res, {
+    max,
+    windowMs: rateOverride.windowMs,
+    message: `Rate limit kini ${max} req/menit per endpoint (bucket dikosongkan)`,
+  })
 })
 
 // Ubah TTL access token SAAT RUNTIME (tanpa restart) — uji "token valid

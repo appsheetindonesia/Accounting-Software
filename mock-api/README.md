@@ -109,11 +109,18 @@ agar angka kembali ke baseline yang terverifikasi, tanpa mematikan server.
 Endpoint dev lain: `POST /admin/seed-bulk {count}` (maks 50.000) — seed massal jurnal
 seimbang untuk uji performa (RG-09); `POST /admin/expire-tokens` — paksa semua access
 token yang diterbitkan sebelumnya kedaluwarsa (uji deterministik tanpa menunggu TTL;
-di-reset oleh `POST /admin/reset`); `POST /admin/set-token-ttl {ttlSeconds}` — ubah
-TTL access token SAAT RUNTIME (tanpa restart) untuk simulasi **kedaluwarsa terjadwal**:
-token yang diterbitkan sebelumnya basi N detik setelah issuedAt-nya (dipakai E2E
-RG-19; di-reset oleh `POST /admin/reset`). Reset memakai `structuredClone` agar
-mutasi runtime (tutup periode, reverse, edit akun) tidak mencemari seed.
+di-reset oleh `POST /admin/reset`); `POST /admin/expire-refresh-tokens` — paksa
+SEMUA refresh token kedaluwarsa → refresh berikutnya `SESSION_EXPIRED` (dipakai E2E
+RG-20); `POST /admin/set-token-ttl {ttlSeconds}` — ubah TTL access token SAAT
+RUNTIME (tanpa restart) untuk simulasi **kedaluwarsa terjadwal**: token yang
+diterbitkan sebelumnya basi N detik setelah issuedAt-nya (dipakai E2E RG-19;
+di-reset oleh `POST /admin/reset`); `POST /admin/set-rate-limit {max, windowMs}` —
+ubah ambang rate limit SAAT RUNTIME (tanpa restart, menang atas `MOCK_RATE_MAX`)
+dan mengosongkan bucket → uji `RATE_LIMITED` dengan ambang rendah (dipakai E2E
+RG-21/22; di-reset oleh `POST /admin/reset`). Endpoint `/admin/*` dikecualikan
+dari rate limit (alat dev/test harus selalu bisa diakses). Reset memakai
+`structuredClone` agar mutasi runtime (tutup periode, reverse, edit akun)
+tidak mencemari seed.
 
 **Kedaluwarsa access token terjadwal**: token `mock.<userId>.<issuedAt>` hanya valid
 `MOCK_ACCESS_TTL` detik (default 3600). Demo cepat: `MOCK_ACCESS_TTL=10 npm run dev` →

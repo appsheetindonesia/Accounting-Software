@@ -518,6 +518,29 @@ describe('Kode error katalog yang baru terimplementasi (API §13)', () => {
     }
   })
 
+  it('POST /admin/expire-refresh-tokens → refresh berikutnya SESSION_EXPIRED + sesi dihapus (E2E RG-20)', async () => {
+    // Login normal → refresh token valid (refresh ROTASI token: yang aktif
+    // adalah hasil refresh, bukan token dari login)
+    const login = await request(app).post('/auth/login').send(USERS.admin)
+    expect(login.status).toBe(200)
+    const before = await request(app).post('/auth/refresh').send({ refreshToken: login.body.data.refreshToken })
+    expect(before.status).toBe(200) // sesi masih valid sebelum expire
+    const refreshToken = before.body.data.refreshToken
+
+    // Kedaluwarsakan semua refresh token (deterministik — tanpa TTL/restart)
+    const exp = await request(app).post('/admin/expire-refresh-tokens').send({})
+    expect(exp.status).toBe(200)
+    expect(exp.body.data.status).toBe('expired')
+
+    // Refresh sekarang → 401 SESSION_EXPIRED
+    const res = await request(app).post('/auth/refresh').send({ refreshToken })
+    expectError(res, 401, 'SESSION_EXPIRED')
+
+    // Sesi dihapus dari Map → token yang sama kedua kalinya tak dikenal
+    const again = await request(app).post('/auth/refresh').send({ refreshToken })
+    expectError(again, 401, 'INVALID_REFRESH_TOKEN')
+  })
+
   it('refresh dengan token tak dikenal → INVALID_REFRESH_TOKEN', async () => {
     const res = await request(app).post('/auth/refresh')
       .send({ refreshToken: 'bukan-token-yang-ada' })
