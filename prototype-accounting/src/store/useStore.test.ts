@@ -169,6 +169,21 @@ describe('login — POST /auth/login (bukan auto-login demo)', () => {
     expect(s.lastSyncedAt).toBeTruthy() // sinkron berhasil tercatat
   })
 
+  it('setAuth dipanggil dengan entitas aktif → X-Entity-Id terkirim SEJAK login (bukan menunggu ganti entitas)', async () => {
+    const setAuthSpy = vi.spyOn(clientApi, 'setAuth')
+    useStore.setState({ activeEntityId: 'ent-001' })
+    mockedApi.login.mockResolvedValue({ accessToken: 'mock.user-001.1', refreshToken: 'x', expiresIn: 86400, user: demoUser, activePeriod: { id: '2026-03', name: 'Maret 2026', isOpen: true } } as any)
+    mockedApi.getAccounts.mockResolvedValue({ accounts: mockAccounts })
+    mockedApi.getJournals.mockResolvedValue({ journals: mockJournals, totals: { debit: 0, credit: 0, difference: 0 } })
+
+    await useStore.getState().login('rina@estetikakreasi.co.id', 'password123')
+
+    // login → client entityId = entitas aktif → semua request berikutnya membawa
+    // X-Entity-Id: ent-001 (tanpa kebocoran/null header dari sesi sebelumnya)
+    expect(setAuthSpy).toHaveBeenCalledWith('mock.user-001.1', 'ent-001', 'x')
+    setAuthSpy.mockRestore()
+  })
+
   it('kredensial salah (401) → authError, TIDAK masuk & TIDAK auto-login demo', async () => {
     mockedApi.login.mockRejectedValue(new ApiError(401, 'INVALID_CREDENTIALS', 'Email atau password salah'))
 

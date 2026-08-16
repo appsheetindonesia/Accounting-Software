@@ -396,7 +396,7 @@ export const useStore = create<AccountingState>()(
         init: async (opts) => {
           const token = get().accessToken
           if (!token) return
-          if (token !== 'local.demo') setAuth(token, undefined, get().refreshToken)
+          if (token !== 'local.demo') setAuth(token, get().activeEntityId, get().refreshToken)
           const status = get().apiStatus
           if (status === 'connecting' || status === 'online') return
           set({ apiStatus: 'connecting' })
@@ -409,6 +409,9 @@ export const useStore = create<AccountingState>()(
             const [accRes, jrnRes] = await Promise.all([api.getAccounts(), api.getJournals()])
             const journals = jrnRes.journals.map((j) => enrichCreatedBy(toJournalEntry(j), auth?.user ?? get().user))
             const entities = await fetchEntities()
+            // Reconnect offline→online: auto-login demo juga harus menyinkronkan
+            // entityId client agar header X-Entity-Id ikut terkirim.
+            if (auth) setAuth(auth.accessToken, get().activeEntityId, auth.refreshToken ?? null)
             set({
               apiStatus: 'online',
               ...(auth
@@ -470,6 +473,9 @@ export const useStore = create<AccountingState>()(
             const [accRes, jrnRes] = await Promise.all([api.getAccounts(), api.getJournals()])
             const journals = jrnRes.journals.map((j) => enrichCreatedBy(toJournalEntry(j), auth.user))
             const entities = await fetchEntities()
+            // Sinkronkan entityId client dengan entitas aktif → header X-Entity-Id
+            // terkirim SEJAK login (bukan hanya saat ganti entitas eksplisit).
+            setAuth(auth.accessToken, get().activeEntityId, auth.refreshToken)
             set({
               apiStatus: 'online',
               accessToken: auth.accessToken,
