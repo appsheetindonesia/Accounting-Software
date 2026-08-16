@@ -131,6 +131,28 @@ describe('ExportButtons — tombol Export PDF/XLSX', () => {
     expect(mockedApi.exportReport).toHaveBeenCalledTimes(1)
   })
 
+  it('klik ganda cepat pada tombol yang SAMA (satu frame, satu batch) → export dipanggil SEKALI saja', async () => {
+    let resolve!: (v: string) => void
+    mockedApi.exportReport.mockReturnValue(new Promise<string>((r) => (resolve = r)))
+    const { getByRole } = render(<ExportButtons reportType="income-statement" period="2026-03" />)
+    const pdf = getByRole('button', { name: 'Export PDF' })
+
+    // Dua klik dalam SATU batch act: React 18 mengelompokkan setState, jadi busy
+    // state BELUM ter-render di antara kedua klik — guard tombol-disabled TIDAK
+    // cukup. Hanya guard sinkron (ref) di dalam handler yang mencegah export ganda.
+    await act(async () => {
+      fireEvent.click(pdf)
+      fireEvent.click(pdf)
+    })
+
+    expect(mockedApi.exportReport).toHaveBeenCalledTimes(1)
+    await act(async () => resolve('Laba-Rugi-2026-03.pdf'))
+    await waitFor(() => expect(getByRole('button', { name: 'Export PDF' })).toHaveProperty('disabled', false))
+    // Selesai → tombol bisa dipakai lagi, dan klik berikutnya memicu export baru
+    fireEvent.click(getByRole('button', { name: 'Export PDF' }))
+    await waitFor(() => expect(mockedApi.exportReport).toHaveBeenCalledTimes(2))
+  })
+
   it('klik saat offline → api TIDAK dipanggil', () => {
     useStore.setState({ apiStatus: 'offline' })
     const { getByRole } = render(<ExportButtons reportType="income-statement" period="2026-03" />)

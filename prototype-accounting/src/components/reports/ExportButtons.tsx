@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { FileSpreadsheet, FileText } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import { api } from '../../api'
@@ -21,10 +21,16 @@ export default function ExportButtons(props: ExportButtonsProps) {
   const apiStatus = useStore((s) => s.apiStatus)
   const showToast = useStore((s) => s.showToast)
   const [busy, setBusy] = useState<ExportFormat | null>(null)
+  // Guard SINKRON (ref) — busy state React di-batch: dua klik dalam satu frame
+  // membaca busy lama (null) sebelum re-render, jadi `disabled` tombol saja
+  // tidak cukup mencegah export ganda. Ref tidak memicu render dan langsung
+  // terlihat oleh klik kedua dalam batch yang sama.
+  const busyRef = useRef<ExportFormat | null>(null)
   const online = apiStatus === 'online'
 
   const doExport = async (format: ExportFormat) => {
-    if (busy) return
+    if (busyRef.current) return
+    busyRef.current = format
     setBusy(format)
     try {
       const filename =
@@ -35,6 +41,7 @@ export default function ExportButtons(props: ExportButtonsProps) {
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Export gagal — coba lagi', 'error')
     } finally {
+      busyRef.current = null
       setBusy(null)
     }
   }
