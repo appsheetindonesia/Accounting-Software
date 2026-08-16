@@ -16,6 +16,7 @@ import TrialBalancePage from './components/reports/TrialBalancePage'
 import BalanceSheetPage from './components/reports/BalanceSheetPage'
 import SettingsPage from './components/SettingsPage'
 import ComingSoon from './components/ComingSoon'
+import SessionExpiredModal from './components/SessionExpiredModal'
 
 function App() {
   const page = useStore((s) => s.page)
@@ -84,6 +85,9 @@ function App() {
       {/* Toast di level PALING LUAR agar muncul juga di halaman login
           (mis. toast "Anda telah keluar" setelah logout). */}
       <Toast />
+      {/* Modal sesi berakhir di level terluar juga — muncul di atas halaman
+          login (refresh gagal → logout otomatis + pemberitahuan eksplisit). */}
+      <SessionExpiredModal />
     </>
   )
 }

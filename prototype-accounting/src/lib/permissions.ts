@@ -39,3 +39,10 @@ export const canWriteJournal = (role: string | null | undefined): boolean => can
 
 /** Dapat menyetujui/menolak jurnal (journal.approve) — hanya admin. */
 export const canApproveJournal = (role: string | null | undefined): boolean => can(role, 'journal.approve')
+
+// Pesan khusus yang ditampilkan UI saat server menolak approve/reject dengan
+// NO_APPROVAL_RIGHTS (403) — "role tidak punya izin approve". Bukan error
+// generik: memberitahu siapa yang berhak + langkah berikutnya (hubungi admin).
+// Mirror pesan mock API (mock-api/src/server.js: requireApprovalRights).
+export const NO_APPROVAL_RIGHTS_MESSAGE =
+  'Hanya Admin yang dapat menyetujui atau menolak jurnal. Hubungi admin Anda untuk persetujuan.'

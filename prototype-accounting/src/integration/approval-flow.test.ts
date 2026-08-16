@@ -118,7 +118,7 @@ describe('approval workflow → submit → approve/reject (MSW)', () => {
     expect(useStore.getState().journals).toHaveLength(mockJournals.length)
   })
 
-  it('permission: akuntan dapat submit tapi approve → 403 FORBIDDEN; admin approve → sukses', async () => {
+  it('permission: akuntan dapat submit tapi approve → 403 NO_APPROVAL_RIGHTS dengan pesan khusus; admin approve → sukses', async () => {
     // Akuntan (Dimas): journal.write YA, journal.approve TIDAK
     await useStore.getState().login('dimas@estetikakreasi.co.id', 'password123')
     await useStore.getState().saveJournal(input, 'draft')
@@ -127,9 +127,12 @@ describe('approval workflow → submit → approve/reject (MSW)', () => {
     await useStore.getState().submitJournal(id) // boleh (journal.write)
     expect(useStore.getState().journals.find((j) => j.id === id)?.status).toBe('pending-approval')
 
-    await useStore.getState().approveJournal(id) // dilarang (tanpa journal.approve)
+    // Approve dilarang (tanpa journal.approve) → server NO_APPROVAL_RIGHTS (bukan FORBIDDEN generik)
+    await useStore.getState().approveJournal(id)
     expect(useStore.getState().toast?.kind).toBe('error')
-    expect(useStore.getState().toast?.message).toContain('Tidak memiliki akses')
+    // UI menampilkan pesan KHUSUS NO_APPROVAL_RIGHTS (siapa yang berhak + langkah berikutnya)
+    expect(useStore.getState().toast?.message).toContain('Hanya Admin yang dapat menyetujui')
+    expect(useStore.getState().toast?.message).toContain('Hubungi admin')
     expect(useStore.getState().journals.find((j) => j.id === id)?.status).toBe('pending-approval')
 
     // Admin (Rina) approve → sukses

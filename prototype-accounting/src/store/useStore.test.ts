@@ -361,7 +361,7 @@ describe('closePeriod — tutup periode fiskal', () => {
     mockedApi.closePeriod.mockResolvedValue({ id: 'fp-2026-03', isOpen: false, handledDrafts: { posted: 2, deleted: 0, kept: 0 } })
     // Server kini mengembalikan kedua draft seed sebagai posted
     const postedJournals = mockJournals.map((j) =>
-      j.id === 'JNL-2026-03-006' || j.id === 'JNL-2026-03-007' ? { ...j, status: 'posted' } : j,
+      j.id === 'JNL-2026-03-006' || j.id === 'JNL-2026-03-007' ? { ...j, status: 'posted' as const } : j,
     )
     mockedApi.getJournals.mockResolvedValue({ journals: postedJournals, totals: { debit: 0, credit: 0, difference: 0 } })
 
@@ -511,8 +511,8 @@ describe('openSearchResult — fokus hasil global search', () => {
   })
 })
 
-describe('handleSessionExpired — refresh gagal → kembali ke halaman login', () => {
-  it('menghapus token & user, mengisi authError', () => {
+describe('handleSessionExpired — refresh gagal → logout otomatis + modal "Sesi berakhir"', () => {
+  it('menghapus token & user, mengisi authError DAN membuka modal sessionExpired', () => {
     useStore.setState({ accessToken: 'mock.t', refreshToken: 'r1', user: demoUser, apiStatus: 'online' })
     useStore.getState().handleSessionExpired()
 
@@ -522,6 +522,35 @@ describe('handleSessionExpired — refresh gagal → kembali ke halaman login', 
     expect(s.user).toBeNull()
     expect(s.apiStatus).toBe('idle')
     expect(s.authError).toContain('Sesi berakhir')
+    // Modal "Sesi berakhir" terbuka — user tahu kenapa dilempar ke login
+    expect(s.sessionExpired).toBe(true)
+  })
+
+  it('dismissSessionExpired menutup modal (user siap login lagi)', () => {
+    useStore.getState().handleSessionExpired()
+    expect(useStore.getState().sessionExpired).toBe(true)
+
+    useStore.getState().dismissSessionExpired()
+
+    expect(useStore.getState().sessionExpired).toBe(false)
+  })
+
+  it('login baru & logout me-reset sessionExpired (modal tidak menempel)', async () => {
+    useStore.getState().handleSessionExpired()
+    expect(useStore.getState().sessionExpired).toBe(true)
+
+    // Logout saat modal terbuka → modal tertutup
+    useStore.getState().logout()
+    expect(useStore.getState().sessionExpired).toBe(false)
+
+    // Login baru setelah sesi berakhir → modal tertutup
+    useStore.getState().handleSessionExpired()
+    expect(useStore.getState().sessionExpired).toBe(true)
+    mockedApi.login.mockResolvedValue({ accessToken: 'mock.user-001.1', refreshToken: 'x', expiresIn: 86400, user: demoUser, activePeriod: { id: '2026-03', name: 'Maret 2026', isOpen: true } } as any)
+    mockedApi.getAccounts.mockResolvedValue({ accounts: mockAccounts })
+    mockedApi.getJournals.mockResolvedValue({ journals: mockJournals, totals: { debit: 0, credit: 0, difference: 0 } })
+    await useStore.getState().login('rina@estetikakreasi.co.id', 'password123')
+    expect(useStore.getState().sessionExpired).toBe(false)
   })
 })
 
@@ -708,6 +737,45 @@ describe('approval workflow — submit/approve/reject', () => {
     expect(j.status).toBe('draft')
     expect(j.rejectionReason).toBe('Nominal tidak sesuai') // tersimpan dari respons API
     expect(bal().get('5-3000')).toBe(6_000_000) // tetap tidak dihitung
+  })
+
+  it('NO_APPROVAL_RIGHTS (403) dari server → toast pesan KHUSUS, bukan pesan API mentah/generik', async () => {
+    useStore.setState({ apiStatus: 'online' })
+    mockedApi.approveJournal.mockRejectedValue(new ApiError(403, 'NO_APPROVAL_RIGHTS', 'Role Anda tidak memiliki izin approve'))
+
+    await useStore.getState().approveJournal('JNL-2026-03-012')
+
+    const s = useStore.getState()
+    expect(s.toast?.kind).toBe('error')
+    // Pesan khusus: siapa yang berhak + langkah berikutnya (bukan e.message server)
+    expect(s.toast?.message).toContain('Hanya Admin yang dapat menyetujui')
+    expect(s.toast?.message).toContain('Hubungi admin')
+    expect(s.toast?.message).not.toContain('Role Anda tidak memiliki izin approve')
+    expect(s.toast?.message).not.toContain('Gagal approve jurnal')
+    // Tidak ada jurnal yang berubah (server menolak sebelum mutasi)
+    expect(s.journals).toHaveLength(mockJournals.length)
+  })
+
+  it('reject dengan NO_APPROVAL_RIGHTS → pesan khusus yang sama', async () => {
+    useStore.setState({ apiStatus: 'online' })
+    mockedApi.rejectJournal.mockRejectedValue(new ApiError(403, 'NO_APPROVAL_RIGHTS', 'Role Anda tidak memiliki izin approve'))
+
+    await useStore.getState().rejectJournal('JNL-2026-03-012', 'alasan')
+
+    const s = useStore.getState()
+    expect(s.toast?.kind).toBe('error')
+    expect(s.toast?.message).toContain('Hanya Admin yang dapat menyetujui')
+    expect(s.toast?.message).toContain('Hubungi admin')
+  })
+
+  it('error approval lain (mis. INVALID_STATUS_TRANSITION) tetap memakai pesan API', async () => {
+    useStore.setState({ apiStatus: 'online' })
+    mockedApi.approveJournal.mockRejectedValue(new ApiError(409, 'INVALID_STATUS_TRANSITION', 'Hanya jurnal pending-approval yang dapat di-approve'))
+
+    await useStore.getState().approveJournal('JNL-2026-03-006')
+
+    expect(useStore.getState().toast?.kind).toBe('error')
+    expect(useStore.getState().toast?.message).toContain('Hanya jurnal pending-approval')
   })
 
   it('gagal jaringan (offline) → fallback lokal tetap transisi status', async () => {

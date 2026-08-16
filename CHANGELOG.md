@@ -2,6 +2,52 @@
 
 Semua perubahan penting dicatat di sini. Format mengikuti [Keep a Changelog](https://keepachangelog.com/id-ID/1.1.0/), versi mengikuti [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+Perubahan sejak tag **v0.1.0-alpha** (commit `9052bf7`).
+
+### Ditambahkan
+
+- **Branding PT. Kreasi Inovasi Estetika** di seluruh dokumen & prototipe: palet `#2596BE`, prefix API `AAJ`, email demo `estetikakreasi.co.id`, kop surat & footer dokumen
+- **Alur auth transparan**: polling koneksi (`GET /health` tiap 10 dtk → banner offline hilang otomatis), **TTL token terjadwal** (access token basi → auto-refresh di sesi aktif tanpa reload), logout membersihkan sesi penuh + reset `entityId`
+- **Approval lebih praktis**: reject **wajib isi alasan** (ditampilkan di detail & kartu Dashboard), tombol **"Simpan & Ajukan"** langsung berstatus Menunggu Approval, badge notifikasi di TopBar + tombol **Setujui inline** di halaman Jurnal
+- **Export Buku Besar per akun** (PDF/XLSX) + global search + tutup periode — semuanya via UI (RG-03/RG-04/RG-07 pindah dari asersi API)
+- **Skeleton loading** konsisten di semua halaman fetch (Jurnal, Buku Besar, Laba Rugi, Neraca, Neraca Lajur) + unit test `useApiFetch`
+- **QA tooling**: generator hasil test (kolom Pembuat Test & Link Bug, override CLI `--run-date`/`--environment`, preservasi Status + Tanggal Run + Environment per baris, conditional formatting Status di Test Cases & Ringkasan S1), konverter payload TestRail `add_results_for_cases` (`--host`/`--run-id`, auto-konversi setelah regenerasi, contoh `--sample` deterministik), contoh curl siap salin-tempel di QA Test Plan §8
+- **Mock API**: 6 kode error katalog (SESSION_EXPIRED, FILE_TOO_LARGE, UNSUPPORTED_FILE_TYPE, RATE_LIMITED, NO_APPROVAL_RIGHTS, INTERNAL_ERROR) + **rate limit 30 req/menit** (API §1.5)
+
+### Diperbaiki
+
+- Gate `qa-sync` gagal di CI karena **line ending CRLF vs LF** — generator kini menulis LF deterministik, perbandingan CSV dinormalisasi (line ending ≠ perubahan konten)
+- Fix tipe `tsc -b` (`useStore.closePeriod` implicit any, duplikat `modalOpen`, tipe `as const` di test) — typecheck asli proyek kini bersih
+
+### CI & Infrastruktur
+
+- Workflow **Pages** untuk build & deploy prototipe ke GitHub Pages + guard verifikasi base di `dist/index.html`
+- Job **unit** di e2e.yml (manual) + **gate qa-sync** di ci.yml (setiap push/PR): CSV/XLSX harus sinkron dengan QA Test Plan
+- `.npmrc` (`package-lock=false`) mencegah package-lock di root; `.gitignore` log & artefak runtime untuk `e2e/` & `prototype-accounting/`
+- Badge status CI di README
+
+---
+
+## [v0.1.0-alpha] — 2026-08-15
+
+Rilis **alpha** — penanda milestone *approval UI + CI* (commit `9052bf7`).
+
+### Ditambahkan
+
+- **Dokumentasi lengkap + prototipe interaktif** terintegrasi mock API (BukuWarung Akuntansi → Appsheet Accounting Journal, tema biru `#2596BE`)
+- **Modul laporan lanjutan**: Buku Besar (saldo berjalan), Laba Rugi, Neraca Lajur & Neraca (indikator seimbang), migrasi persist per-version
+- **QA tooling**: generator test case + template hasil, suite **E2E Playwright RG-01..RG-12**
+- **Autentikasi**: halaman login, refresh token, integration test MSW, sinkronisasi branding
+- **Workflow approval** (submit / approve / reject) via UI + **CI GitHub Actions** (unit → integration → E2E)
+
+### Status
+
+Fitur inti terverifikasi di mock API; **belum untuk produksi**.
+
+---
+
 ## [v0.1.0] — 2026-08-15
 
 ### Ringkasan
@@ -91,5 +137,6 @@ npm run test:e2e              # E2E Playwright RG-01..RG-19
 
 <!-- Versi berikutnya -->
 
-[unreleased]: https://github.com/appsheetindonesia/Accounting-Software/compare/v0.1.0...HEAD
+[unreleased]: https://github.com/appsheetindonesia/Accounting-Software/compare/v0.1.0-alpha...HEAD
+[v0.1.0-alpha]: https://github.com/appsheetindonesia/Accounting-Software/releases/tag/v0.1.0-alpha
 [v0.1.0]: https://github.com/appsheetindonesia/Accounting-Software/releases/tag/v0.1.0

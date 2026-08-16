@@ -7,6 +7,7 @@ import { api, ApiError, isNetworkError, toJournalEntry, type Entity } from '../a
 import { setAuth, setRefreshToken, setSessionExpiredHandler, setTokensRefreshedHandler } from '../api/client'
 import type { AuthUser } from '../api'
 import { isEffectJournal } from '../lib/ledger'
+import { NO_APPROVAL_RIGHTS_MESSAGE } from '../lib/permissions'
 import { CURRENT_VERSION, migratePersistedState, setMigrationHandler, type PersistedShape } from './persist'
 
 export { isEffectJournal }
@@ -77,7 +78,11 @@ interface AccountingState {
   login: (email: string, password: string) => Promise<void>
   loginOffline: () => void
   logout: () => void
+  // Refresh gagal (SESSION_EXPIRED / INVALID_REFRESH_TOKEN) → sesi dihapus
+  // otomatis + modal "Sesi berakhir" ditampilkan (sessionExpired = true).
   handleSessionExpired: () => void
+  dismissSessionExpired: () => void
+  sessionExpired: boolean
 
   saveJournal: (input: NewJournalInput, action: 'draft' | 'submit' | 'post') => Promise<void>
   closePeriod: (id: string, draftAction?: 'post-all' | 'delete-all' | 'keep') => Promise<void>
@@ -120,6 +125,16 @@ const nextLocalSeq = (journals: JournalEntry[]) =>
     const m = /(\d+)$/.exec(j.id)
     return m ? Math.max(max, Number(m[1])) : max
   }, 0) + 1
+
+// Pesan error untuk aksi approval: NO_APPROVAL_RIGHTS (403) dari server =
+// role user tidak punya izin approve → tampilkan pesan khusus (bukan pesan
+// API mentah / fallback generik). Error lain tetap memakai pesan API.
+const approvalErrorMessage = (e: unknown, fallback: string): string =>
+  e instanceof ApiError && e.code === 'NO_APPROVAL_RIGHTS'
+    ? NO_APPROVAL_RIGHTS_MESSAGE
+    : e instanceof ApiError
+      ? e.message
+      : fallback
 
 // Key localStorage. JANGAN ganti nama key: data lama dimigrasi lewat
 // version + migrate() (lihat src/store/persist.ts), bukan di-reset.
@@ -290,7 +305,7 @@ export const useStore = create<AccountingState>()(
       // masih ada draft → server 422 DRAFT_ACTION_REQUIRED; error dilempar agar
       // UI menampilkan dialog pilihan aksi. Sukses → refetch jurnal (draft
       // ter-post/terhapus) + toast ringkasan handledDrafts.
-      const closePeriod = async (id, draftAction) => {
+      const closePeriod = async (id: string, draftAction?: 'post-all' | 'delete-all' | 'keep') => {
         try {
           const res = await api.closePeriod(id, draftAction)
           const jrn = await api.getJournals()
@@ -335,7 +350,6 @@ export const useStore = create<AccountingState>()(
         clearSearchFocus: () => set({ focusJournalId: null, focusAccountId: null }),
         focusJournalId: null,
         focusAccountId: null,
-        modalOpen: false,
         closePeriod,
 
         accounts: mockAccounts,
@@ -373,6 +387,7 @@ export const useStore = create<AccountingState>()(
         refreshToken: null,
         authLoading: false,
         authError: null,
+        sessionExpired: false,
         // Reconnect sesi tersimpan (reload) — TANPA auto-login demo.
         // Dipanggil App saat mount, tombol "Coba lagi" (OfflineBanner), dan
         // polling koneksi berkala (App.tsx, GET /health tiap 10 detik).
@@ -456,6 +471,7 @@ export const useStore = create<AccountingState>()(
               activePeriod: auth.activePeriod?.id ?? get().activePeriod,
               lastSyncedAt: nowIso(),
               authLoading: false,
+              sessionExpired: false,
               toast: { message: `Selamat datang, ${auth.user.name}`, kind: 'success' },
             })
           } catch (e) {
@@ -483,6 +499,7 @@ export const useStore = create<AccountingState>()(
             lastRefreshedAt: null,
             authLoading: false,
             authError: null,
+            sessionExpired: false,
             toast: { message: 'Masuk offline — menampilkan data demo lokal', kind: 'error' },
           })
         },
@@ -513,11 +530,14 @@ export const useStore = create<AccountingState>()(
             isSyncing: false,
             lastSyncedAt: null,
             lastRefreshedAt: null,
+            sessionExpired: false,
             toast: { message: 'Anda telah keluar', kind: 'success' },
           })
         },
 
-        // Dipanggil client saat refresh token gagal (401 berulang) → login ulang.
+        // Dipanggil client saat refresh token gagal (401 berulang) → logout
+        // otomatis + modal "Sesi berakhir" (sessionExpired). User kembali ke
+        // halaman login dan harus masuk lagi untuk melanjutkan.
         handleSessionExpired: () => {
           setAuth(null, null, null)
           setRefreshToken(null)
@@ -528,8 +548,10 @@ export const useStore = create<AccountingState>()(
             user: null,
             lastRefreshedAt: null,
             authError: 'Sesi berakhir. Silakan login kembali.',
+            sessionExpired: true,
           })
         },
+        dismissSessionExpired: () => set({ sessionExpired: false }),
 
         saveJournal: async (input, action) => {
           if (get().apiStatus === 'online') {
@@ -691,7 +713,7 @@ export const useStore = create<AccountingState>()(
                 get().enqueueOffline(toOp({ kind: 'approve', ref: id }))
                 return
               }
-              set({ toast: { message: e instanceof ApiError ? e.message : 'Gagal approve jurnal', kind: 'error' } })
+              set({ toast: { message: approvalErrorMessage(e, 'Gagal approve jurnal'), kind: 'error' } })
             }
             return
           }
@@ -718,7 +740,7 @@ export const useStore = create<AccountingState>()(
                 get().enqueueOffline(toOp({ kind: 'reject', ref: id, reason }))
                 return
               }
-              set({ toast: { message: e instanceof ApiError ? e.message : 'Gagal reject jurnal', kind: 'error' } })
+              set({ toast: { message: approvalErrorMessage(e, 'Gagal reject jurnal'), kind: 'error' } })
             }
             return
           }
@@ -863,10 +885,17 @@ export const useStore = create<AccountingState>()(
                 set({ apiStatus: 'offline', isSyncing: false })
                 return
               }
-              // Server menolak operasi (mis. PERIOD_CLOSED) → keluarkan dari
-              // antrian agar tidak macet, laporkan ke user, lanjut ke berikutnya.
+              // Server menolak operasi (mis. PERIOD_CLOSED / NO_APPROVAL_RIGHTS)
+              // → keluarkan dari antrian agar tidak macet, laporkan ke user,
+              // lanjut ke berikutnya. NO_APPROVAL_RIGHTS pakai pesan khusus.
               set((s) => ({ offlineQueue: s.offlineQueue.filter((o) => o.id !== op.id) }))
-              errors.push(e instanceof ApiError ? e.message : 'Operasi gagal disinkronkan')
+              errors.push(
+                op.kind === 'approve' || op.kind === 'reject'
+                  ? approvalErrorMessage(e, 'Operasi gagal disinkronkan')
+                  : e instanceof ApiError
+                    ? e.message
+                    : 'Operasi gagal disinkronkan',
+              )
             }
           }
 

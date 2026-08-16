@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# ============================================================
+# pre-commit — gate sinkronisasi artefak QA
+#
+# Menolak commit jika `QA Test Plan - Accounting.md` (atau file
+# terkait QA) berubah tanpa artefak CSV/XLSX di-regenerasi ulang
+# (scripts/check-qa-sync.py).
+#
+# Hanya aktif ketika file terkait QA ikut di-stage; commit lain
+# tidak menambah latency (langsung exit 0).
+# Instal:  scripts/hooks/install.sh
+# ============================================================
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+# File yang perubahan-nya memicu pemeriksaan sinkronisasi
+QA_RE='(^|/)(QA Test Plan - Accounting\.md|qa-test-cases-[^/]*\.csv|qa-test-cases\.xlsx|qa-test-results-[^/]*\.(csv|xlsx)|scripts/(generate-qa-test-cases|convert-results-to-testrail)\.py)$'
+
+if ! git diff --cached --name-only | grep -Eq "$QA_RE"; then
+    exit 0
+fi
+
+if ! command -v python >/dev/null 2>&1; then
+    echo "pre-commit: ERROR — python tidak ditemukan, tidak bisa cek sinkronisasi QA." >&2
+    echo "  Jalankan 'python scripts/generate-qa-test-cases.py' sebelum commit." >&2
+    exit 1
+fi
+
+echo "pre-commit: perubahan file QA terdeteksi — cek sinkronisasi artefak…"
+if ! python scripts/check-qa-sync.py; then
+    echo "pre-commit: GAGAL — commit ditolak (lihat pesan di atas)." >&2
+    exit 1
+fi
+
+# Auto-konverter generator dapat menulis qa-test-results-testrail.json
+# (bukan bagian OUTPUT_FILES yang dipulihkan gate) — bersihkan jika
+# untracked agar tidak tertinggal sebagai artefak uji.
+if [ -f qa-test-results-testrail.json ] && \
+   ! git ls-files --error-unmatch qa-test-results-testrail.json >/dev/null 2>&1; then
+    rm -f qa-test-results-testrail.json
+fi
+
+exit 0

@@ -6,6 +6,9 @@
 #
 #   npm run build (tsc -b && vite build) dengan --base yang
 #   diambil dari nama repo (subpath Pages), jadi aset tidak 404.
+#   Step Guard memverifikasi dist/index.html benar-benar
+#   mereferensikan aset dengan base itu SEBELUM artifact di-upload
+#   (base salah → aset 404 setelah deploy; guard menghentikan build).
 #
 # Persyaratan sekali-setel di GitHub:
 #   Settings → Pages → Source: "GitHub Actions"
@@ -31,6 +34,10 @@ jobs:
     name: Build prototipe (Vite)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      # Sumber tunggal base Pages (subpath dari nama repo) — dipakai step
+      # Build (--base) dan step Guard (verifikasi dist/index.html).
+      PAGES_BASE: /${{ github.event.repository.name }}/
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -51,7 +58,21 @@ jobs:
 
       - name: Build (tsc -b && vite build, base = nama repo)
         working-directory: prototype-accounting
-        run: npm run build -- --base=/${{ github.event.repository.name }}/
+        run: npm run build -- --base=$PAGES_BASE
+
+      # Guard: pastikan hasil build memakai base Pages yang benar sebelum
+      # artifact di-upload. Vite menulis <script src="/<repo>/assets/..."> dan
+      # <link href="/<repo>/assets/..."> di dist/index.html — jika base salah
+      # (mis. "/" atau nama repo berubah), aset akan 404 setelah deploy.
+      - name: Guard — verifikasi base Pages di dist/index.html
+        working-directory: prototype-accounting
+        run: |
+          echo "Base Pages yang diharapkan: $PAGES_BASE"
+          if ! grep -Eq '(src|href)="'"$PAGES_BASE"'assets/' dist/index.html; then
+            echo "::error::dist/index.html tidak mereferensikan aset dengan base Pages ($PAGES_BASE) — aset akan 404 setelah deploy. Periksa argumen --base di step Build."
+            exit 1
+          fi
+          echo "OK — aset direferensikan dengan base Pages ($PAGES_BASE)"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

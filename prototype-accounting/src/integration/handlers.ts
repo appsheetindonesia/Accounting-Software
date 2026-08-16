@@ -327,7 +327,9 @@ export const handlers = [
   http.post('*/journals/:id/approve', async ({ request, params }) => {
     const user = currentUser(request)
     if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
-    if (!hasPermission(user, 'journal.approve')) return fail(403, 'FORBIDDEN', 'Tidak memiliki akses')
+    // Mirror mock API: kegagalan izin approve → NO_APPROVAL_RIGHTS (API §13),
+    // bukan FORBIDDEN generik — klien tampilkan pesan khusus "role tidak punya izin".
+    if (!hasPermission(user, 'journal.approve')) return fail(403, 'NO_APPROVAL_RIGHTS', 'Role Anda tidak memiliki izin approve')
     const journal = db.journals.find((j) => j.id === params.id)
     if (!journal) return fail(404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
     if (journal.status !== 'pending-approval')
@@ -340,7 +342,8 @@ export const handlers = [
   http.post('*/journals/:id/reject', async ({ request, params }) => {
     const user = currentUser(request)
     if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
-    if (!hasPermission(user, 'journal.approve')) return fail(403, 'FORBIDDEN', 'Tidak memiliki akses')
+    // Mirror mock API: kegagalan izin approve → NO_APPROVAL_RIGHTS (API §13)
+    if (!hasPermission(user, 'journal.approve')) return fail(403, 'NO_APPROVAL_RIGHTS', 'Role Anda tidak memiliki izin approve')
     const journal = db.journals.find((j) => j.id === params.id)
     if (!journal) return fail(404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
     if (journal.status !== 'pending-approval')
