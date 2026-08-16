@@ -144,9 +144,11 @@ test('RG-16 Refresh gagal: access + refresh token basi → sesi berakhir → kem
   // Reload → /auth/me 401 → refresh gagal (INVALID_REFRESH_TOKEN) → sesi berakhir
   await page.reload()
 
-  // Kembali ke halaman login dengan pesan "Sesi berakhir"
+  // Kembali ke halaman login dengan pesan "Sesi berakhir" — scope ke dalam
+  // form login: pesan authError; teks yang sama juga tampil sebagai toast
+  // (handleSessionExpired), jadi getByText global ambigu (strict mode).
   await expect(page.getByLabel('Email')).toBeVisible()
-  await expect(page.getByText('Sesi berakhir. Silakan login kembali.')).toBeVisible()
+  await expect(page.locator('form').getByText('Sesi berakhir. Silakan login kembali.')).toBeVisible()
   // Dashboard TIDAK tampil
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toHaveCount(0)
 })
@@ -312,7 +314,8 @@ test('RG-20 SESSION_EXPIRED: refresh token kedaluwarsa di server → modal "Sesi
   await page.getByRole('button', { name: 'Masuk kembali' }).click()
   await expect(page.getByLabel('Email')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Appsheet Accounting Journal' })).toBeVisible()
-  await expect(page.getByText('Sesi berakhir. Silakan login kembali.')).toBeVisible()
+  // Pesan authError di form login (teks sama juga ada di toast → scope form)
+  await expect(page.locator('form').getByText('Sesi berakhir. Silakan login kembali.')).toBeVisible()
   // Dashboard TIDAK tampil sebelum login ulang
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toHaveCount(0)
 

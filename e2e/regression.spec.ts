@@ -421,16 +421,17 @@ test.describe('RG-05 s/d RG-08 — entitas, approval, search, periode', () => {
     //    klik → detail jurnal otomatis terbuka (tanpa filter manual)
     const globalSearch = page.getByLabel('Pencarian global')
     await globalSearch.fill('gaji')
-    await expect(page.getByRole('button', { name: /JV-2026-03-0005/ })).toBeVisible()
-    await page.getByRole('button', { name: /JV-2026-03-0005/ }).click()
+    // Hasil search kini role="option" (pola ARIA listbox — aksesibilitas keyboard)
+    await expect(page.getByRole('option', { name: /JV-2026-03-0005/ })).toBeVisible()
+    await page.getByRole('option', { name: /JV-2026-03-0005/ }).click()
     // Navigasi ke Jurnal + baris detail hasil pencarian terbuka otomatis
     await expect(page.getByText('Pencatatan beban gaji karyawan Maret', { exact: true }).first()).toBeVisible()
 
     // 5. Search global akun: 'Pendapatan Jasa' (bukan akun default) → klik →
     //    Buku Besar memilih akun tsb (membuktikan fokus hasil search bekerja)
     await globalSearch.fill('Pendapatan Jasa')
-    await expect(page.getByRole('button', { name: /Pendapatan Jasa/ }).first()).toBeVisible()
-    await page.getByRole('button', { name: /Pendapatan Jasa/ }).first().click()
+    await expect(page.getByRole('option', { name: /Pendapatan Jasa/ }).first()).toBeVisible()
+    await page.getByRole('option', { name: /Pendapatan Jasa/ }).first().click()
     await expect(page.getByRole('heading', { name: 'Buku Besar' })).toBeVisible()
     await expect(page.getByText('Pendapatan Jasa', { exact: true }).first()).toBeVisible() // akun terpilih
     await expect(page.getByText('Saldo Akhir', { exact: true })).toBeVisible()

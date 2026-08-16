@@ -3,15 +3,18 @@
 // SATU perintah `npm test`:
 //
 //   1. mock-api               — integration test Vitest + Supertest
-//                               (91 test, tanpa server — app Express langsung)
-//   2. prototype-accounting   — unit + integration MSW (Vitest, 168 test)
-//   3. e2e                    — Playwright RG-01..RG-19 (38 test;
+//                               (112 test, tanpa server — app Express langsung)
+//   2. prototype-accounting   — unit + integration MSW (Vitest, 259 test)
+//   3. e2e                    — Playwright RG-01..RG-22 (44 test =
+//                               22 skenario × chromium + firefox;
 //                               webServer menyalakan mock API :4000 + Vite :5173)
 //
 //   npm test                   # semua suite sekaligus
 //   npm run test:mock-api      # per-suite (tetap tersedia)
 //   npm run test:prototype
 //   npm run test:e2e
+//   npm test -- --only=e2e     # subset: mock-api | prototype | e2e
+//                              # (bisa juga koma: --only=mock-api,prototype)
 //
 // Perilaku:
 //   - Paralel → total durasi ≈ suite terlama (E2E), bukan penjumlahan
@@ -27,13 +30,33 @@ import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
-const suites = [
+const allSuites = [
   { name: 'mock-api', cwd: path.join(root, 'mock-api'), env: {} },
   { name: 'prototype', cwd: path.join(root, 'prototype-accounting'), env: {} },
   // E2E: Playwright menyalakan mock API (port 4000) + Vite (5173) sendiri
   // lewat webServer. Persistence nonaktif agar run hermetis (sama dengan CI).
   { name: 'e2e', cwd: path.join(root, 'e2e'), env: { MOCK_API_PERSIST: '0' } },
 ]
+
+// Parse --only=<suite> (atau daftar koma) untuk menjalankan subset suite
+// tanpa mengubah perintah npm. Nilai tidak valid → error + exit 1.
+const onlyArg = process.argv.find((a) => a.startsWith('--only='))
+let suites = allSuites
+if (onlyArg) {
+  const requested = onlyArg.slice('--only='.length).split(',').map((s) => s.trim()).filter(Boolean)
+  const valid = new Set(allSuites.map((s) => s.name))
+  const unknown = requested.filter((r) => !valid.has(r))
+  if (unknown.length) {
+    console.error(`[test-all] Nilai --only tidak dikenal: ${unknown.join(', ')}`)
+    console.error(`[test-all] Pilihan valid: ${[...valid].join(' | ')} (bisa digabung dengan koma)`)
+    process.exit(1)
+  }
+  suites = allSuites.filter((s) => requested.includes(s.name))
+  if (!suites.length) {
+    console.error('[test-all] --only tidak memilih suite apa pun')
+    process.exit(1)
+  }
+}
 
 function runSuite(suite) {
   return new Promise((resolve) => {
@@ -58,7 +81,8 @@ function runSuite(suite) {
 }
 
 const started = Date.now()
-console.log('[test-all] Menjalankan 3 suite sekaligus: mock-api (Supertest) · prototype (unit + MSW) · e2e (Playwright)\n')
+const subset = onlyArg ? ` (--only=${onlyArg.slice('--only='.length)})` : ''
+console.log(`[test-all] Menjalankan ${suites.length} suite${subset}: ${suites.map((s) => s.name).join(' · ')}\n`)
 
 const results = await Promise.all(suites.map(runSuite))
 
