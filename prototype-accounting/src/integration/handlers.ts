@@ -13,6 +13,14 @@ interface DbUser {
   email: string
   password: string
   role: string
+  entityId: string
+  isActive: boolean
+}
+
+interface Entity {
+  id: string
+  name: string
+  code: string
   isActive: boolean
 }
 
@@ -35,22 +43,97 @@ interface Period {
   isActive: boolean
 }
 
+// Akun & jurnal disimpan dengan penanda entitas (multi-tenant) — mirror
+// mock-api/src/server.js (db.journals di-stamp entityId saat boot; header
+// X-Entity-Id menentukan tenant yang dilayani, default dari profil user).
+type DbAccount = Account & { entityId: string }
+type DbJournal = JournalRecord & { entityId: string }
+
 interface Db {
   users: DbUser[]
-  accounts: Account[]
-  journals: JournalRecord[]
+  entities: Entity[]
+  accounts: DbAccount[]
+  journals: DbJournal[]
   periods: Period[]
   seqJournal: number
   sessions: Map<string, string> // refreshToken → userId
 }
 
+// ---- Data entitas kedua (CV Karya Mandiri) — kecil tapi bisa dibedakan, untuk
+// membuktikan isolasi server-side: ganti X-Entity-Id → server mengembalikan
+// data yang BENAR-BENAR berbeda (nama akun & deskripsi jurnal), bukan sekadar
+// salinan ent-001. Perhatikan id jurnal SAMA dengan seed (JNL-2026-03-001) —
+// ini sengaja: bukti bahwa id per entitas tidak bentrok & tidak bocor lintas
+// tenant ketika filter server salah.
+const ent2Accounts: Account[] = [
+  { id: '1-1100', code: '1-1100', name: 'Kas CV Karya Mandiri', type: 'asset', category: 'Kas & Bank', normalBalance: 'debit', baseBalance: 25_000_000, isActive: true },
+  { id: '4-1000', code: '4-1000', name: 'Pendapatan Jasa CV', type: 'revenue', category: 'Pendapatan', normalBalance: 'credit', baseBalance: 10_000_000, isActive: true },
+  { id: '5-1000', code: '5-1000', name: 'Beban Gaji CV', type: 'expense', category: 'Beban Operasional', normalBalance: 'debit', baseBalance: 5_000_000, isActive: true },
+]
+
+const ent2Line = (id: string, accountId: string, debit: number, credit: number, description?: string): JournalEntry['lines'][number] => {
+  const account = ent2Accounts.find((a) => a.id === accountId)!
+  return {
+    id,
+    accountId,
+    accountCode: account.code,
+    accountName: account.name,
+    debit,
+    credit,
+    description,
+  }
+}
+
+const ent2Journals: JournalEntry[] = [
+  {
+    id: 'JNL-2026-03-001',
+    transactionNumber: 'BKM-2026-03-0001',
+    date: '2026-03-06',
+    description: 'Penerimaan jasa CV Karya Mandiri (ent-002)',
+    lines: [
+      ent2Line('e2-1', '1-1100', 8_000_000, 0, 'Penerimaan tunai'),
+      ent2Line('e2-2', '4-1000', 0, 8_000_000, 'Pendapatan jasa'),
+    ],
+    status: 'posted',
+    source: 'manual',
+    createdBy: 'Rina',
+    createdAt: '2026-03-06T09:00:00Z',
+    postedAt: '2026-03-06T09:02:00Z',
+  },
+  {
+    id: 'JNL-2026-03-002',
+    transactionNumber: 'BKK-2026-03-0002',
+    date: '2026-03-11',
+    description: 'Pembayaran gaji CV Karya Mandiri (ent-002)',
+    lines: [
+      ent2Line('e2-3', '5-1000', 3_000_000, 0, 'Gaji karyawan'),
+      ent2Line('e2-4', '1-1100', 0, 3_000_000, 'Pembayaran tunai'),
+    ],
+    status: 'posted',
+    source: 'manual',
+    createdBy: 'Rina',
+    createdAt: '2026-03-11T10:00:00Z',
+    postedAt: '2026-03-11T10:02:00Z',
+  },
+]
+
 const createDb = (): Db => ({
   users: [
-    { id: 'user-001', name: 'Rina', email: 'rina@estetikakreasi.co.id', password: 'password123', role: 'admin', isActive: true },
-    { id: 'user-002', name: 'Dimas', email: 'dimas@estetikakreasi.co.id', password: 'password123', role: 'accountant', isActive: true },
+    { id: 'user-001', name: 'Rina', email: 'rina@estetikakreasi.co.id', password: 'password123', role: 'admin', entityId: 'ent-001', isActive: true },
+    { id: 'user-002', name: 'Dimas', email: 'dimas@estetikakreasi.co.id', password: 'password123', role: 'accountant', entityId: 'ent-001', isActive: true },
   ],
-  accounts: structuredClone(mockAccounts),
-  journals: structuredClone(mockJournals),
+  entities: [
+    { id: 'ent-001', name: 'PT. Kreasi Inovasi Estetika', code: 'KI-001', isActive: true },
+    { id: 'ent-002', name: 'CV Karya Mandiri', code: 'KM-002', isActive: true },
+  ],
+  accounts: [
+    ...structuredClone(mockAccounts).map((a) => ({ ...a, entityId: 'ent-001' })),
+    ...structuredClone(ent2Accounts).map((a) => ({ ...a, entityId: 'ent-002' })),
+  ],
+  journals: [
+    ...structuredClone(mockJournals).map((j) => ({ ...j, entityId: 'ent-001' })),
+    ...structuredClone(ent2Journals).map((j) => ({ ...j, entityId: 'ent-002' })),
+  ],
   // Periode fiskal — mirror mock-api/src/data.js: Januari & Februari 2026 DITUTUP, Maret terbuka
   periods: [
     { id: 'fp-2026-01', name: 'Januari 2026', month: 1, year: 2026, startDate: '2026-01-01', endDate: '2026-01-31', isOpen: false, isActive: false },
@@ -90,13 +173,26 @@ const rolePermissions: Record<string, string[]> = {
 const hasPermission = (user: DbUser, ...perms: string[]) =>
   (rolePermissions[user.role] ?? []).some((p) => perms.includes(p))
 
-// ---- saldo akun: base + efek jurnal posted (bukan reversal) ----
-const computeBalances = (): Map<string, number> => {
-  const map = new Map(db.accounts.map((a) => [a.id, a.baseBalance]))
-  for (const j of db.journals) {
+// ---- multi-tenant: header X-Entity-Id (mirror mock-api requireAuth) ----
+// Entitas yang dilayani = header request; default dari profil user (ent-001)
+// bila header tidak dikirim (mis. request lama tanpa header).
+const currentEntityId = (request: Request, user: DbUser): string =>
+  request.headers.get('x-entity-id') || user.entityId
+
+const entityAccounts = (entityId: string): DbAccount[] =>
+  db.accounts.filter((a) => a.entityId === entityId)
+
+const entityJournals = (entityId: string): DbJournal[] =>
+  db.journals.filter((j) => j.entityId === entityId)
+
+// ---- saldo akun: base + efek jurnal posted (bukan reversal), PER ENTITAS ----
+const computeBalances = (entityId: string): Map<string, number> => {
+  const accounts = entityAccounts(entityId)
+  const map = new Map(accounts.map((a) => [a.id, a.baseBalance]))
+  for (const j of entityJournals(entityId)) {
     if (!isEffectJournal(j as JournalEntry)) continue // aman: pending-approval ≠ posted
     for (const ln of j.lines) {
-      const account = db.accounts.find((a) => a.id === ln.accountId)
+      const account = accounts.find((a) => a.id === ln.accountId)
       if (!account) continue
       const delta = account.normalBalance === 'debit' ? ln.debit - ln.credit : ln.credit - ln.debit
       map.set(account.id, (map.get(account.id) ?? 0) + delta)
@@ -105,15 +201,17 @@ const computeBalances = (): Map<string, number> => {
   return map
 }
 
-// ---- validasi jurnal (mock-api/server.js: validateJournal, BR-4) ----
-const validateLines = (lines: { accountId?: string; debit?: number; credit?: number }[]) => {
+// ---- validasi jurnal (mock-api/server.js: validateJournal, BR-4) — akun
+// divalidasi terhadap chart of accounts ENTITAS AKTIF, bukan global. ----
+const validateLines = (lines: { accountId?: string; debit?: number; credit?: number }[], entityId: string) => {
+  const accounts = entityAccounts(entityId)
   if (!Array.isArray(lines) || lines.length === 0)
     return { code: 'JOURNAL_NO_LINES', message: 'Jurnal harus memiliki minimal 1 debit dan 1 kredit' }
   let debit = 0
   let credit = 0
   for (const ln of lines) {
     if (!ln.accountId) return { code: 'LINE_NO_ACCOUNT', message: 'Akun wajib dipilih' }
-    const account = db.accounts.find((a) => a.id === ln.accountId)
+    const account = accounts.find((a) => a.id === ln.accountId)
     if (!account || account.isActive === false)
       return { code: 'LINE_NO_ACCOUNT', message: 'Akun tidak aktif atau sudah dihapus' }
     debit += Number(ln.debit ?? 0)
@@ -134,6 +232,10 @@ const findPeriodByDate = (dateStr: string) => {
   })
 }
 const closedPeriodErr = (period: Period) => fail(422, 'PERIOD_CLOSED', `Periode ${period.name} sudah ditutup`)
+
+// Cari periode dari key 'fp-2026-03' ATAU '2026-03' (mirror periodByKey server)
+const periodByKey = (key: string) =>
+  db.periods.find((p) => p.id === key) ?? db.periods.find((p) => `${p.year}-${String(p.month).padStart(2, '0')}` === key)
 
 const pad = (n: number, len = 4) => String(n).padStart(len, '0')
 const pad3 = (n: number) => String(n).padStart(3, '0')
@@ -171,35 +273,122 @@ export const handlers = [
     return new HttpResponse(null, { status: 204 })
   }),
 
-  // 4. Chart of Accounts
+  // 3. Entitas (multi-tenant) — daftar untuk entity switcher di sidebar
+  http.get('*/entities', ({ request }) => {
+    const user = currentUser(request)
+    if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
+    return ok(db.entities)
+  }),
+
+  // 9. Periode fiskal — daftar (termasuk tertutup) untuk UI Pengaturan
+  http.get('*/periods', ({ request }) => {
+    const user = currentUser(request)
+    if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
+    return ok({ periods: db.periods })
+  }),
+
+  // 10. Dashboard — kartu saldo dihitung dari akun & jurnal ENTITAS AKTIF
+  //     (mirror mock-api /dashboard/summary). Tanpa ini, kartu di UI tidak
+  //     berubah saat ganti entitas (fallback offline memakai data lokal).
+  http.get('*/dashboard/summary', ({ request }) => {
+    const user = currentUser(request)
+    if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
+    const entityId = currentEntityId(request, user)
+    const map = computeBalances(entityId)
+    const accounts = entityAccounts(entityId)
+    const sum = (type: string) => accounts.filter((a) => a.type === type).reduce((s, a) => s + (map.get(a.id) ?? 0), 0)
+    const revenue = accounts.filter((a) => a.type === 'revenue').reduce((s, a) => s + (map.get(a.id) ?? 0), 0)
+    const expenses = accounts.filter((a) => a.type === 'expense').reduce((s, a) => s + (map.get(a.id) ?? 0), 0)
+    return ok({
+      cards: [
+        { key: 'totalAssets', label: 'Total Aset', value: sum('asset'), deltaPercent: 12.5, deltaDirection: 'up', compareLabel: 'dari bulan lalu' },
+        { key: 'totalLiabilities', label: 'Total Utang', value: sum('liability'), deltaPercent: 3.2, deltaDirection: 'down', compareLabel: 'dari bulan lalu' },
+        { key: 'totalEquity', label: 'Total Modal', value: sum('equity'), deltaPercent: 8.1, deltaDirection: 'up', compareLabel: 'dari bulan lalu' },
+        { key: 'grossProfit', label: 'Laba Bruto', value: revenue - expenses, deltaPercent: 15.3, deltaDirection: 'up', compareLabel: 'dari bulan lalu' },
+      ],
+    })
+  }),
+
+  // 6. Laporan Laba Rugi — dihitung dari akun & jurnal ENTITAS AKTIF
+  //     (mirror mock-api /reports/income-statement).
+  http.get('*/reports/income-statement', ({ request }) => {
+    const user = currentUser(request)
+    if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
+    const entityId = currentEntityId(request, user)
+    const url = new URL(request.url)
+    const periodKey = url.searchParams.get('period') || '2026-03'
+    const p = periodByKey(periodKey)
+    if (!p) return fail(422, 'INVALID_PERIOD', 'Periode tidak valid')
+    const map = computeBalances(entityId)
+    const accounts = entityAccounts(entityId)
+    const revenueAccounts = accounts.filter((a) => a.type === 'revenue')
+    const expenseAccounts = accounts.filter((a) => a.type === 'expense')
+    const revenueTotal = revenueAccounts.reduce((s, a) => s + (map.get(a.id) ?? 0), 0)
+    const expenseTotal = expenseAccounts.reduce((s, a) => s + (map.get(a.id) ?? 0), 0)
+    const mkSection = (title: string, list: DbAccount[]) => ({
+      title,
+      subtotal: list.reduce((s, a) => s + (map.get(a.id) ?? 0), 0),
+      lines: list.map((a) => ({
+        accountCode: a.code,
+        accountName: a.name,
+        amount: map.get(a.id) ?? 0,
+        indentLevel: 2,
+        isBold: false,
+        isTotal: false,
+      })),
+    })
+    const sections = [mkSection('PENDAPATAN', revenueAccounts), mkSection('BEBAN', expenseAccounts)]
+    sections[0].lines.push({ accountCode: '', accountName: 'Total Pendapatan', amount: revenueTotal, indentLevel: 1, isBold: true, isTotal: true })
+    sections[0].subtotal = revenueTotal
+    sections[1].lines.push({ accountCode: '', accountName: 'Total Beban', amount: expenseTotal, indentLevel: 1, isBold: true, isTotal: true })
+    sections[1].subtotal = expenseTotal
+    const entity = db.entities.find((e) => e.id === entityId)
+    return ok({
+      id: `RPT-${periodKey}-001`,
+      type: 'income-statement',
+      entity: { id: entityId, name: entity?.name ?? '' },
+      period: { start: p.startDate, end: p.endDate },
+      generatedAt: nowIso(),
+      currency: 'IDR',
+      sections,
+      netIncome: revenueTotal - expenseTotal,
+    })
+  }),
+
+  // 4. Chart of Accounts — HANYA akun entitas aktif (X-Entity-Id)
   http.get('*/accounts', ({ request }) => {
     const user = currentUser(request)
     if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
-    return ok({ accounts: db.accounts })
+    const entityId = currentEntityId(request, user)
+    return ok({ accounts: entityAccounts(entityId) })
   }),
 
-  // 5. Jurnal
+  // 5. Jurnal — HANYA jurnal entitas aktif (X-Entity-Id)
   http.get('*/journals', ({ request }) => {
     const user = currentUser(request)
     if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
+    const journals = entityJournals(currentEntityId(request, user))
     let debit = 0
     let credit = 0
-    for (const j of db.journals) {
+    for (const j of journals) {
       for (const ln of j.lines) {
         debit += ln.debit
         credit += ln.credit
       }
     }
-    return ok({ journals: db.journals, totals: { debit, credit, difference: debit - credit } })
+    return ok({ journals, totals: { debit, credit, difference: debit - credit } })
   }),
 
   http.get('*/journals/next-number', ({ request }) => {
     const user = currentUser(request)
     if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
+    const entityId = currentEntityId(request, user)
     const url = new URL(request.url)
     const prefix = url.searchParams.get('prefix') || 'BKM'
     const period = url.searchParams.get('period') || '2026-03'
-    const existing = db.journals
+    // Nomor urut berseri PER ENTITAS (mirror mock-api validateJournal) — dua
+    // entitas boleh punya BKM-2026-03-0001 tanpa bentrok.
+    const existing = entityJournals(entityId)
       .filter((j) => j.transactionNumber.startsWith(`${prefix}-${period}-`))
       .map((j) => Number(j.transactionNumber.split('-').pop()))
     const next = existing.length ? Math.max(...existing) + 1 : 1
@@ -209,6 +398,7 @@ export const handlers = [
   http.post('*/journals', async ({ request }) => {
     const user = currentUser(request)
     if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
+    const entityId = currentEntityId(request, user)
     const body = (await request.json()) as {
       date?: string
       transactionNumber?: string
@@ -216,13 +406,14 @@ export const handlers = [
       submitForApproval?: boolean
       lines?: { accountId?: string; debit?: number; credit?: number; description?: string }[]
     }
-    const err = validateLines(body.lines ?? [])
+    const err = validateLines(body.lines ?? [], entityId)
     if (err) return fail(422, err.code, err.message)
     // Periode tertutup → 422 PERIOD_CLOSED (BR-6, mock-api validateJournal)
     if (body.date) {
       const period = findPeriodByDate(body.date)
       if (period && !period.isOpen) return closedPeriodErr(period)
     }
+    const accounts = entityAccounts(entityId)
     const seq = db.seqJournal++
     const id = `JNL-${(body.date ?? '').slice(0, 7)}-${pad3(seq)}`
     const journal: JournalRecord = {
@@ -231,7 +422,7 @@ export const handlers = [
       date: body.date ?? '',
       description: body.description?.trim() || 'Tanpa keterangan',
       lines: (body.lines ?? []).map((ln, i) => {
-        const account = db.accounts.find((a) => a.id === ln.accountId)!
+        const account = accounts.find((a) => a.id === ln.accountId)!
         return {
           id: `line-${seq}-${i + 1}`,
           accountId: account.id,
@@ -246,18 +437,19 @@ export const handlers = [
       createdBy: user.id,
       createdAt: nowIso(),
     }
-    db.journals.unshift(journal)
+    db.journals.unshift({ ...journal, entityId })
     return ok(journal, 201)
   }),
 
   http.delete('*/journals/:id', ({ request, params }) => {
     const user = currentUser(request)
     if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
-    const idx = db.journals.findIndex((j) => j.id === params.id)
+    const journals = entityJournals(currentEntityId(request, user))
+    const idx = journals.findIndex((j) => j.id === params.id)
     if (idx === -1) return fail(404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
-    if (db.journals[idx].status !== 'draft')
+    if (journals[idx].status !== 'draft')
       return fail(409, 'JOURNAL_ALREADY_POSTED', 'Hanya jurnal draft yang dapat dihapus')
-    db.journals.splice(idx, 1)
+    db.journals.splice(db.journals.indexOf(journals[idx]), 1)
     return new HttpResponse(null, { status: 204 })
   }),
 
@@ -265,7 +457,8 @@ export const handlers = [
     const user = currentUser(request)
     if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
     if (!hasPermission(user, 'journal.write')) return fail(403, 'FORBIDDEN', 'Tidak memiliki akses')
-    const journal = db.journals.find((j) => j.id === params.id)
+    const entityId = currentEntityId(request, user)
+    const journal = entityJournals(entityId).find((j) => j.id === params.id)
     if (!journal) return fail(404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
     if (journal.status === 'posted') return fail(409, 'ALREADY_POSTED', 'Jurnal sudah diposting')
     if (journal.status === 'reversed') return fail(409, 'ALREADY_REVERSED', 'Jurnal sudah dibatalkan')
@@ -274,7 +467,7 @@ export const handlers = [
     if (period && !period.isOpen) return closedPeriodErr(period)
     journal.status = 'posted'
     journal.postedAt = nowIso()
-    const balances = computeBalances()
+    const balances = computeBalances(entityId)
     const affectedAccounts = [...new Set(journal.lines.map((ln) => ln.accountId))].map((accountId) => ({
       accountId,
       newBalance: balances.get(accountId) ?? 0,
@@ -286,7 +479,8 @@ export const handlers = [
     const user = currentUser(request)
     if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
     if (!hasPermission(user, 'journal.write')) return fail(403, 'FORBIDDEN', 'Tidak memiliki akses')
-    const journal = db.journals.find((j) => j.id === params.id)
+    const entityId = currentEntityId(request, user)
+    const journal = entityJournals(entityId).find((j) => j.id === params.id)
     if (!journal) return fail(404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
     if (journal.status === 'reversed') return fail(409, 'ALREADY_REVERSED', 'Jurnal sudah dibatalkan')
     if (journal.status !== 'posted') return fail(409, 'INVALID_STATUS_TRANSITION', 'Hanya jurnal posted yang dapat dibalik')
@@ -308,7 +502,7 @@ export const handlers = [
     }
     journal.status = 'reversed'
     journal.reversalOf = reversal.transactionNumber
-    db.journals.unshift(reversal)
+    db.journals.unshift({ ...reversal, entityId })
     return ok({ reversedJournalId: journal.id, status: 'reversed', reversalJournal: reversal })
   }),
 
@@ -317,7 +511,7 @@ export const handlers = [
     const user = currentUser(request)
     if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
     if (!hasPermission(user, 'journal.write')) return fail(403, 'FORBIDDEN', 'Tidak memiliki akses')
-    const journal = db.journals.find((j) => j.id === params.id)
+    const journal = entityJournals(currentEntityId(request, user)).find((j) => j.id === params.id)
     if (!journal) return fail(404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
     if (journal.status !== 'draft') return fail(409, 'INVALID_STATUS_TRANSITION', 'Hanya jurnal draft yang dapat disubmit')
     journal.status = 'pending-approval'
@@ -330,7 +524,7 @@ export const handlers = [
     // Mirror mock API: kegagalan izin approve → NO_APPROVAL_RIGHTS (API §13),
     // bukan FORBIDDEN generik — klien tampilkan pesan khusus "role tidak punya izin".
     if (!hasPermission(user, 'journal.approve')) return fail(403, 'NO_APPROVAL_RIGHTS', 'Role Anda tidak memiliki izin approve')
-    const journal = db.journals.find((j) => j.id === params.id)
+    const journal = entityJournals(currentEntityId(request, user)).find((j) => j.id === params.id)
     if (!journal) return fail(404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
     if (journal.status !== 'pending-approval')
       return fail(409, 'INVALID_STATUS_TRANSITION', 'Hanya jurnal pending-approval yang dapat di-approve')
@@ -344,7 +538,7 @@ export const handlers = [
     if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
     // Mirror mock API: kegagalan izin approve → NO_APPROVAL_RIGHTS (API §13)
     if (!hasPermission(user, 'journal.approve')) return fail(403, 'NO_APPROVAL_RIGHTS', 'Role Anda tidak memiliki izin approve')
-    const journal = db.journals.find((j) => j.id === params.id)
+    const journal = entityJournals(currentEntityId(request, user)).find((j) => j.id === params.id)
     if (!journal) return fail(404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
     if (journal.status !== 'pending-approval')
       return fail(409, 'INVALID_STATUS_TRANSITION', 'Hanya jurnal pending-approval yang dapat di-reject')

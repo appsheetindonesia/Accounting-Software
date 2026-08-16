@@ -440,13 +440,14 @@ export const useStore = create<AccountingState>()(
             // Reconnect = AUTO-LOGIN demo dulu (api.login juga setAuth token
             // baru di client), alih-alih menunggu 401 yang tak akan pernah pulih.
             const auth = token === 'local.demo' ? await api.login({ email: DEMO_EMAIL, password: DEMO_PASSWORD }) : null
+            // Reconnect offline→online: sinkronkan entityId client SEBELUM
+            // fetch data, agar header X-Entity-Id ikut terkirim sejak request
+            // pertama (bukan hanya di request berikutnya).
+            if (auth) setAuth(auth.accessToken, get().activeEntityId, auth.refreshToken ?? null)
             const [accRes, jrnRes] = await Promise.all([api.getAccounts(), api.getJournals()])
             const journals = jrnRes.journals.map((j) => enrichCreatedBy(toJournalEntry(j), auth?.user ?? get().user))
             const entities = await fetchEntities()
             const periods = await fetchPeriods()
-            // Reconnect offline→online: auto-login demo juga harus menyinkronkan
-            // entityId client agar header X-Entity-Id ikut terkirim.
-            if (auth) setAuth(auth.accessToken, get().activeEntityId, auth.refreshToken ?? null)
             set({
               apiStatus: 'online',
               ...(auth
@@ -506,13 +507,15 @@ export const useStore = create<AccountingState>()(
           set({ authLoading: true, authError: null })
           try {
             const auth = await api.login({ email, password })
+            // Sinkronkan entityId client dengan entitas aktif SEBELUM fetch
+            // data → request pertama (accounts/journals/entities/periods) sudah
+            // membawa header X-Entity-Id, bukan hanya setelah ganti entitas
+            // eksplisit (dan tanpa bergantung pada fallback entityId profil user).
+            setAuth(auth.accessToken, get().activeEntityId, auth.refreshToken)
             const [accRes, jrnRes] = await Promise.all([api.getAccounts(), api.getJournals()])
             const journals = jrnRes.journals.map((j) => enrichCreatedBy(toJournalEntry(j), auth.user))
             const entities = await fetchEntities()
             const periods = await fetchPeriods()
-            // Sinkronkan entityId client dengan entitas aktif → header X-Entity-Id
-            // terkirim SEJAK login (bukan hanya saat ganti entitas eksplisit).
-            setAuth(auth.accessToken, get().activeEntityId, auth.refreshToken)
             set({
               apiStatus: 'online',
               accessToken: auth.accessToken,
