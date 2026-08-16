@@ -16,6 +16,7 @@ export default function JournalPage() {
   const lastSyncedAt = useStore((s) => s.lastSyncedAt)
   const activePeriod = useStore((s) => s.activePeriod)
   const periods = useStore((s) => s.periods)
+  const entityRefetching = useStore((s) => s.entityRefetching)
   const canWrite = canWriteJournal(user?.role)
   const [keyword, setKeyword] = useState('')
   const [status, setStatus] = useState<StatusFilter>('all')
@@ -38,11 +39,12 @@ export default function JournalPage() {
     }
   }, [focusJournalId])
 
-  // Skeleton saat data jurnal sedang di-fetch pertama kali oleh init()
-  // (apiStatus 'connecting' sebelum sinkronisasi pertama berhasil —
-  // lastSyncedAt null). Setelah pernah sinkron, data store dipakai langsung
-  // tanpa flash skeleton (cached/persist tersedia instan).
-  const loadingJournals = apiStatus === 'connecting' && lastSyncedAt === null
+  // Skeleton saat data jurnal sedang di-fetch: fetch pertama oleh init()
+  // (apiStatus 'connecting' & belum pernah sinkron — lastSyncedAt null) ATAU
+  // refetch ganti entitas (entityRefetching) — indikator loading konsisten di
+  // seluruh alur, bukan hanya fetch pertama. Setelah pernah sinkron & entitas
+  // stabil, data store dipakai langsung tanpa flash skeleton (cached/persist).
+  const loadingJournals = (apiStatus === 'connecting' && lastSyncedAt === null) || entityRefetching
 
   const filtered = useMemo(() => {
     const kw = keyword.trim().toLowerCase()

@@ -3,7 +3,7 @@
 // daftar jurnal difilter per periode, dan periode tertutup ditandai (badge +
 // tombol Buat Jurnal nonaktif) — konsisten dengan kontrak periode API (isOpen).
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, render, screen } from '@testing-library/react'
 import { mockAccounts, mockJournals } from '../../data/mock'
 import { useStore } from '../../store/useStore'
 import JournalPage from './JournalPage'
@@ -83,5 +83,38 @@ describe('JournalPage — periode aktif & status tertutup', () => {
     expect(screen.getByText(/Maret 2026 ·/)).toBeTruthy()
     expect(screen.queryByText(/Periode tertutup/)).toBeNull()
     expect(screen.getByRole('button', { name: 'Buat Jurnal' })).toHaveProperty('disabled', false)
+  })
+
+  it('state connecting → skeleton tampil, lalu diganti data saat sinkron selesai', () => {
+    // Awal: aplikasi masih menghubungkan ke API (belum pernah sinkron)
+    useStore.setState({ apiStatus: 'connecting', lastSyncedAt: null })
+    render(<JournalPage />)
+
+    // Skeleton konsisten (animate-pulse), daftar jurnal belum dirender
+    expect(document.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0)
+    expect(screen.queryByText('BKM-2026-03-0001')).toBeNull()
+
+    // Sinkron selesai → skeleton diganti data jurnal dari store
+    act(() => useStore.setState({ apiStatus: 'online', lastSyncedAt: '2026-08-16T00:00:00Z' }))
+    expect(screen.getByText('BKM-2026-03-0001')).toBeTruthy()
+    expect(screen.getByText(/Maret 2026 · \d+ entri jurnal/)).toBeTruthy()
+    expect(document.querySelectorAll('.animate-pulse').length).toBe(0)
+  })
+
+  it('refetch ganti entitas (entityRefetching) → skeleton tampil walau sudah pernah sinkron, lalu data', () => {
+    // Sudah pernah sinkron — tanpa entityRefetching, data langsung tampil
+    useStore.setState({ apiStatus: 'online', lastSyncedAt: '2026-08-16T00:00:00Z', entityRefetching: false })
+    render(<JournalPage />)
+    expect(screen.getByText('BKM-2026-03-0001')).toBeTruthy()
+
+    // Ganti entitas: refetch sedang berjalan → data lama diganti skeleton
+    act(() => useStore.setState({ entityRefetching: true }))
+    expect(document.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0)
+    expect(screen.queryByText('BKM-2026-03-0001')).toBeNull()
+
+    // Refetch selesai → skeleton hilang, data entitas baru tampil
+    act(() => useStore.setState({ entityRefetching: false }))
+    expect(screen.getByText('BKM-2026-03-0001')).toBeTruthy()
+    expect(document.querySelectorAll('.animate-pulse').length).toBe(0)
   })
 })

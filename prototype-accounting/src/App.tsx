@@ -14,6 +14,7 @@ import LedgerPage from './components/ledger/LedgerPage'
 import IncomeStatementPage from './components/reports/IncomeStatementPage'
 import TrialBalancePage from './components/reports/TrialBalancePage'
 import BalanceSheetPage from './components/reports/BalanceSheetPage'
+import CashFlowPage from './components/reports/CashFlowPage'
 import SettingsPage from './components/SettingsPage'
 import ComingSoon from './components/ComingSoon'
 import SessionExpiredModal from './components/SessionExpiredModal'
@@ -71,6 +72,8 @@ function App() {
                 <TrialBalancePage />
               ) : page === 'neraca' ? (
                 <BalanceSheetPage />
+              ) : page === 'arus-kas' ? (
+                <CashFlowPage />
               ) : page === 'pengaturan' ? (
                 <SettingsPage />
               ) : (

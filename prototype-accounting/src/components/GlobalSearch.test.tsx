@@ -2,9 +2,10 @@
 // Test komponen global search (TopBar): debounce, dropdown hasil, klik →
 // navigasi + fokus via store, nonaktif saat offline, respons basi diabaikan.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { api, type SearchResult } from '../api'
 import { useStore } from '../store/useStore'
+import { deferred } from '../test/helpers'
 import GlobalSearch from './GlobalSearch'
 
 vi.mock('../api', () => ({
@@ -32,20 +33,14 @@ const accountResult: SearchResult = {
   metadata: { balance: 155_000_000 },
 }
 
-const deferred = <T,>() => {
-  let resolve!: (v: T) => void
-  const promise = new Promise<T>((r) => (resolve = r))
-  return { promise, resolve }
-}
-
 beforeEach(() => {
   useStore.setState({ apiStatus: 'online', page: 'dashboard', focusJournalId: null, focusAccountId: null })
   mockedApi.search.mockReset()
 })
 
 afterEach(() => {
+  // Cleanup DOM otomatis via setup global (src/test/setup.ts)
   useStore.setState({ apiStatus: 'idle' })
-  cleanup()
 })
 
 describe('GlobalSearch — pencarian global di TopBar', () => {

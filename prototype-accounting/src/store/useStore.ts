@@ -43,6 +43,10 @@ interface AccountingState {
   // mengubah header X-Entity-Id client (setAuth) lalu re-fetch data server.
   entities: Entity[]
   activeEntityId: string
+  // TRUE selama setActiveEntity sedang re-fetch data entitas baru — halaman
+  // menampilkan skeleton (konsisten dengan fetch pertama). Transient, tidak
+  // dipersist. false saat idle / offline (offline tidak refetch).
+  entityRefetching: boolean
   setActiveEntity: (id: string) => Promise<void>
 
   // Periode fiskal (GET /periods) — status isOpen dipakai UI untuk menandai
@@ -379,22 +383,28 @@ export const useStore = create<AccountingState>()(
 
         entities: DEFAULT_ENTITIES,
         activeEntityId: 'ent-001',
+        entityRefetching: false,
         periods: [],
         // Ganti entitas aktif: sinkronkan header X-Entity-Id client (setAuth)
         // lalu re-fetch journals/accounts dari server (online) agar semua
-        // halaman menampilkan data entitas baru. Saat offline, hanya ganti
-        // penanda aktif — data lokal demo (ent-001) tetap ditampilkan.
+        // halaman menampilkan data entitas baru. Selama refetch, entityRefetching
+        // = true → halaman menampilkan skeleton (bukan data entitas lama),
+        // konsisten dengan indikator loading fetch pertama. Saat offline, hanya
+        // ganti penanda aktif — data lokal demo (ent-001) tetap ditampilkan.
         setActiveEntity: async (id) => {
           if (id === get().activeEntityId) return
           set({ activeEntityId: id })
           setAuth(get().accessToken, id, get().refreshToken)
           if (get().apiStatus !== 'online') return
+          set({ entityRefetching: true })
           try {
             const [accRes, jrnRes] = await Promise.all([api.getAccounts(), api.getJournals()])
             const journals = jrnRes.journals.map((j) => enrichCreatedBy(toJournalEntry(j), get().user))
             set({ accounts: accRes.accounts, journals, lastSyncedAt: nowIso() })
           } catch {
             set({ apiStatus: 'offline' })
+          } finally {
+            set({ entityRefetching: false })
           }
         },
 

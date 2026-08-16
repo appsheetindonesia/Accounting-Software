@@ -1,23 +1,12 @@
 // @vitest-environment happy-dom
 // Hanya file ini yang memakai DOM (renderHook). File test lain tetap di
 // environment Node agar perilaku persist/localStorage mereka tidak berubah.
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
+// Cleanup DOM otomatis via setup global (src/test/setup.ts) — tidak perlu
+// afterEach(cleanup) manual.
+import { describe, expect, it, vi } from 'vitest'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { useApiFetch } from './useApiFetch'
-
-afterEach(() => cleanup())
-
-// Deferred promise — kendali penuh kapan loader selesai (untuk memeriksa
-// state antara loading → selesai).
-const deferred = <T,>() => {
-  let resolve!: (v: T) => void
-  let reject!: (e: unknown) => void
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res
-    reject = rej
-  })
-  return { promise, resolve, reject }
-}
+import { deferred } from '../test/helpers'
 
 describe('useApiFetch — loading state & fallback offline', () => {
   it('state awal: loading=true, data=null, offline=false selama loader belum selesai', async () => {
@@ -120,5 +109,38 @@ describe('useApiFetch — loading state & fallback offline', () => {
     expect(result.current.data).toBe('B')
     expect(result.current.loading).toBe(false)
     expect(result.current.offline).toBe(false)
+  })
+})
+
+describe('useApiFetch — unmount saat fetch masih berjalan', () => {
+  it('loader resolve SETELAH unmount → tanpa peringatan apa pun (guard alive mencegah setState)', async () => {
+    const d = deferred<string>()
+    // Tangkap SEMUA peringatan/error console selama skenario. Guard `alive`
+    // membuat resolve post-unmount jadi no-op → React tidak mencatat apa pun
+    // (setState di luar act / ke komponen yang sudah di-unmount).
+    //
+    // Catatan jujur: React 19 menekan peringatan "state update on an unmounted
+    // component" (silent no-op), jadi di versi ini assert ini utamanya menjaga
+    // kontrak — dan langsung merah bila environment/React/testing-library mulai
+    // memperingatkan (mis. React lama) atau hook diubah hingga melempar.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      const { result, unmount } = renderHook(() => useApiFetch('k1', true, () => d.promise, () => 'fb'))
+      expect(result.current.loading).toBe(true)
+
+      // Unmount SAAT fetch masih pending (promise belum resolve)
+      unmount()
+
+      // Resolve DI LUAR act: bila guard `alive` hilang, callback .then/.finally
+      // memanggil setState pada komponen yang sudah di-unmount (wrapped-outside
+      // act) → environment yang memperingatkan akan mencatat di sini.
+      d.resolve('ok')
+      await new Promise((r) => setTimeout(r, 0)) // flush microtask + finally
+
+      expect(errorSpy.mock.calls).toEqual([])
+    } finally {
+      errorSpy.mockRestore()
+    }
   })
 })

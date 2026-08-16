@@ -6,6 +6,10 @@ import { defineConfig } from 'vitest/config'
 // Provider v8 — tanpa native dependency tambahan.
 export default defineConfig({
   test: {
+    // Setup global: cleanup Testing Library otomatis setelah tiap test
+    // (lihat src/test/setup.ts) — pola render/cleanup konsisten di semua
+    // test komponen tanpa mengulang afterEach(cleanup) per file.
+    setupFiles: ['./src/test/setup.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary', 'lcov'],

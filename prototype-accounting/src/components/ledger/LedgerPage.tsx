@@ -34,6 +34,8 @@ export default function LedgerPage() {
   const journals = useStore((s) => s.journals)
   const setPage = useStore((s) => s.setPage)
   const apiStatus = useStore((s) => s.apiStatus)
+  const activeEntityId = useStore((s) => s.activeEntityId)
+  const entityRefetching = useStore((s) => s.entityRefetching)
 
   // Fokus dari global search: hasil akun diklik → akun tsb dipilih (reaktif,
   // berfungsi walau halaman sudah terbuka), lalu fokus dibersihkan (transient).
@@ -62,7 +64,7 @@ export default function LedgerPage() {
   // Data via API: GET /ledger/accounts/:id?period= (tunggu koneksi menetap)
   const ready = apiStatus === 'online' || apiStatus === 'offline'
   const { data: apiView, loading, offline } = useApiFetch<LedgerView>(
-    `ledger:${account?.id}:${period.key}:${apiStatus}`,
+    `ledger:${account?.id}:${period.key}:${apiStatus}:${activeEntityId}`,
     ready,
     () => {
       if (!account) return Promise.resolve(localView)
@@ -182,7 +184,7 @@ export default function LedgerPage() {
         </div>
       )}
 
-      {loading ? (
+      {loading || entityRefetching ? (
         <>
           <SkeletonTable rows={5} />
           <div className="mt-3">

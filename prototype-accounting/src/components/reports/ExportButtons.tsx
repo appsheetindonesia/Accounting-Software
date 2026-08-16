@@ -6,7 +6,7 @@ import { api } from '../../api'
 type ExportFormat = 'pdf' | 'xlsx'
 
 type ExportButtonsProps =
-  | { reportType: 'trial-balance' | 'income-statement' | 'balance-sheet'; period: string }
+  | { reportType: 'trial-balance' | 'income-statement' | 'balance-sheet' | 'cash-flow'; period: string }
   | { accountId: string; accountCode: string; accountName: string; period: string }
 
 /**

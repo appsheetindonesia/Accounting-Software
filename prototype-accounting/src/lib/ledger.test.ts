@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeBalanceSheet, computeLedger, computeIncomeStatement, computeTrialBalance, isEffectJournal } from './ledger'
+import { computeBalanceSheet, computeLedger, computeIncomeStatement, computeTrialBalance, computeCashFlow, isEffectJournal } from './ledger'
 import { mockAccounts, mockJournals } from '../data/mock'
 import type { JournalEntry } from '../types'
 
@@ -257,6 +257,45 @@ describe('computeBalanceSheet — identitas Aset = Kewajiban + Ekuitas', () => {
     expect(v.totalAssets).toBe(587_000_000) // 557 + 30 (Kas +30)
     expect(v.netIncome).toBe(74_000_000) // 44 + 30
     expect(v.balanced).toBe(true)
+  })
+})
+
+describe('computeCashFlow — arus kas metode tidak langsung', () => {
+  it('Maret baseline: saldo kas 440 → 464jt (net +24jt), operasi = laba bersih 44jt', () => {
+    const v = computeCashFlow(mockAccounts, mockJournals, '2026-03-01', '2026-03-31')
+    // Kas Besar 60 + Bank 380 + Kas Kecil 0 = 440; akhir: Kas 84 (60+25−10−3+12) + 380
+    expect(v.beginningCash).toBe(440_000_000)
+    expect(v.endingCash).toBe(464_000_000)
+    expect(v.netCashFlow).toBe(24_000_000)
+    // Operasi: Laba bersih 44jt (155 pendapatan − 111 beban); investasi/pendanaan kosong
+    expect(v.sections[0].subtotal).toBe(44_000_000)
+    expect(v.sections[0].lines[0]).toMatchObject({ accountName: 'Laba bersih', amount: 44_000_000 })
+    expect(v.sections[1].subtotal).toBe(0)
+    expect(v.sections[2].subtotal).toBe(0)
+  })
+
+  it('draft & reversed TIDAK mengubah arus kas (BKK-0006, JV-0007, BKM-0008 diabaikan)', () => {
+    const v = computeCashFlow(mockAccounts, mockJournals, '2026-03-01', '2026-03-31')
+    // Draft (5jt + 2,5jt) dan reversed (2jt) tidak masuk → kas tetap 464jt
+    expect(v.endingCash).toBe(464_000_000)
+    expect(v.netCashFlow).toBe(24_000_000)
+  })
+
+  it('Januari (tanpa jurnal Jan): kas tetap 440jt, net 0; laba bersih 77jt (base)', () => {
+    const v = computeCashFlow(mockAccounts, mockJournals, '2026-01-01', '2026-01-31')
+    expect(v.beginningCash).toBe(440_000_000)
+    expect(v.endingCash).toBe(440_000_000)
+    expect(v.netCashFlow).toBe(0)
+    expect(v.sections[0].subtotal).toBe(77_000_000) // 130 − 53
+  })
+
+  it('jurnal Januari (periode tertutup) masuk saldo awal & akhir Maret (arus berantai)', () => {
+    const withJan = [janJournal, ...mockJournals]
+    const v = computeCashFlow(mockAccounts, withJan, '2026-03-01', '2026-03-31')
+    expect(v.beginningCash).toBe(470_000_000) // 440 + 30 (Kas +30 di Januari)
+    expect(v.endingCash).toBe(494_000_000) // 464 + 30
+    expect(v.netCashFlow).toBe(24_000_000) // arus Maret tidak berubah
+    expect(v.sections[0].subtotal).toBe(74_000_000) // 44 + 30
   })
 })
 

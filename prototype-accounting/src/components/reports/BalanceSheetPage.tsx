@@ -33,6 +33,7 @@ export default function BalanceSheetPage() {
   const apiStatus = useStore((s) => s.apiStatus)
   const entities = useStore((s) => s.entities)
   const activeEntityId = useStore((s) => s.activeEntityId)
+  const entityRefetching = useStore((s) => s.entityRefetching)
   const entityName = entities.find((e) => e.id === activeEntityId)?.name ?? 'PT. Kreasi Inovasi Estetika'
   const openModal = useStore((s) => s.openModal)
   const user = useStore((s) => s.user)
@@ -54,7 +55,7 @@ export default function BalanceSheetPage() {
   // Data via API: GET /reports/balance-sheet?asOf= (tunggu koneksi menetap)
   const ready = apiStatus === 'online' || apiStatus === 'offline'
   const { data: apiView, loading, offline } = useApiFetch<BSView>(
-    `balance-sheet:${period.key}:${apiStatus}`,
+    `balance-sheet:${period.key}:${apiStatus}:${activeEntityId}`,
     ready,
     () =>
       api.getBalanceSheet(period.end).then((d) => {
@@ -160,7 +161,7 @@ export default function BalanceSheetPage() {
         </p>
       )}
 
-      {loading && !apiView ? (
+      {(loading && !apiView) || entityRefetching ? (
         <div className="space-y-5">
           <SkeletonLines rows={3} />
           <SkeletonLines rows={6} />

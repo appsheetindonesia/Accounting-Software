@@ -532,6 +532,34 @@ describe('setActiveEntity — ganti entitas aktif (multi-tenant)', () => {
     expect(s.activeEntityId).toBe('ent-002')
     expect(s.apiStatus).toBe('offline')
   })
+
+  it('entityRefetching: true SELAMA refetch (indikator skeleton), false setelah selesai', async () => {
+    useStore.setState({ apiStatus: 'online', activeEntityId: 'ent-001', entityRefetching: false })
+    // Deferred promises: refetch tertahan → flag harus tetap true selama menunggu
+    let resolveAcc!: (v: { accounts: typeof mockAccounts }) => void
+    let resolveJrn!: (v: { journals: typeof mockJournals; totals: { debit: number; credit: number; difference: number } }) => void
+    mockedApi.getAccounts.mockReturnValue(new Promise((r) => { resolveAcc = r }) as any)
+    mockedApi.getJournals.mockReturnValue(new Promise((r) => { resolveJrn = r }) as any)
+
+    const p = useStore.getState().setActiveEntity('ent-002')
+    expect(useStore.getState().entityRefetching).toBe(true)
+
+    resolveAcc({ accounts: mockAccounts })
+    resolveJrn({ journals: mockJournals, totals: { debit: 0, credit: 0, difference: 0 } })
+    await p
+
+    expect(useStore.getState().entityRefetching).toBe(false)
+    expect(useStore.getState().activeEntityId).toBe('ent-002')
+  })
+
+  it('entityRefetching tetap false saat offline (tidak ada refetch → tidak ada skeleton)', async () => {
+    useStore.setState({ apiStatus: 'offline', activeEntityId: 'ent-001', entityRefetching: false })
+
+    await useStore.getState().setActiveEntity('ent-002')
+
+    expect(useStore.getState().entityRefetching).toBe(false)
+    expect(mockedApi.getAccounts).not.toHaveBeenCalled()
+  })
 })
 
 describe('openSearchResult — fokus hasil global search', () => {

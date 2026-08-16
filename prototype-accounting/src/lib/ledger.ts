@@ -186,6 +186,79 @@ export const computeBalanceSheet = (
   }
 }
 
+// ------------------------------------------------------------
+// Arus Kas (Cash Flow)
+// ------------------------------------------------------------
+export interface CashFlowLine {
+  accountCode: string
+  accountName: string
+  amount: number
+  indentLevel: number
+  isBold: boolean
+  isTotal: boolean
+}
+
+export interface CashFlowSection {
+  title: string
+  subtotal: number
+  lines: CashFlowLine[]
+}
+
+export interface CashFlowView {
+  sections: CashFlowSection[]
+  netCashFlow: number
+  beginningCash: number
+  endingCash: number
+}
+
+// Arus kas s/d periodEnd (metode tidak langsung, konsisten dengan mock API
+// GET /reports/cash-flow):
+// - saldo awal kas = efek jurnal posted s/d sehari SEBELUM start periode
+// - saldo akhir kas = efek jurnal posted s/d periodEnd (inclusive)
+//   (akun Kas & Bank: type asset, kategori 'Kas & Bank')
+// - arus kas bersih = selisih saldo akhir − awal; aktivitas operasi memakai
+//   laba bersih sebagai baris awal (investasi/pendanaan kosong di seed).
+const dayBefore = (date: string) => {
+  const d = new Date(`${date}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() - 1)
+  return d.toISOString().slice(0, 10)
+}
+
+export const computeCashFlow = (
+  accounts: Account[],
+  journals: JournalEntry[],
+  periodStart: string,
+  periodEnd: string,
+): CashFlowView => {
+  const cashAccounts = accounts.filter((a) => a.type === 'asset' && a.category === 'Kas & Bank')
+  const sumCash = (asOf: string) => {
+    const closing = closingBalances(accounts, journals, asOf)
+    return cashAccounts.reduce((s, a) => s + (closing.get(a.id) ?? 0), 0)
+  }
+  const beginningCash = sumCash(dayBefore(periodStart))
+  const endingCash = sumCash(periodEnd)
+  const closingEnd = closingBalances(accounts, journals, periodEnd)
+  const sumOf = (type: Account['type']) =>
+    accounts.filter((a) => a.type === type).reduce((s, a) => s + (closingEnd.get(a.id) ?? 0), 0)
+  const netIncome = sumOf('revenue') - sumOf('expense')
+  return {
+    sections: [
+      {
+        title: 'ARUS KAS DARI AKTIVITAS OPERASI',
+        subtotal: netIncome,
+        lines: [
+          { accountCode: '', accountName: 'Laba bersih', amount: netIncome, indentLevel: 1, isBold: false, isTotal: false },
+        ],
+      },
+      { title: 'ARUS KAS DARI AKTIVITAS INVESTASI', subtotal: 0, lines: [] },
+      { title: 'ARUS KAS DARI AKTIVITAS PENDANAAN', subtotal: 0, lines: [] },
+    ],
+    netCashFlow: endingCash - beginningCash,
+    beginningCash,
+    endingCash,
+  }
+}
+
 export interface TrialBalanceLine {
   accountCode: string
   accountName: string

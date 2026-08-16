@@ -100,6 +100,20 @@ export interface BalanceSheet {
   isBalanced: boolean
 }
 
+export interface CashFlow {
+  id: string
+  type: 'cash-flow'
+  period: { start: string; end: string }
+  sections: {
+    title: string
+    subtotal: number
+    lines: { accountCode: string; accountName: string; amount: number; indentLevel: number; isBold: boolean; isTotal: boolean }[]
+  }[]
+  netCashFlow: number
+  beginningCash: number
+  endingCash: number
+}
+
 export const api = {
   // 0. Health (tanpa auth) — dipakai polling koneksi (cek server hidup tiap 10 detik)
   health() {
@@ -227,11 +241,14 @@ export const api = {
   getBalanceSheet(asOf: string) {
     return request<BalanceSheet>('/reports/balance-sheet', { query: { asOf } })
   },
+  getCashFlow(period: string) {
+    return request<CashFlow>('/reports/cash-flow', { query: { period } })
+  },
 
   // 11. Export laporan (PDF/XLSX) — unduhan file via navigasi browser.
   //     Nama file dihitung di sini (konsisten dengan penamaan server) untuk toast.
-  exportReport(reportType: 'trial-balance' | 'income-statement' | 'balance-sheet', format: 'pdf' | 'xlsx', period: string) {
-    const names = { 'trial-balance': 'Neraca-Lajur', 'income-statement': 'Laba-Rugi', 'balance-sheet': 'Neraca' }
+  exportReport(reportType: 'trial-balance' | 'income-statement' | 'balance-sheet' | 'cash-flow', format: 'pdf' | 'xlsx', period: string) {
+    const names = { 'trial-balance': 'Neraca-Lajur', 'income-statement': 'Laba-Rugi', 'balance-sheet': 'Neraca', 'cash-flow': 'Arus-Kas' }
     const filename = `${names[reportType]}-${period}.${format}`
     return download(`/exports/reports/${reportType}`, { format, period }).then(() => filename)
   },

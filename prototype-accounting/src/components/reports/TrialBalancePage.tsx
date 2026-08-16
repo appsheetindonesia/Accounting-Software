@@ -22,6 +22,7 @@ export default function TrialBalancePage() {
   const apiStatus = useStore((s) => s.apiStatus)
   const entities = useStore((s) => s.entities)
   const activeEntityId = useStore((s) => s.activeEntityId)
+  const entityRefetching = useStore((s) => s.entityRefetching)
   const entityName = entities.find((e) => e.id === activeEntityId)?.name ?? 'PT. Kreasi Inovasi Estetika'
   const [periodIdx, setPeriodIdx] = useState(2) // Maret 2026
 
@@ -36,7 +37,7 @@ export default function TrialBalancePage() {
   // Data via API: GET /reports/trial-balance?period= (tunggu koneksi menetap)
   const ready = apiStatus === 'online' || apiStatus === 'offline'
   const { data: apiView, loading, offline } = useApiFetch<TBView>(
-    `trial-balance:${period.key}:${apiStatus}`,
+    `trial-balance:${period.key}:${apiStatus}:${activeEntityId}`,
     ready,
     () =>
       api.getTrialBalance(period.key).then((d) => ({
@@ -96,7 +97,7 @@ export default function TrialBalancePage() {
         </p>
       )}
 
-      {loading && !apiView ? (
+      {(loading && !apiView) || entityRefetching ? (
         <div className="space-y-5">
           <SkeletonLines rows={3} />
           <SkeletonTable rows={5} />
