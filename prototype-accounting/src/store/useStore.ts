@@ -549,7 +549,7 @@ export const useStore = create<AccountingState>()(
         // otomatis + modal "Sesi berakhir" (sessionExpired). User kembali ke
         // halaman login dan harus masuk lagi untuk melanjutkan.
         handleSessionExpired: () => {
-          setAuth(null, null, null)
+          setAuth(null, null, null) // client: token + entityId API-layer ikut bersih
           setRefreshToken(null)
           set({
             apiStatus: 'idle',
@@ -558,6 +558,10 @@ export const useStore = create<AccountingState>()(
             user: null,
             lastRefreshedAt: null,
             authError: 'Sesi berakhir. Silakan login kembali.',
+            // Reset pilihan entitas (mirror logout) — tanpa ini user berikutnya
+            // mewarisi activeEntityId tenant user sebelumnya (kebocoran multi-tenant).
+            entities: DEFAULT_ENTITIES,
+            activeEntityId: 'ent-001',
             sessionExpired: true,
           })
         },

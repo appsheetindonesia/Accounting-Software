@@ -535,6 +535,18 @@ describe('handleSessionExpired — refresh gagal → logout otomatis + modal "Se
     expect(useStore.getState().sessionExpired).toBe(false)
   })
 
+  it('me-reset activeEntityId & entities ke default (tanpa kebocoran tenant ke user berikutnya)', () => {
+    // User sebelumnya pindah ke entitas kedua (ent-002)
+    useStore.setState({ activeEntityId: 'ent-002', entities: [{ id: 'ent-002', name: 'PT Lain', code: 'KI-002', isActive: true }] })
+    useStore.getState().handleSessionExpired()
+
+    const s = useStore.getState()
+    // Sesi berakhir → pilihan entitas dikembalikan ke default (mirror logout),
+    // sehingga login berikutnya tidak mewarisi tenant user sebelumnya.
+    expect(s.activeEntityId).toBe('ent-001')
+    expect(s.entities).toEqual([{ id: 'ent-001', name: 'PT. Kreasi Inovasi Estetika', code: 'KI-001', isActive: true }])
+  })
+
   it('login baru & logout me-reset sessionExpired (modal tidak menempel)', async () => {
     useStore.getState().handleSessionExpired()
     expect(useStore.getState().sessionExpired).toBe(true)
@@ -551,6 +563,28 @@ describe('handleSessionExpired — refresh gagal → logout otomatis + modal "Se
     mockedApi.getJournals.mockResolvedValue({ journals: mockJournals, totals: { debit: 0, credit: 0, difference: 0 } })
     await useStore.getState().login('rina@estetikakreasi.co.id', 'password123')
     expect(useStore.getState().sessionExpired).toBe(false)
+  })
+
+  it('ganti entitas lalu logout → entity lama tidak bocor (store reset + setAuth(null,null,null) bersihkan X-Entity-Id)', async () => {
+    const setAuthSpy = vi.spyOn(clientApi, 'setAuth')
+    useStore.setState({ apiStatus: 'online', user: demoUser, accessToken: 'mock.user-001.1', refreshToken: 'r1', activeEntityId: 'ent-001' })
+    mockedApi.getAccounts.mockResolvedValue({ accounts: mockAccounts })
+    mockedApi.getJournals.mockResolvedValue({ journals: mockJournals, totals: { debit: 0, credit: 0, difference: 0 } })
+
+    // User berpindah ke entitas kedua → store & client sama-sama memegang ent-002
+    await useStore.getState().setActiveEntity('ent-002')
+    expect(useStore.getState().activeEntityId).toBe('ent-002')
+    expect(setAuthSpy).toHaveBeenLastCalledWith('mock.user-001.1', 'ent-002', 'r1')
+
+    // Logout → tidak ada jejak entitas lama, baik di store MAUPUN client layer
+    useStore.getState().logout()
+    const s = useStore.getState()
+    expect(s.activeEntityId).toBe('ent-001')
+    expect(s.entities).toEqual([{ id: 'ent-001', name: 'PT. Kreasi Inovasi Estetika', code: 'KI-001', isActive: true }])
+    // setAuth(null, null, null): entityId API-layer dibersihkan → request tenant
+    // berikutnya TIDAK membawa X-Entity-Id ent-002 yang basi (kebocoran lintas tenant)
+    expect(setAuthSpy).toHaveBeenLastCalledWith(null, null, null)
+    setAuthSpy.mockRestore()
   })
 })
 
