@@ -13,9 +13,11 @@ import { entities, users, rolePermissions, accounts, coaTemplate, journals, peri
 import { isEnabled as persistEnabled, getFilePath as persistFilePath, loadState as loadPersisted, saveState as savePersisted } from './persistence.js'
 
 const app = express()
-// exposedHeaders: browser perlu membaca Content-Disposition (nama file export)
-// dari respons download laporan (GET /exports/...).
-app.use(cors({ exposedHeaders: ['Content-Disposition'] }))
+// exposedHeaders: browser perlu membaca Content-Disposition (nama file export
+// dari respons download laporan) DAN Retry-After (jeda retry 429 RATE_LIMITED
+// dibaca via res.headers.get('retry-after') di client.ts — header ini bukan
+// CORS-safelisted, jadi wajib di-expose agar terbaca JavaScript).
+app.use(cors({ exposedHeaders: ['Content-Disposition', 'Retry-After'] }))
 app.use(express.json())
 
 // ------------------------------------------------------------
@@ -134,7 +136,14 @@ const rateLimit = (req, res, next) => {
   }
   bucket.count += 1
   rateBuckets.set(key, bucket)
-  if (bucket.count > max) return fail(res, 429, 'RATE_LIMITED', 'Terlalu banyak permintaan')
+  if (bucket.count > max) {
+    // Retry-After (RFC 7231): sisa detik sampai bucket ter-reset — klien
+    // memakainya sebagai jeda retry (dibatasi cap di client.ts agar UI
+    // tidak menggantung saat window panjang).
+    const retryAfter = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000))
+    res.set('Retry-After', String(retryAfter))
+    return fail(res, 429, 'RATE_LIMITED', 'Terlalu banyak permintaan')
+  }
   next()
 }
 

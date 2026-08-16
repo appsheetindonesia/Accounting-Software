@@ -64,6 +64,10 @@ interface RequestOptions {
 // 429 RATE_LIMITED: jumlah retry & jeda antar percobaan (API §1.5).
 const RATE_LIMIT_RETRIES = 2
 const RATE_LIMIT_DELAY_MS = 800
+// Batas atas jeda dari header Retry-After — hormati server, tapi jangan sampai
+// UI terasa menggantung (mis. window rate limit 60 detik → tetap retry setelah
+// 5 detik, bukan menunggu penuh).
+const RATE_LIMIT_MAX_DELAY_MS = 5000
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 // Dedupe: satu refresh untuk banyak request 401 yang datang bersamaan
@@ -120,12 +124,14 @@ const doRequest = async <T>(path: string, opts: RequestOptions, allowRefresh: bo
 
   let res = await attempt()
 
-  // 429 RATE_LIMITED → retry otomatis dengan jeda (hormati Retry-After bila
-  // server mengirimnya, default 800ms). Maksimal RATE_LIMIT_RETRIES percobaan
-  // ulang; bila masih 429 → jatuh ke ApiError RATE_LIMITED di bawah.
+  // 429 RATE_LIMITED → retry otomatis dengan jeda (hormati header Retry-After
+  // dari server, dibatasi cap RATE_LIMIT_MAX_DELAY_MS; default 800ms bila server
+  // tidak mengirimnya). Maksimal RATE_LIMIT_RETRIES percobaan ulang; bila masih
+  // 429 → jatuh ke ApiError RATE_LIMITED di bawah.
   for (let retry = 0; res.status === 429 && retry < RATE_LIMIT_RETRIES; retry++) {
     const retryAfter = Number(res.headers?.get?.('retry-after'))
-    const delay = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : RATE_LIMIT_DELAY_MS
+    const rawDelay = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : RATE_LIMIT_DELAY_MS
+    const delay = Math.min(rawDelay, RATE_LIMIT_MAX_DELAY_MS)
     await sleep(delay)
     res = await attempt()
   }

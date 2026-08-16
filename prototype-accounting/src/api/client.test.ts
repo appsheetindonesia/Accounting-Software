@@ -198,6 +198,73 @@ describe('request — retry 429 RATE_LIMITED (API §1.5)', () => {
       vi.unstubAllGlobals()
     }
   })
+
+  it('menghormati header Retry-After: jeda = detik yang diminta server (bukan 800ms default)', async () => {
+    vi.useFakeTimers()
+    try {
+      // Respons 429 membawa Retry-After: 2 (detik)
+      const withRetryAfter = (status: number, body: unknown, retryAfter: string) =>
+        ({
+          ok: status >= 200 && status < 300,
+          status,
+          json: async () => body,
+          headers: { get: (h: string) => (h === 'retry-after' ? retryAfter : null) },
+        }) as Response
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(withRetryAfter(429, { error: { code: 'RATE_LIMITED', message: 'Terlalu banyak permintaan' } }, '2'))
+        .mockResolvedValueOnce(json(200, { data: { ok: true } }))
+      vi.stubGlobal('fetch', fetchMock)
+      setAuth('mock.user-001.1', undefined, 'r1')
+
+      const pending = request<{ ok: boolean }>('/journals')
+      // Belum genap 2 detik (1.999ms) → retry BELUM terjadi (default 800ms
+      // TIDAK dipakai — Retry-After server yang menang)
+      await vi.advanceTimersByTimeAsync(1999)
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      // Genap 2000ms → retry berjalan
+      await vi.advanceTimersByTimeAsync(1)
+      const result = await pending
+
+      expect(result).toEqual({ ok: true })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('Retry-After yang sangat panjang DIBATASI cap (5 detik) agar UI tidak menggantung', async () => {
+    vi.useFakeTimers()
+    try {
+      const withRetryAfter = (status: number, body: unknown, retryAfter: string) =>
+        ({
+          ok: status >= 200 && status < 300,
+          status,
+          json: async () => body,
+          headers: { get: (h: string) => (h === 'retry-after' ? retryAfter : null) },
+        }) as Response
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(withRetryAfter(429, { error: { code: 'RATE_LIMITED', message: 'Terlalu banyak permintaan' } }, '99'))
+        .mockResolvedValueOnce(json(200, { data: { ok: true } }))
+      vi.stubGlobal('fetch', fetchMock)
+      setAuth('mock.user-001.1', undefined, 'r1')
+
+      const pending = request<{ ok: boolean }>('/journals')
+      // 4.999ms — masih di bawah cap 5.000ms → retry belum terjadi
+      await vi.advanceTimersByTimeAsync(4999)
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      // 5.000ms (cap) → retry berjalan, TANPA menunggu 99 detik penuh
+      await vi.advanceTimersByTimeAsync(1)
+      await pending
+
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+      vi.unstubAllGlobals()
+    }
+  })
 })
 
 describe('setAuth — membersihkan sesi lokal (logout / ganti entitas)', () => {

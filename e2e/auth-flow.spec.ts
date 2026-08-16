@@ -355,13 +355,16 @@ test('RG-21 RATE_LIMITED: 429 dengan ambang rendah → retry otomatis → reques
   await dialog1.getByRole('button', { name: 'Simpan Draft' }).click()
   await expect(page.getByRole('status')).toContainText('Jurnal disimpan sebagai draft')
 
-  // Simpan jurnal #2 → 429 (bucket 2 > 1) → klien retry (+800ms). Segera
-  // naikkan ambang + kosongkan bucket → retry klien berhasil (201 Created).
+  // Simpan jurnal #2 → 429 (bucket 2 > 1, Retry-After ~60s) → klien retry
+  // (jeda = Retry-After, dibatasi cap 5 detik). Segera naikkan ambang +
+  // kosongkan bucket → retry klien berhasil (201 Created).
   const blocked = page.waitForResponse(
     (res) => res.url().endsWith('/journals') && res.request().method() === 'POST' && res.status() === 429,
+    { timeout: 15_000 },
   )
   const retried = page.waitForResponse(
     (res) => res.url().endsWith('/journals') && res.request().method() === 'POST' && res.status() === 201,
+    { timeout: 20_000 },
   )
   const dialog2 = await openJournalModal(page)
   await fillBalancedJournal(dialog2, '5000000', 'RG-21 jurnal kedua — retry')
@@ -404,7 +407,8 @@ test('RG-22 RATE_LIMITED: 429 berulang (ambang rendah) → toast "Terlalu banyak
   await dialog1.getByRole('button', { name: 'Simpan Draft' }).click()
   await expect(page.getByRole('status')).toContainText('Jurnal disimpan sebagai draft')
 
-  // Simpan #2 → 429 → retry 800ms → 429 → retry 800ms → 429 → toast error
+  // Simpan #2 → 429 (Retry-After ~60s, cap klien 5s) → retry 5s → 429 →
+  // retry 5s → 429 → toast error (total ±10s)
   const statuses: number[] = []
   page.on('response', (res) => {
     if (res.url().endsWith('/journals') && res.request().method() === 'POST') statuses.push(res.status())
@@ -414,7 +418,7 @@ test('RG-22 RATE_LIMITED: 429 berulang (ambang rendah) → toast "Terlalu banyak
   await dialog2.getByRole('button', { name: 'Simpan Draft' }).click()
 
   // Pesan 'Terlalu banyak permintaan' tampil (retry habis → ApiError RATE_LIMITED)
-  await expect(page.getByRole('status')).toContainText('Terlalu banyak permintaan', { timeout: 10_000 })
+  await expect(page.getByRole('status')).toContainText('Terlalu banyak permintaan', { timeout: 20_000 })
   // Bukti jaringan: 3 percobaan (1 asli + 2 retry), semuanya 429
   expect(statuses).toHaveLength(3)
   expect(statuses.every((s) => s === 429)).toBe(true)

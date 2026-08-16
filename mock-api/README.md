@@ -193,7 +193,10 @@ Katalog error: `VALIDATION_ERROR`, `INVALID_CREDENTIALS`, `UNAUTHORIZED`, `SESSI
 Catatan: `SESSION_EXPIRED` (401) muncul saat refresh token kedaluwarsa (TTL
 refresh default 7 hari, override `MOCK_REFRESH_TTL_MS`); `RATE_LIMITED` (429)
 aktif per-IP per-endpoint dengan ambang `MOCK_RATE_MAX` (default **30** req/menit
-per endpoint, API §1.5; window `MOCK_RATE_WINDOW_MS` default 60s). Suite unit
+per endpoint, API §1.5; window `MOCK_RATE_WINDOW_MS` default 60s) — respons 429
+menyertakan header **`Retry-After`** (RFC 7231: sisa detik sampai bucket reset),
+yang dipakai klien sebagai jeda retry otomatis (dibatasi cap 5 detik di
+`prototype-accounting/src/api/client.ts`). Suite unit
 (`NODE_ENV=test`) bebas limit kecuali `MOCK_RATE_MAX` di-set eksplisit; E2E
 Playwright & `scripts/dev.mjs` menaikkan ambang via env agar suite tidak
 kena throttle — untuk menguji `RATE_LIMITED` jalankan mock API langsung

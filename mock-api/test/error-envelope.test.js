@@ -575,12 +575,14 @@ describe('Kode error katalog yang baru terimplementasi (API §13)', () => {
     expect(res.body.data.mimeType).toBe('image/png')
   })
 
-  it('melebihi ambang request → RATE_LIMITED (429)', async () => {
+  it('melebihi ambang request → RATE_LIMITED (429) + header Retry-After', async () => {
     process.env.MOCK_RATE_MAX = '3'
     try {
       let last
       for (let i = 0; i < 5; i++) last = await request(app).get('/health')
       expectError(last, 429, 'RATE_LIMITED')
+      // RFC 7231: Retry-After menyebut berapa detik lagi bucket ter-reset
+      expect(Number(last.headers['retry-after'])).toBeGreaterThanOrEqual(1)
     } finally {
       delete process.env.MOCK_RATE_MAX
     }
@@ -605,6 +607,8 @@ describe('Kode error katalog yang baru terimplementasi (API §13)', () => {
       expect(okCount).toBeGreaterThanOrEqual(25)
       expect(okCount).toBeLessThanOrEqual(30)
       expectError(last, 429, 'RATE_LIMITED')
+      // Retry-After mengikuti window (60s default) — detik tersisa sampai reset
+      expect(Number(last.headers['retry-after'])).toBeGreaterThanOrEqual(1)
     } finally {
       process.env.NODE_ENV = prevEnv
       if (prevMax !== undefined) process.env.MOCK_RATE_MAX = prevMax
