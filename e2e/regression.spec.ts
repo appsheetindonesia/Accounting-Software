@@ -296,17 +296,21 @@ test.describe('RG-05 s/d RG-08 — entitas, approval, search, periode', () => {
     await expect(page.getByText('8 entri jurnal')).toBeVisible()
 
     // 2. Switch ke ent-002 (CV Karya Mandiri) via dropdown sidebar →
-    //    data TERISOLASI: 0 jurnal (jurnal ent-001 tidak terlihat di UI)
+    //    data TERISOLASI: 2 jurnal seed ent-002 (jurnal ent-001 tidak terlihat di UI)
     await entitySelect.selectOption('ent-002')
     await expect(entityLabel).toHaveText('CV Karya Mandiri')
-    await expect(page.getByText('0 entri jurnal')).toBeVisible()
+    await expect(page.getByText('2 entri jurnal')).toBeVisible()
+    // Tabel jurnal menampilkan nama akun per baris — akun ent-002 tampil,
+    // akun ent-001 (Kas Besar) tidak bocor
+    await expect(page.getByText('Kas CV Karya Mandiri', { exact: true }).first()).toBeVisible()
+    await expect(page.getByText('Kas Besar', { exact: true }).first()).not.toBeVisible()
 
-    // 3. Buat jurnal 5jt via UI di ent-002 → kini 1 entri jurnal
+    // 3. Buat jurnal 5jt via UI di ent-002 → kini 3 entri jurnal
     const dialog = await openJournalModal(page)
     await fillBalancedJournal(dialog, '5000000', 'RG-05 jurnal entitas CV Karya Mandiri')
     await dialog.getByRole('button', { name: 'Posting' }).click()
     await expect(page.getByRole('status')).toContainText('Jurnal berhasil diposting')
-    await expect(page.getByText('1 entri jurnal')).toBeVisible()
+    await expect(page.getByText('3 entri jurnal')).toBeVisible()
 
     // 4. Switch balik ke ent-001 → jurnal ent-002 TIDAK terlihat, tetap 8
     await entitySelect.selectOption('ent-001')
@@ -513,16 +517,20 @@ test.describe('RG-09 s/d RG-12 — performa, restart, lintas browser, error', ()
     await gotoNav(page, 'Jurnal')
     await expect(page.getByText('200 entri jurnal')).toBeVisible()
 
-    // Filter server tetap benar pada data besar (10.000 jurnal)
-    const byKeyword = await (await request.get(`${API_BASE}/journals?keyword=bulk%20%231001`, { headers: h })).json()
+    // Filter server tetap benar pada data besar (10.000 jurnal).
+    // Keyword pakai spasi penutup agar tidak ikut mencocokkan "bulk #10010"
+    // (substring collision saat nomor seed berubah karena ent-002).
+    const byKeyword = await (await request.get(`${API_BASE}/journals?keyword=${encodeURIComponent('bulk #1001 ')}`, { headers: h })).json()
     expect(byKeyword.meta.total).toBe(1)
     expect(byKeyword.data.journals[0].transactionNumber).toBe('BKM-2026-03-2001') // n=1001 → nomor n+1000
 
-    // Filter UI tetap benar: nomor bukti yang pasti ada di 200 baris pertama
+    // Filter UI tetap benar: ambil nomor bukti dari baris pertama yang termuat
+    // (deterministik walau nomor seed bergeser karena ent-002), lalu filter → 1 baris
+    const firstNumber = (await page.locator('tbody tr').first().locator('td').nth(1).innerText()).trim()
     const search = page.getByPlaceholder('Cari no. bukti, keterangan, atau akun...')
-    await search.fill('BKM-2026-03-5236')
+    await search.fill(firstNumber)
     await expect(page.getByText('1 entri jurnal')).toBeVisible()
-    await expect(page.getByText('BKM-2026-03-5236', { exact: true })).toBeVisible()
+    await expect(page.getByText(firstNumber, { exact: true })).toBeVisible()
     expect(errors).toEqual([])
   })
 
