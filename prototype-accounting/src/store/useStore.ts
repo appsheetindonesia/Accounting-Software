@@ -427,11 +427,21 @@ export const useStore = create<AccountingState>()(
                 ? { toast: { message: 'Sesi offline tersambung — login demo otomatis', kind: 'success' as const } }
                 : {}),
             })
-          } catch {
-            set({
-              apiStatus: 'offline',
-              ...(opts?.silent ? {} : { toast: { message: 'Mock API tidak terhubung — menampilkan data lokal', kind: 'error' as const } }),
-            })
+          } catch (e) {
+            if (isNetworkError(e)) {
+              // Jaringan benar-benar mati → offline + toast (perilaku lama)
+              set({
+                apiStatus: 'offline',
+                ...(opts?.silent ? {} : { toast: { message: 'Mock API tidak terhubung — menampilkan data lokal', kind: 'error' as const } }),
+              })
+            } else if (get().accessToken) {
+              // Server MERESPONS error (ApiError, mis. 500/403) — sesi masih ada,
+              // tapi jangan tandai offline (bukan masalah jaringan).
+              set({ apiStatus: 'idle' })
+            }
+            // ApiError + token sudah dibersihkan (handleSessionExpired): biarkan
+            // state apa adanya — toast "Mock API tidak terhubung" menyesatkan
+            // saat masalahnya sesi kedaluwarsa (modal "Sesi Berakhir" tampil).
             return
           }
           // Koneksi pulih → kirim operasi offline yang tertunda ke server.
