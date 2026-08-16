@@ -26,6 +26,7 @@ export default function BalanceCards() {
   const accounts = useStore((s) => s.accounts)
   const balances = useBalances()
   const apiStatus = useStore((s) => s.apiStatus)
+  const activeEntityId = useStore((s) => s.activeEntityId)
   const ready = apiStatus === 'online' || apiStatus === 'offline'
 
   // Fallback offline: hitung dari data lokal (sama seperti sebelumnya)
@@ -52,7 +53,7 @@ export default function BalanceCards() {
   }
 
   const { data, loading } = useApiFetch(
-    `dashboard-summary:${apiStatus}`,
+    `dashboard-summary:${apiStatus}:${activeEntityId}`,
     ready,
     () => api.getDashboardSummary().then((d) => d.cards),
     localCards,

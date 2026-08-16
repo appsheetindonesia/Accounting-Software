@@ -14,6 +14,7 @@ export default function AlertsPanel() {
   const journals = useStore((s) => s.journals)
   const setPage = useStore((s) => s.setPage)
   const apiStatus = useStore((s) => s.apiStatus)
+  const activeEntityId = useStore((s) => s.activeEntityId)
 
   const localAlerts = (): PanelAlert[] => {
     const alerts: PanelAlert[] = []
@@ -41,7 +42,7 @@ export default function AlertsPanel() {
       : { action: () => setPage('journal'), actionLabel: 'Tinjau' }
 
   const { data } = useApiFetch(
-    `dashboard-alerts:${apiStatus}`,
+    `dashboard-alerts:${apiStatus}:${activeEntityId}`,
     apiStatus === 'online' || apiStatus === 'offline',
     () =>
       api.getDashboardAlerts().then((d) =>

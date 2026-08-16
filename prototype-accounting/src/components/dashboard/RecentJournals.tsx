@@ -10,6 +10,7 @@ export default function RecentJournals() {
   const journals = useStore((s) => s.journals)
   const setPage = useStore((s) => s.setPage)
   const apiStatus = useStore((s) => s.apiStatus)
+  const activeEntityId = useStore((s) => s.activeEntityId)
 
   const localRecent = (): JournalEntry[] =>
     [...journals]
@@ -17,7 +18,7 @@ export default function RecentJournals() {
       .slice(0, 5)
 
   const { data } = useApiFetch(
-    `dashboard-recent:${apiStatus}`,
+    `dashboard-recent:${apiStatus}:${activeEntityId}`,
     apiStatus === 'online' || apiStatus === 'offline',
     () => api.getDashboardRecent().then((d) => d.journals.map(toJournalEntry)),
     localRecent,
