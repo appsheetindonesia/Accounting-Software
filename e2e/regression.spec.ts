@@ -461,6 +461,26 @@ test.describe('RG-05 s/d RG-08 — entitas, approval, search, periode', () => {
     // 5. Dashboard tetap fungsional setelah ganti periode
     await gotoNav(page, 'Dashboard')
     await expect(page.getByText(BASE.aset, { exact: true }).first()).toBeVisible()
+
+    // 6. Halaman Jurnal mengikuti periode global + seed base TIDAK memuat
+    //    jurnal Jan–Feb (regresi anti-bocor seed:extra — jurnal lintas bulan
+    //    hanya dimuat oleh `npm run seed:extra`, bukan baseline E2E)
+    await gotoNav(page, 'Jurnal')
+    // Periode global masih 2026-02 (dari langkah 1) → base seed tanpa jurnal
+    // Februari: daftar kosong, tidak ada no. bukti Jan/Feb yang bocor ke UI
+    await expect(page.getByText('0 entri jurnal')).toBeVisible()
+    await expect(page.getByText(/2026-0[12]-/)).toHaveCount(0)
+    await expect(page.getByText('Periode tertutup — mutasi diblokir')).toBeVisible()
+    // Januari juga kosong di base seed (seed:extra = 3 jurnal Jan, 4 Feb)
+    await page.getByLabel('Pilih periode').selectOption('2026-01')
+    await expect(page.getByText('0 entri jurnal')).toBeVisible()
+    await expect(page.getByText(/2026-0[12]-/)).toHaveCount(0)
+    // Kembali ke Maret (terbuka) → tepat 8 jurnal seed base, tanpa badge tertutup
+    await page.getByLabel('Pilih periode').selectOption('2026-03')
+    await expect(page.getByText('8 entri jurnal')).toBeVisible()
+    await expect(page.getByText('BKM-2026-03-0001', { exact: true })).toBeVisible()
+    await expect(page.getByText('JV-2026-03-0007', { exact: true })).toBeVisible()
+    await expect(page.getByText('Periode tertutup — mutasi diblokir')).toHaveCount(0)
   })
 })
 
