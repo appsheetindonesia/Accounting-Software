@@ -7,7 +7,7 @@ const json = (status: number, body: unknown) =>
     status,
     json: async () => body,
     headers: { get: () => null }, // tanpa Retry-After → jeda default 800ms
-  }) as Response
+  }) as unknown as Response
 
 const refreshCall = (calls: unknown[][]) => calls.find((c) => String(c[0]).includes('/auth/refresh'))
 
