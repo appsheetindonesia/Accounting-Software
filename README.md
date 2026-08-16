@@ -10,13 +10,21 @@ Sistem akuntansi **PT. Kreasi Inovasi Estetika** — prototipe web (React + Vite
 
 > Repo ini privat — badge hanya tampil bagi pengguna yang punya akses.
 
+### Laporan per tahap (debug CI)
+
+Job `test` di `ci.yml` berjalan sebagai **matrix per tahap** — unit test prototipe dan
+integration test mock API dieksekusi paralel di runner terpisah. Setiap tahap menulis
+laporan **JUnit** (`<dir>/test-results/junit.xml`, di-ignore git) dan meng-uploadnya sebagai
+artifact saat gagal, dengan nama per tahap (`junit-unit-prototipe`, `junit-integration-mock-api`)
+agar debug cukup mengunduh satu artifact tanpa membuka ulang seluruh log.
+
 ## Struktur
 
 | Folder | Isi |
 |--------|-----|
 | `prototype-accounting/` | Prototipe web (React + TypeScript + Vite + Zustand), unit test Vitest + MSW |
 | `mock-api/` | Mock API Express (persistence, auth + refresh token, error envelope, rate limit), integration test Vitest + Supertest |
-| `e2e/` | E2E Playwright RG-01..RG-19 (chromium + firefox) |
+| `e2e/` | E2E Playwright RG-01..RG-22 (chromium + firefox) |
 | `scripts/` | Skrip dev terpadu (`dev.mjs`) & agregat test (`test-all.mjs`) |
 | Dokumen `*.md` | BRD, PRD, FRD, API contract, Database Schema, QA Test Plan, dll. |
 | `.github/workflows/` | CI (`ci.yml`), verifikasi manual (`e2e.yml`), deploy GitHub Pages (`pages.yml`) |
