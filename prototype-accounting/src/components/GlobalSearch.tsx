@@ -26,8 +26,25 @@ export default function GlobalSearch() {
   const [activeIndex, setActiveIndex] = useState(-1)
   const seq = useRef(0)
   const rootRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const online = apiStatus === 'online'
+
+  // Pintasan global Ctrl+K (Cmd+K di macOS) → fokus input pencarian. Dipasang
+  // di window agar bisa dipanggil dari halaman mana pun (aksesibilitas
+  // keyboard — pola umum aplikasi web). Mencegah default browser (focus
+  // address bar di beberapa browser) via preventDefault.
+  useEffect(() => {
+    const onShortcut = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        inputRef.current?.focus()
+        inputRef.current?.select()
+      }
+    }
+    window.addEventListener('keydown', onShortcut)
+    return () => window.removeEventListener('keydown', onShortcut)
+  }, [])
 
   useEffect(() => {
     const q = query.trim()
@@ -117,6 +134,7 @@ export default function GlobalSearch() {
     <div ref={rootRef} className="relative hidden md:block">
       <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" />
       <input
+        ref={inputRef}
         type="search"
         value={query}
         onChange={(e) => {

@@ -751,6 +751,20 @@ test.describe('RG-05 s/d RG-08 — entitas, approval, search, periode', () => {
     await expect(page.getByRole('heading', { name: 'Buku Besar' })).toBeVisible()
     await expect(page.getByText('Pendapatan Jasa', { exact: true }).first()).toBeVisible() // akun terpilih
     await expect(page.getByText('Saldo Akhir', { exact: true })).toBeVisible()
+
+    // 6. Search global laporan: 'Arus Kas' → klik → halaman laporan terbuka
+    //    (membuktikan semua menu navigasi bisa dicari & dibuka)
+    await globalSearch.fill('Arus Kas')
+    await expect(page.getByRole('option', { name: /Arus Kas/ })).toBeVisible()
+    await page.getByRole('option', { name: /Arus Kas/ }).first().click()
+    await expect(page.getByRole('heading', { name: 'Laporan Arus Kas' })).toBeVisible()
+
+    // 7. Pintasan global Ctrl+K → fokus input pencarian dari halaman mana pun,
+    //    lalu ketik langsung (tanpa klik input) → hasil muncul
+    await page.keyboard.press('Control+k')
+    await expect(globalSearch).toBeFocused()
+    await page.keyboard.type('laba')
+    await expect(page.getByRole('option', { name: /Laba Rugi/ })).toBeVisible()
   })
 
   test('RG-07b Navigasi keyboard global search: ketik + ArrowDown + Enter', async ({ page }) => {

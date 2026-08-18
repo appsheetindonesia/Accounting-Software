@@ -264,4 +264,24 @@ describe('GlobalSearch — navigasi keyboard (aksesibilitas)', () => {
     expect(useStore.getState().page).toBe('dashboard')
     expect(screen.getByRole('option', { name: /JV-2026-03-0005/ })).toBeTruthy()
   })
+
+  it('Ctrl+K di window → fokus input pencarian (pintasan global)', () => {
+    render(<GlobalSearch />)
+    const input = screen.getByLabelText('Pencarian global') as HTMLInputElement
+    expect(document.activeElement).not.toBe(input)
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    expect(document.activeElement).toBe(input)
+  })
+
+  it('Cmd+K di macOS → fokus input pencarian; tombol lain tidak memicu', () => {
+    render(<GlobalSearch />)
+    const input = screen.getByLabelText('Pencarian global') as HTMLInputElement
+
+    fireEvent.keyDown(window, { key: 'a', ctrlKey: true }) // bukan K → tidak fokus
+    expect(document.activeElement).not.toBe(input)
+
+    fireEvent.keyDown(window, { key: 'k', metaKey: true }) // Cmd+K → fokus
+    expect(document.activeElement).toBe(input)
+  })
 })
