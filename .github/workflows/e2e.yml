@@ -37,7 +37,7 @@ jobs:
   e2e:
     name: E2E RG-01..RG-19 (chromium + firefox) — shard ${{ matrix.shard }}/2
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -73,9 +73,19 @@ jobs:
           cd ../prototype-accounting && npm ci
           cd ../e2e && npm ci
 
+      # Retry install Playwright — CDN kadang stall di runner baru;
+      # 3 attempt dengan backoff 10s/30s agar tidak memakan timeout penuh.
       - name: Install Playwright browsers + system deps
         working-directory: e2e
-        run: npx playwright install --with-deps chromium firefox
+        run: |
+          for attempt in 1 2 3; do
+            echo "=== Attempt $attempt/3 ==="
+            npx playwright install --with-deps chromium firefox && exit 0
+            echo "⚠️ Attempt $attempt failed, retrying in $((attempt * 10))s..."
+            sleep $((attempt * 10))
+          done
+          echo "❌ Semua attempt gagal"
+          exit 1
 
       - name: Run E2E (RG-01..RG-19) — shard ${{ matrix.shard }}/2
         working-directory: e2e
