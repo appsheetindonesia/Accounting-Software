@@ -828,6 +828,12 @@ def main() -> None:
     ap.add_argument("--environment",
                     help="override environment run (default: env QA_ENVIRONMENT, "
                          "lalu 'QA Local (mock API)')")
+    ap.add_argument("--sample-seed", type=int, default=SAMPLE_SEED,
+                    metavar="N",
+                    help="seed untuk status acak di --sample (default: "
+                         f"{SAMPLE_SEED}). Beda seed → distribusi berbeda, "
+                         "tapi tetap deterministik — run ulang dengan seed "
+                         "sama selalu menghasilkan status sama persis.")
     args = ap.parse_args()
 
     # Terapkan override CLI ke nilai default (berlaku untuk seluruh output;
@@ -852,7 +858,8 @@ def main() -> None:
 
     if args.sample:
         import json
-        random_statuses(enrich(records))  # tanpa load existing — status murni acak
+        sample_seed = args.sample_seed
+        random_statuses(enrich(records), seed=sample_seed)  # tanpa load existing — status murni acak
         paths = [
             write_tracker_csv(records, SAMPLE_FILES["tracker"]),
             write_xlsx(records, SAMPLE_FILES["xlsx"]),
@@ -865,7 +872,7 @@ def main() -> None:
         for p in paths:
             print(f"[OK] {p}  (contoh run — status acak, file asli tidak disentuh)")
         print(f"\nContoh run: {len(tc)} TC + {len(rg)} RG = {len(records)} test case dengan status terisi")
-        print(f"         Seed status acak: {SAMPLE_SEED} (tetap) — run ulang menghasilkan status yang sama persis")
+        print(f"         Seed status acak: {sample_seed} (tetap) — run ulang dengan seed sama menghasilkan status sama persis")
         return
 
     existing = load_existing_metadata()
