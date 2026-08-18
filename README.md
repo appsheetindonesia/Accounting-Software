@@ -34,7 +34,7 @@ Riwayat perubahan & catatan rilis: **[CHANGELOG.md](CHANGELOG.md)**
 | `prototype-accounting/` | Prototipe web (React + TypeScript + Vite + Zustand), unit test Vitest + MSW |
 | `mock-api/` | Mock API Express (persistence, auth + refresh token, error envelope, rate limit), integration test Vitest + Supertest |
 | `e2e/` | E2E Playwright RG-01..RG-22 (chromium + firefox) |
-| `scripts/` | Skrip dev terpadu (`dev.mjs` + `dev-stop.mjs`) & agregat test (`test-all.mjs`) |
+| `scripts/` | Skrip dev terpadu (`dev.mjs` + `dev-stop.mjs`), agregat test (`test-all.mjs`), pemantau CI (`check-ci.ps1`) |
 | Dokumen `*.md` | Semua spesifikasi — lihat [Dokumentasi](#dokumentasi) |
 | `.github/workflows/` | CI (`ci.yml` — unit+integration+lint+qa-sync), E2E Playwright (`e2e.yml`), deploy GitHub Pages (`pages.yml`) |
 
@@ -78,6 +78,19 @@ menghapusnya saat berhenti — jadi `npm run dev:stop` mematikan mock API + Vite
 sekaligus tanpa harus menebak PID lewat netstat/tasklist. Varian seed:
 `npm run dev:extra` (jurnal lintas bulan), `dev:reset` (seed segar walau
 persistence aktif), `dev:no-persist` (in-memory, reset tiap boot).
+
+### Memantau GitHub Actions tanpa curl manual
+
+`scripts/check-ci.ps1` menampilkan status run terbaru + hasil tiap job (dan
+step yang gagal) lewat REST API — token diambil otomatis dari env
+`GH_TOKEN`/`GITHUB_TOKEN`, `gh auth token`, atau Git Credential Manager.
+
+```powershell
+powershell -File scripts/check-ci.ps1                    # run terbaru branch aktif
+powershell -File scripts/check-ci.ps1 -Commit bc5c0ad    # run untuk commit tertentu
+powershell -File scripts/check-ci.ps1 -Workflow CI -Limit 1  # filter workflow (nama run)
+powershell -File scripts/check-ci.ps1 -Watch             # poll sampai semua selesai
+```
 
 Detail lebih lanjut ada di README masing-masing sub-proyek (`mock-api/`, `prototype-accounting/`, `e2e/`).
 

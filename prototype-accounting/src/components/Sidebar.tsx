@@ -166,8 +166,6 @@ function PeriodListbox() {
 export default function Sidebar() {
   const page = useStore((s) => s.page)
   const setPage = useStore((s) => s.setPage)
-  const activePeriod = useStore((s) => s.activePeriod)
-  const setActivePeriod = useStore((s) => s.setActivePeriod)
   const entities = useStore((s) => s.entities)
   const activeEntityId = useStore((s) => s.activeEntityId)
   const setActiveEntity = useStore((s) => s.setActiveEntity)

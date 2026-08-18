@@ -10,17 +10,17 @@
 #   mereferensikan aset dengan base itu SEBELUM artifact di-upload
 #   (base salah → aset 404 setelah deploy; guard menghentikan build).
 #
-# STATUS JOB DEPLOY: DINONAKTIFKAN SEMENTARA (if: false) sampai GitHub
-# Pages diaktifkan di Settings → Pages → Source: "GitHub Actions" —
-# repo private plan Free tidak bisa diaktifkan dari Actions (GITHUB_TOKEN
-# tidak berwenang), jadi workflow ini berjalan BUILD-ONLY agar tidak
-# selalu failure. Setelah Pages aktif, hapus `if: false` di job deploy;
-# pre-flight gh api di dalamnya akan langsung mengizinkan deploy.
+# JOB DEPLOY TIDAK PERNAH GAGAL TOTAL saat Pages belum aktif: job deploy
+# tetap berjalan, tapi langkah pertama (pre-flight `gh api repos/.../pages`)
+# mendeteksi situs belum aktif dan MEN-SKIP langkah Deploy dengan pesan
+# petunjuk enablement yang jelas di log — workflow tetap hijau (warning),
+# artifact build tetap tersimpan. Begitu Pages diaktifkan di
+# Settings → Pages → Source: "GitHub Actions", push berikutnya langsung deploy
+# tanpa perlu mengubah workflow.
 #
-# Catatan: kegagalan run Pages sebelumnya BUKAN karena Pages belum aktif
-# (pre-flight skip sudah bekerja) melainkan step Build yang gagal karena
-# error tipe tsc -b (fix: GlobalSearch select type + 2 test file) —
-# sudah diperbaiki, build kini lulus.
+# Catatan: repo private plan Free tidak bisa mengaktifkan Pages dari Actions
+# (GITHUB_TOKEN tidak berwenang) — inilah kenapa pre-flight (bukan
+# configure-pages enablement) yang menjadi sumber kebenaran status Pages.
 #
 # Semua action memakai versi runtime Node 24 (wajib sejak Jun 2026).
 # ============================================================
@@ -101,10 +101,6 @@ jobs:
   deploy:
     name: Deploy ke GitHub Pages
     needs: build
-    # NONAKTIF SEMENTARA sampai Pages diaktifkan di Settings (lihat header).
-    # Hapus baris ini setelah konfigurasi Pages selesai — pre-flight gh api
-    # di langkah pertama akan mengaktifkan deploy otomatis.
-    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:
@@ -114,9 +110,9 @@ jobs:
       # Pre-flight: pastikan situs Pages benar-benar aktif sebelum deploy.
       # Bila belum (mis. repo private — GITHUB_TOKEN tidak berwenang
       # mengaktifkan Pages dari Actions), workflow TIDAK gagal: deploy
-      # di-skip dengan peringatan yang jelas, artifact tetap tersimpan.
-      # Begitu situs diaktifkan, push berikutnya langsung deploy.
-      - name: Cek status GitHub Pages
+      # di-skip dengan petunjuk enablement yang jelas, artifact tetap
+      # tersimpan. Begitu situs diaktifkan, push berikutnya langsung deploy.
+      - name: Cek status GitHub Pages (pre-flight)
         id: pages-check
         env:
           GH_TOKEN: ${{ github.token }}
@@ -126,9 +122,12 @@ jobs:
           PAGES_OK=$?
           set -e
           if [ "$PAGES_OK" -ne 0 ]; then
-            echo "::warning::GitHub Pages belum diaktifkan — deploy di-skip (artifact build tetap tersimpan). Aktifkan di Settings → Pages → Source: 'GitHub Actions' lalu push ulang."
+            echo "::error title=GitHub Pages belum aktif::Deploy di-skip — artifact build tetap tersimpan di job build."
+            echo "::warning::Cara mengaktifkan: Repo Settings → Pages → Source: pilih 'GitHub Actions' → Save. Lalu push ulang (atau workflow_dispatch) — workflow ini langsung deploy tanpa edit apa pun."
+            echo "::notice::Repo private plan Free: GITHUB_TOKEN tidak dapat mengaktifkan Pages dari Actions — aktivasi harus manual lewat Settings."
             echo "enabled=false" >> "$GITHUB_OUTPUT"
           else
+            echo "::notice::GitHub Pages aktif — lanjut deploy."
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           fi
 
@@ -136,3 +135,18 @@ jobs:
         id: deployment
         if: steps.pages-check.outputs.enabled == 'true'
         uses: actions/deploy-pages@v5
+
+      # Bila Pages belum aktif: sampaikan langkah enablement sebagai step
+      # tersendiri agar terlihat jelas di log run (bukan cuma annotation).
+      - name: Petunjuk enablement GitHub Pages
+        if: steps.pages-check.outputs.enabled != 'true'
+        run: |
+          echo "GitHub Pages belum aktif di repo ini, jadi deploy di-skip."
+          echo "Artifact prototipe TETAP tersimpan (job build) — tidak ada yang hilang."
+          echo ""
+          echo "Langkah aktivasi (sekali saja):"
+          echo "  1. Buka https://github.com/${{ github.repository }}/settings/pages"
+          echo "  2. Source: pilih 'GitHub Actions' (bukan branch)"
+          echo "  3. Save"
+          echo "  4. Push ulang commit mana pun (atau jalankan workflow_dispatch) —"
+          echo "     workflow ini langsung men-deploy tanpa perlu mengubah file."
