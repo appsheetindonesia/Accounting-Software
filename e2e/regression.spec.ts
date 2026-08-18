@@ -369,6 +369,39 @@ test.describe('RG-01 s/d RG-04 — siklus jurnal, reverse, laporan, periode', ()
     }
   })
 
+  test('RG-03d Klik ganda cepat Export PDF di Laba Rugi → hanya 1 request export (guard busyRef)', async ({ page }) => {
+    // Klik ganda (dblclick = dua klik dalam gestur yang sama) pada Export PDF
+    // harus mengirim TEPAT 1 request: guard busyRef (ref sinkron) menolak klik
+    // kedua sebelum re-render, dan tombol menjadi nonaktif setelahnya. Mirip
+    // unit test ExportButtons "klik ganda satu frame" tapi lewat browser nyata.
+    await gotoNav(page, 'Laba Rugi')
+    await expect(page.getByText('Rp 155.000.000', { exact: true }).first()).toBeVisible()
+
+    let exportCount = 0
+    page.on('request', (r) => {
+      if (r.method() === 'GET' && r.url().includes('/exports/reports/income-statement') && r.url().includes('format=pdf')) {
+        exportCount++
+      }
+    })
+    // Promise request dipasang SEBELUM klik agar tidak melewatkan request
+    // pertama (race jika dipasang setelah dblclick).
+    const firstReq = page.waitForRequest(
+      (r) =>
+        r.method() === 'GET' &&
+        r.url().includes('/exports/reports/income-statement') &&
+        r.url().includes('format=pdf'),
+    )
+
+    await page.getByRole('button', { name: 'Export PDF' }).dblclick()
+    await firstReq
+
+    // Jeda singkat agar request kedua (bila guard bocor) sempat muncul
+    // sebelum asersi jumlah.
+    await page.waitForTimeout(600)
+
+    expect(exportCount).toBe(1)
+  })
+
   test('RG-04 Tutup periode: posting diblokir, laporan tetap terbaca, draft ter-post', async ({ page }) => {
     // 1. Tutup Maret 2026 via UI (Pengaturan): tombol Tutup → dialog pilihan
     //    aksi draft muncul (2 draft seed) → pilih 'Posting semua draft'

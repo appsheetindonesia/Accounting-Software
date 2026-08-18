@@ -148,7 +148,12 @@ describe('ExportButtons — tombol Export PDF/XLSX', () => {
     expect(mockedApi.exportReport).toHaveBeenCalledTimes(1)
     await act(async () => resolve('Laba-Rugi-2026-03.pdf'))
     await waitFor(() => expect(getByRole('button', { name: 'Export PDF' })).toHaveProperty('disabled', false))
-    // Selesai → tombol bisa dipakai lagi, dan klik berikutnya memicu export baru
+    // Cooldown 350ms (useActionGuard): klik ganda NYATA dblclick datang setelah
+    // microtask selesai — klik dalam cooldown tetap ditolak (hanya 1 request)
+    fireEvent.click(getByRole('button', { name: 'Export PDF' }))
+    expect(mockedApi.exportReport).toHaveBeenCalledTimes(1) // masih dalam cooldown
+    // Setelah cooldown habis → tombol dipakai lagi, klik berikutnya memicu export baru
+    await new Promise((r) => setTimeout(r, 400))
     fireEvent.click(getByRole('button', { name: 'Export PDF' }))
     await waitFor(() => expect(mockedApi.exportReport).toHaveBeenCalledTimes(2))
   })

@@ -21,15 +21,19 @@ export default function ExportButtons(props: ExportButtonsProps) {
   const apiStatus = useStore((s) => s.apiStatus)
   const showToast = useStore((s) => s.showToast)
   const [busy, setBusy] = useState<ExportFormat | null>(null)
-  // Guard SINKRON (ref) — busy state React di-batch: dua klik dalam satu frame
-  // membaca busy lama (null) sebelum re-render, jadi `disabled` tombol saja
-  // tidak cukup mencegah export ganda. Ref tidak memicu render dan langsung
-  // terlihat oleh klik kedua dalam batch yang sama.
+  // Guard anti double-click SINKRON (ref) PER FORMAT + cooldown 350ms — busy
+  // state React di-batch: dua klik dalam satu frame membaca busy lama (null)
+  // sebelum re-render, jadi `disabled` tombol saja tidak cukup. Ref memblokir
+  // klik kedua dalam frame yang sama; cooldown PER FORMAT menahan ref ±350ms
+  // SETELAH selesai agar klik ganda NYATA oleh user (dblclick — microtask
+  // selesai sebelum klik kedua) hanya mengirim 1 request (E2E RG-03d), TANPA
+  // memblokir ganti format cepat (PDF→XLSX, RG-03/RG-03c).
   const busyRef = useRef<ExportFormat | null>(null)
   const online = apiStatus === 'online'
 
   const doExport = async (format: ExportFormat) => {
-    if (busyRef.current) return
+    // Guard aktif saat in-flight ATAU dalam cooldown untuk FORMAT yang sama
+    if (busyRef.current === format) return
     busyRef.current = format
     setBusy(format)
     try {
@@ -41,8 +45,12 @@ export default function ExportButtons(props: ExportButtonsProps) {
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Export gagal — coba lagi', 'error')
     } finally {
-      busyRef.current = null
       setBusy(null)
+      // Cooldown per format: lepas SETELAH 350ms, dan hanya bila tidak ada
+      // export format lain yang sedang berjalan (ref format lain tidak ditimpa).
+      window.setTimeout(() => {
+        if (busyRef.current === format) busyRef.current = null
+      }, 350)
     }
   }
 
