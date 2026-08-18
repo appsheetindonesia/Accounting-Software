@@ -175,6 +175,72 @@ export default function LedgerPage() {
         </p>
       )}
 
+      {/* Daftar akun klik-di-baris — pola sama seperti Jurnal Terbaru di Dashboard:
+          baris role=button + aria-label, klik/Enter/Space memilih akun (detail Buku
+          Besar akun tsb ditampilkan). Baris yang aktif di-highlight. */}
+      <div className="rounded-xl border border-line bg-surface shadow-card">
+        <div className="flex items-center justify-between border-b border-line px-5 py-4">
+          <h3 className="text-sm font-bold text-ink">Daftar Akun</h3>
+          <span className="text-xs text-ink-soft">Klik baris untuk melihat detail</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px]">
+            <thead>
+              <tr className="border-b border-line bg-canvas text-left text-[11px] font-bold uppercase tracking-wider text-ink-faint">
+                <th className="px-5 py-2.5">Kode</th>
+                <th className="px-3 py-2.5">Akun</th>
+                <th className="px-3 py-2.5">Tipe</th>
+                <th className="px-5 py-2.5" />
+              </tr>
+            </thead>
+            <tbody>
+              {accounts
+                .filter((a) => !a.id.includes('header'))
+                .map((a) => {
+                  const active = a.id === account?.id
+                  return (
+                    <tr
+                      key={a.id}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Buka detail akun ${a.code} ${a.name}`}
+                      aria-pressed={active}
+                      onClick={() => setAccountId(a.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          setAccountId(a.id)
+                        }
+                      }}
+                      title={`Buka detail akun ${a.code} ${a.name}`}
+                      className={`cursor-pointer border-b border-line/70 last:border-0 transition hover:bg-surface-hover/60 focus-visible:bg-surface-hover/60 focus-visible:outline-none ${
+                        active ? 'bg-primary/10 ring-1 ring-primary/30' : ''
+                      }`}
+                    >
+                      <td className="num whitespace-nowrap px-5 py-3 text-xs font-semibold text-primary">{a.code}</td>
+                      <td className="px-3 py-3 text-sm text-ink">{a.name}</td>
+                      <td className="px-3 py-3 text-xs text-ink-soft">
+                        {a.type === 'asset'
+                          ? 'Aset'
+                          : a.type === 'liability'
+                            ? 'Utang'
+                            : a.type === 'equity'
+                              ? 'Modal'
+                              : a.type === 'revenue'
+                                ? 'Pendapatan'
+                                : 'Beban'}
+                      </td>
+                      <td className="px-5 py-3 text-right">
+                        <ChevronRight size={15} className="ml-auto text-ink-faint" />
+                      </td>
+                    </tr>
+                  )
+                })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {loading && !apiView ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-surface px-5 py-3 shadow-card">
           <div className="space-y-2">

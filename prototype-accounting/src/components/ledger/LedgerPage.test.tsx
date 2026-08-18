@@ -110,6 +110,49 @@ describe('LedgerPage — ExportButtons variant per akun', () => {
   })
 })
 
+describe('LedgerPage — daftar akun klik-di-baris (pola Jurnal Terbaru)', () => {
+  it('baris akun ter-render sebagai tombol (role=button + aria-label), default 1-1100 aktif', async () => {
+    vi.mocked(api.getLedger).mockResolvedValue(ledgerFixture as any)
+    useStore.setState({ apiStatus: 'online', lastSyncedAt: '2026-08-16T00:00:00Z' })
+    render(<LedgerPage />)
+    await screen.findAllByText('Rp 87.000.000', { exact: true })
+
+    // Semua akun non-header jadi baris klik (aria-label = Buka detail akun <kode> <nama>)
+    expect(screen.getByRole('button', { name: 'Buka detail akun 1-1100 Kas Besar' })).not.toBeNull()
+    expect(screen.getByRole('button', { name: 'Buka detail akun 4-1000 Pendapatan Jasa' })).not.toBeNull()
+    // Baris default (1-1100) aktif
+    expect(screen.getByRole('button', { name: 'Buka detail akun 1-1100 Kas Besar' }).getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('klik baris akun lain → detail Buku Besar akun tsb (getLedger dipanggil dengan akun baru)', async () => {
+    vi.mocked(api.getLedger).mockResolvedValue(ledgerFixture as any)
+    useStore.setState({ apiStatus: 'online', lastSyncedAt: '2026-08-16T00:00:00Z' })
+    render(<LedgerPage />)
+    await screen.findAllByText('Rp 87.000.000', { exact: true })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Buka detail akun 4-1000 Pendapatan Jasa' }))
+
+    await waitFor(() => expect(api.getLedger).toHaveBeenCalledWith('4-1000', '2026-03', undefined))
+    expect(screen.getByRole('button', { name: 'Buka detail akun 4-1000 Pendapatan Jasa' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Buka detail akun 1-1100 Kas Besar' }).getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('Enter pada baris akun → memilih akun (perilaku keyboard sama dengan klik)', async () => {
+    vi.mocked(api.getLedger).mockResolvedValue(ledgerFixture as any)
+    useStore.setState({ apiStatus: 'online', lastSyncedAt: '2026-08-16T00:00:00Z' })
+    render(<LedgerPage />)
+    await screen.findAllByText('Rp 87.000.000', { exact: true })
+
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Buka detail akun 5-1000 Beban Gaji' }), {
+      key: 'Enter',
+      code: 'Enter',
+    })
+
+    await waitFor(() => expect(api.getLedger).toHaveBeenCalledWith('5-1000', '2026-03', undefined))
+    expect(screen.getByRole('button', { name: 'Buka detail akun 5-1000 Beban Gaji' }).getAttribute('aria-pressed')).toBe('true')
+  })
+})
+
 describe('LedgerPage — skeleton saat connecting, diganti data', () => {
   it('connecting → skeleton tampil, API belum dipanggil, belum ada isi tabel', () => {
     useStore.setState({ apiStatus: 'connecting' })
