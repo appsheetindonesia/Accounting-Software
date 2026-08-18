@@ -69,6 +69,13 @@ ENVIRONMENT_DEFAULT = os.environ.get("QA_ENVIRONMENT") or "QA Local (mock API)"
 # Nilai default kolom "Pembuat Test" (bisa diedit per baris di Excel).
 TEST_AUTHOR_DEFAULT = "Tim QA"
 
+# Baseline jumlah test case di QA Test Plan. Ini acuan lunak (warning, bukan
+# error): penambahan/pengurangan TC atau RG di plan TIDAK boleh memaksa edit
+# kode — generator tetap jalan, cukup menampilkan peringatan agar drift jumlah
+# terlihat dan baseline di sini bisa diperbarui bila perubahan disengaja.
+EXPECTED_TC = 137
+EXPECTED_RG = 12
+
 # Status yang memicu peringatan S1
 OPEN_STATUSES = {"Not Run", "Fail"}
 
@@ -784,8 +791,14 @@ def main() -> None:
     records = parse_tables()
     tc = [r for r in records if r["id"].startswith("TC-")]
     rg = [r for r in records if r["id"].startswith("RG-")]
-    assert len(tc) == 137, f"Jumlah TC tidak sesuai: {len(tc)} (harus 137)"
-    assert len(rg) == 12, f"Jumlah RG tidak sesuai: {len(rg)} (harus 12)"
+    # Baseline lunak — bukan kontrak keras: jumlah yang berbeda dari EXPECTED_*
+    # hanya memunculkan warning (penambahan TC ke plan tidak menghentikan run).
+    for label, actual, expected in (("TC", len(tc), EXPECTED_TC),
+                                    ("RG", len(rg), EXPECTED_RG)):
+        if actual != expected:
+            print(f"[WARN] Jumlah {label} {actual} != baseline {expected} — "
+                  f"QA Test Plan bertambah/berkurang? Perbarui EXPECTED_{label} "
+                  f"di scripts/generate-qa-test-cases.py bila perubahan ini disengaja.")
 
     if args.sample:
         import json
