@@ -46,6 +46,13 @@ jobs:
       # CI deterministik: persistence mock API dimatikan — state
       # in-memory, reset ke seed di setiap test (beforeEach).
       MOCK_API_PERSIST: '0'
+      # Suite penuh mengirim ratusan request per run — API §1.5 default rate
+      # limit 30 req/menit per endpoint bisa memicu 429 palsu. Ambang dinaikkan
+      # (penegakan sesungguhnya: env MOCK_RATE_MAX di webServer playwright.config.ts
+      # yang dipakai Playwright saat menyalakan mock API; env job ini mendokumentasikan
+      # & mengunci niat di level workflow). RG-21/22 tetap memakai override runtime
+      # /admin/set-rate-limit yang menang atas env.
+      MOCK_RATE_MAX: '100000'
     steps:
       - name: Checkout
         uses: actions/checkout@v5
