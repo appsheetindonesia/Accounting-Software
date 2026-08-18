@@ -25,6 +25,8 @@ laporan **JUnit** (`<dir>/test-results/junit.xml`, di-ignore git) dan meng-uploa
 artifact saat gagal, dengan nama per tahap (`junit-unit-prototipe`, `junit-integration-mock-api`)
 agar debug cukup mengunduh satu artifact tanpa membuka ulang seluruh log.
 
+Riwayat perubahan & catatan rilis: **[CHANGELOG.md](CHANGELOG.md)**
+
 ## Struktur
 
 | Folder | Isi |
@@ -95,8 +97,8 @@ Alur kerja yang diharapkan:
 3. **Merge ke `main`** → kedua workflow berjalan sekali lagi memvalidasi batch
    yang masuk; `pages.yml` men-deploy prototipe ke GitHub Pages.
 
-Skema pemicu ini hemat waktu CI: E2E (~3 menit × 2 browser) hanya untuk jalur
-main/PR yang butuh verifikasi penuh, bukan tiap push branch fitur.
+Skema pemicu ini hemat waktu CI: E2E (di-shard jadi 2 job paralel) hanya
+untuk jalur main/PR yang butuh verifikasi penuh, bukan tiap push branch fitur.
 
 ## Pre-commit QA (hook lokal)
 

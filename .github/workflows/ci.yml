@@ -18,8 +18,9 @@
 #                dengan QA Test Plan (scripts/check-qa-sync.py)
 #
 # Keuntungan paralel: unit & integration selesai dalam hitungan detik
-# (tidak tertahan oleh E2E ~3 menit); kegagalan satu job TIDAK menahan
-# job lain; hasil tiap job terlihat terpisah di badge/status CI.
+# (tidak tertahan oleh E2E yang di-shard 2 job paralel); kegagalan satu
+# job TIDAK menahan job lain; hasil tiap job terlihat terpisah di
+# badge/status CI.
 #
 # Playwright menyalakan mock API + Vite sendiri lewat konfigurasi
 # `webServer` di e2e/playwright.config.ts (CI=true → reuseExistingServer
@@ -27,9 +28,9 @@
 #
 # Pemicu: setiap push ke branch mana pun + pull request + manual.
 # JOB test (unit+integration, cepat) dan qa-sync (gate sinkronisasi,
-# juga cepat) tetap berjalan di SEMUA push; job e2e (~3 menit × 2 browser)
-# di-skip pada push branch non-main agar hemat waktu CI — hanya berjalan
-# di push main, pull request, dan manual (lihat if: di job e2e).
+# juga cepat) tetap berjalan di SEMUA push; job e2e (di-shard jadi 2 job
+# paralel) di-skip pada push branch non-main agar hemat waktu CI — hanya
+# berjalan di push main, pull request, dan manual (lihat if: di job e2e).
 # ============================================================
 name: CI (Unit + Integration + E2E)
 
@@ -114,17 +115,22 @@ jobs:
           retention-days: 7
 
   e2e:
-    name: E2E Playwright RG-01..RG-19 (chromium + firefox)
-    # Hemat waktu CI: E2E (~3 menit × 2 browser) hanya untuk jalur yang
-    # benar-benar butuh verifikasi penuh — push ke main, pull request,
-    # dan pemicu manual. Push ke branch fitur cukup dengan unit+integration
-    # (job test) yang jauh lebih cepat.
+    name: E2E RG-01..RG-19 (chromium + firefox) — shard ${{ matrix.shard }}/2
+    # Hemat waktu CI: E2E di-shard jadi 2 job PARALEL (tiap job menjalankan
+    # setengah suite Playwright via --shard) → wall-clock ±dipotong setengah.
+    # Hanya berjalan di jalur yang butuh verifikasi penuh — push ke main,
+    # pull request, dan pemicu manual. Push ke branch fitur cukup dengan
+    # unit+integration (job test) yang jauh lebih cepat.
     if: |
       github.event_name == 'pull_request' ||
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     env:
       # CI deterministik: persistence mock API dimatikan — state
       # in-memory, reset ke seed di setiap test (beforeEach).
@@ -153,23 +159,23 @@ jobs:
         working-directory: e2e
         run: npx playwright install --with-deps chromium firefox
 
-      - name: Run E2E (RG-01..RG-19)
+      - name: Run E2E (RG-01..RG-19) — shard ${{ matrix.shard }}/2
         working-directory: e2e
-        run: npx playwright test
+        run: npx playwright test --shard=${{ matrix.shard }}/2
 
-      - name: Upload Playwright report
+      - name: Upload Playwright report (shard ${{ matrix.shard }})
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.shard }}
           path: e2e/playwright-report/
           retention-days: 7
 
-      - name: Upload test results (trace/screenshot)
+      - name: Upload test results (shard ${{ matrix.shard }})
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
-          name: test-results
+          name: test-results-${{ matrix.shard }}
           path: e2e/test-results/
           retention-days: 7
 

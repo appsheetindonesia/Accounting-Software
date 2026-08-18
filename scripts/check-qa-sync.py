@@ -9,10 +9,11 @@ Alur:
      dipin dari file yang ter-commit (env QA_RUN_DATE) — jadi pergantian hari
      TIDAK dianggap sebagai perubahan.
   3. Bandingkan KONTEN:
-       - CSV        → identik SETELAH normalisasi line ending (CRLF/LF dianggap
-                      sama — checkout Windows dengan core.autocrlf menulis
-                      CRLF di disk, generator kini menulis LF; ini bukan
-                      perubahan konten).
+       - CSV        → identik SETELAH normalisasi line ending (safety net —
+                      `.gitattributes` (`*.csv text eol=lf`) sudah menjamin
+                      checkout selalu LF, jadi di alur normal byte mentah
+                      sudah cocok; normalisasi tetap menjaga perbandingan
+                      tahan terhadap editor yang menulis CRLF ke disk).
        - XLSX       → nilai sel per sheet + formula conditional formatting
                       (byte XLSX TIDAK dibandingkan: openpyxl menulis timestamp
                       zip non-deterministik, jadi dua save konten-identik
@@ -42,6 +43,17 @@ OUTPUT_FILES = [
     "qa-test-results-testrail.csv",
     "qa-test-results-template.xlsx",
 ]
+
+
+def normalize_line_endings(b: bytes) -> bytes:
+    """Normalisasi line ending → LF. KEBUTUHAN UTAMA sudah hilang: `.gitattributes`
+    (`*.csv text eol=lf`) menjamin checkout selalu LF di semua platform, jadi byte
+    yang ditulis generator (LF) cocok langsung dengan disk. Fungsi ini tetap ada
+    sebagai safety net — editor yang menyimpan CRLF ke disk (mis. Excel lama)
+    tidak boleh membuat gate salah-tolak. CRLF dan CR (Mac lama) keduanya dianggap
+    LF agar perbandingan hanya melihat perbedaan konten, bukan gaya line ending.
+    Diuji di scripts/test_check_qa_sync.py."""
+    return b.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
 
 
 def committed_run_date() -> str:
@@ -106,12 +118,9 @@ def main() -> None:
                 diffs.append(f"{name}: tidak ada di state sebelumnya")
                 continue
             if name.endswith(".csv"):
-                # Normalisasi CRLF → LF: checkout Windows (core.autocrlf)
-                # memberi CRLF di disk, generator menulis LF — byte mentah
-                # berbeda tapi konten sama.
-                def norm(b: bytes) -> bytes:
-                    return b.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
-                if norm(orig.read_bytes()) != norm(new.read_bytes()):
+                # Normalisasi line ending (lihat normalize_line_endings)
+                if (normalize_line_endings(orig.read_bytes())
+                        != normalize_line_endings(new.read_bytes())):
                     diffs.append(f"{name}: isi CSV berbeda — QA Test Plan berubah "
                                  f"tanpa regenerasi")
             else:  # XLSX — bandingkan nilai + CF, bukan byte

@@ -1,0 +1,6 @@
+# CSV selalu LF di repo DAN di working tree (semua platform, termasuk Windows
+# dengan core.autocrlf=true). Generator QA (scripts/generate-qa-test-cases.py)
+# menulis LF deterministik — eol=lf membuat checkout tidak pernah mengubahnya
+# menjadi CRLF, jadi perbandingan byte di gate (scripts/check-qa-sync.py) tidak
+# lagi bergantung pada normalisasi line ending.
+*.csv text eol=lf
