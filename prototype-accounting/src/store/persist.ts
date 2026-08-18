@@ -123,6 +123,19 @@ export const freshPersistedState = (): PersistedShape => ({
   entityDataCache: structuredClone(DEMO_DATA_BY_ENTITY),
 })
 
+// Format id periode yang valid: 'YYYY-MM' (mis. '2026-03'). Dipakai untuk
+// memvalidasi activePeriod tersimpan — nilai korup (mis. '0' dari state lama)
+// TIDAK boleh lolos: formatPeriodLabel('0') menghasilkan "undefined 0" di
+// subtitle halaman Jurnal (anomali yang pernah dilaporkan).
+const PERIOD_ID_RE = /^\d{4}-\d{2}$/
+
+// Sanitasi activePeriod hasil rehidrasi: hanya terima format YYYY-MM, selain
+// itu (korup/legacy, mis. '0' atau 'fp-2026-03') → default '2026-03'. Dipakai
+// di normalizePersisted (jalur migrate/upgrade versi) DAN di merge option
+// zustand (jalur rehidrasi versi SAMA — migrate tidak berjalan di sana).
+export const sanitizeActivePeriod = (value: unknown): string =>
+  typeof value === 'string' && PERIOD_ID_RE.test(value) ? value : '2026-03'
+
 // Normalisasi input tersimpan → bentuk dasar PersistedShape (defensif:
 // field hilang/salah tipe diberi default, jurnal tanpa id dibuang).
 const normalizePersisted = (persisted: unknown): PersistedShape | null => {
@@ -131,7 +144,7 @@ const normalizePersisted = (persisted: unknown): PersistedShape | null => {
   return {
     accounts: Array.isArray(p.accounts) ? p.accounts : mockAccounts,
     journals: p.journals.filter((j): j is JournalEntry => Boolean(j && j.id)),
-    activePeriod: typeof p.activePeriod === 'string' ? p.activePeriod : '2026-03',
+    activePeriod: sanitizeActivePeriod(p.activePeriod),
     seedVersion: typeof p.seedVersion === 'number' ? p.seedVersion : 0,
     seedJournalIds: Array.isArray(p.seedJournalIds) ? p.seedJournalIds : [],
     accessToken: typeof p.accessToken === 'string' ? p.accessToken : null,

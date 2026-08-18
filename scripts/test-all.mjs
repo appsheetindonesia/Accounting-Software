@@ -4,7 +4,7 @@
 //
 //   1. mock-api               — integration test Vitest + Supertest
 //                               (143 test, tanpa server — app Express langsung)
-//   2. prototype-accounting   — unit + integration MSW (Vitest, 320 test)
+//   2. prototype-accounting   — unit + integration MSW (Vitest, 334 test)
 //   3. e2e                    — Playwright RG-01..RG-22 (62 test =
 //                               31 skenario × chromium + firefox;
 //                               webServer menyalakan mock API :4000 + Vite :5173)

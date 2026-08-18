@@ -19,6 +19,7 @@ Perubahan sejak tag **v0.1.0-alpha** (commit `9052bf7`).
 
 ### Diperbaiki
 
+- Anomali subtitle **"undefined 0"** di halaman Jurnal: nilai `activePeriod` korup (mis. `'0'` dari state persist lama/rusak) lolos rehidrasi versi sama → `formatPeriodLabel('0')` menghasilkan "undefined 0". Kini: rehidrasi memvalidasi format `YYYY-MM` (merge zustand + `normalizePersisted`), `formatPeriodLabel` defensif (id tak dikenal ditampilkan apa adanya, tanpa `undefined`/`NaN`), 12 test baru (unit + rehidrasi penuh) — direproduksi & diverifikasi di preview
 - Gate `qa-sync` gagal di CI karena **line ending CRLF vs LF** — generator menulis LF deterministik, `.gitattributes` (`*.csv text eol=lf`) kini menjamin checkout selalu LF di semua platform, normalisasi CSV di gate dipertahankan sebagai safety net (line ending ≠ perubahan konten)
 - Fix tipe `tsc -b` (`useStore.closePeriod` implicit any, duplikat `modalOpen`, tipe `as const` di test) — typecheck asli proyek kini bersih
 

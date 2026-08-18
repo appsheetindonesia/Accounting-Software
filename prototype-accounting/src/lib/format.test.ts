@@ -1,5 +1,27 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { formatSyncAgo } from './format'
+import { formatPeriodLabel, formatSyncAgo } from './format'
+
+describe('formatPeriodLabel — label periode dari id YYYY-MM', () => {
+  it('format valid → nama bulan + tahun', () => {
+    expect(formatPeriodLabel('2026-03')).toBe('Maret 2026')
+    expect(formatPeriodLabel('2026-01')).toBe('Januari 2026')
+    expect(formatPeriodLabel('2026-12')).toBe('Desember 2026')
+  })
+
+  it('id korup (state persist lama, mis. \'0\') → TIDAK menghasilkan "undefined", kembalikan id apa adanya', () => {
+    // Anomali yang pernah dilaporkan: '0'.split('-') → [0, NaN] → MONTHS_ID[NaN]
+    // = undefined → "undefined 0" di subtitle halaman Jurnal.
+    expect(formatPeriodLabel('0')).toBe('0')
+    expect(formatPeriodLabel('')).toBe('')
+  })
+
+  it('id bentuk API (fp-YYYY-MM) / salah format → fallback id asli, tanpa crash', () => {
+    expect(formatPeriodLabel('fp-2026-03')).toBe('fp-2026-03')
+    expect(formatPeriodLabel('2026')).toBe('2026')
+    expect(formatPeriodLabel('2026-13')).toBe('2026-13') // bulan 13 tidak valid
+    expect(formatPeriodLabel('bukan-periode')).toBe('bukan-periode')
+  })
+})
 
 describe('formatSyncAgo — indikator "sinkron terakhir"', () => {
   beforeEach(() => {

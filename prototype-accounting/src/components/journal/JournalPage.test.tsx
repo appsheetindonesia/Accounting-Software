@@ -77,6 +77,22 @@ describe('JournalPage — periode aktif & status tertutup', () => {
     expect(screen.queryByText('BKM-2026-03-0001')).toBeNull()
   })
 
+  it('REPRODUKSI anomali "undefined 0": activePeriod korup (persist \'0\') + periode tertutup → subtitle tetap terbaca, tanpa undefined/NaN', () => {
+    // Simulasi state ter-persist dari versi lama/rusak: normalizePersisted dulu
+    // hanya memeriksa typeof string, sehingga '0' lolos masuk store. Di halaman
+    // Jurnal, formatPeriodLabel('0') → '0'.split('-') → [0, NaN] → MONTHS_ID[NaN]
+    // = undefined → subtitle "undefined 0 · 0 entri jurnal". Test ini menetapkan
+    // perilaku yang benar: subtitle TIDAK pernah mengandung "undefined"/"NaN".
+    useStore.setState({ periods: periods as any, activePeriod: '0' })
+    render(<JournalPage />)
+
+    const subtitle = screen.getByText(/entri jurnal/)
+    expect(subtitle.textContent).not.toContain('undefined')
+    expect(subtitle.textContent).not.toMatch(/NaN/)
+    // Periode tidak dikenali → fallback label = id apa adanya (transparan)
+    expect(subtitle.textContent).toContain('0 · 0 entri jurnal')
+  })
+
   it('periode belum termuat (offline) → diperlakukan terbuka agar demo tetap jalan', () => {
     useStore.setState({ periods: [] as any, activePeriod: '2026-03' })
     render(<JournalPage />)

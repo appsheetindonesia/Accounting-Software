@@ -184,6 +184,50 @@ describe('round-trip penuh — aksi nyata → localStorage → rehidrasi (reload
   })
 })
 
+describe('activePeriod korup (versi SAMA) — rehidrasi menormalkan, bukan meneruskan', () => {
+  it("'0' dari state persist lama → diganti '2026-03' (anomali \"undefined 0\")", async () => {
+    // Versi storage = versi saat ini (6) → migrate TIDAK berjalan; nilai korup
+    // lewat merge option. Sebelum ada merge, '0' masuk store dan subtitle
+    // halaman Jurnal merender formatPeriodLabel('0') = "undefined 0".
+    writePersisted(
+      {
+        accounts: mockAccounts,
+        journals: mockJournals,
+        activePeriod: '0',
+        seedVersion: SEED_VERSION,
+        seedJournalIds: mockJournals.map((j) => j.id),
+      },
+      CURRENT_VERSION,
+    )
+
+    await useStore.persist!.rehydrate()
+
+    expect(useStore.getState().activePeriod).toBe('2026-03')
+    // Zustand menulis ulang storage saat setState berikutnya → nilai normal
+    // ikut tersimpan, bukan '0' yang korup.
+    useStore.setState({ toast: null })
+    const stored = JSON.parse(ls().getItem(STORAGE_KEY)!)
+    expect(stored.state.activePeriod).toBe('2026-03')
+  })
+
+  it("activePeriod valid (YYYY-MM) tetap dipertahankan saat rehidrasi versi sama", async () => {
+    writePersisted(
+      {
+        accounts: mockAccounts,
+        journals: mockJournals,
+        activePeriod: '2026-02',
+        seedVersion: SEED_VERSION,
+        seedJournalIds: mockJournals.map((j) => j.id),
+      },
+      CURRENT_VERSION,
+    )
+
+    await useStore.persist!.rehydrate()
+
+    expect(useStore.getState().activePeriod).toBe('2026-02')
+  })
+})
+
 describe('storage korup / kosong — rehidrasi aman', () => {
   it('JSON korup → seed murni tanpa crash', async () => {
     ls().setItem(STORAGE_KEY, '{not-json!!')

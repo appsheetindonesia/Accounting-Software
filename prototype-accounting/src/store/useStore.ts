@@ -8,7 +8,7 @@ import { setAuth, setRefreshToken, setSessionExpiredHandler, setTokensRefreshedH
 import type { AuthUser } from '../api'
 import { isEffectJournal } from '../lib/ledger'
 import { NO_APPROVAL_RIGHTS_MESSAGE } from '../lib/permissions'
-import { CURRENT_VERSION, migratePersistedState, setMigrationHandler, type PersistedShape } from './persist'
+import { CURRENT_VERSION, migratePersistedState, sanitizeActivePeriod, setMigrationHandler, type PersistedShape } from './persist'
 
 export { isEffectJournal }
 export { CURRENT_VERSION, migratePersistedState } from './persist'
@@ -185,6 +185,19 @@ const persistOptions: PersistOptions<AccountingState, PersistedShape> = {
     entityDataCache: s.entityDataCache,
   }),
   migrate: (persisted, version) => migratePersistedState(persisted, version),
+  // Merge berjalan pada SETIAP rehidrasi (beda dengan migrate yang hanya
+  // dijalankan saat versi storage ≠ versi saat ini). Di sinilah nilai korup
+  // dari storage versi sama dinetralkan: activePeriod di luar format YYYY-MM
+  // (mis. '0' dari state lama) diganti default — mencegah "undefined 0" di
+  // subtitle halaman Jurnal.
+  merge: (persisted, current) => {
+    const p = (persisted ?? {}) as Partial<AccountingState>
+    return {
+      ...current,
+      ...p,
+      activePeriod: sanitizeActivePeriod(p.activePeriod),
+    }
+  },
 }
 
 // Ganti createdBy user id (mis. "user-001") dengan nama untuk tampilan UI

@@ -29,9 +29,13 @@ export const formatDateLong = (iso: string) => {
 }
 
 // "2026-03" -> "Maret 2026" (id periode YYYY-MM)
+// Defensif: id di luar format (mis. '0' dari state persist lama/rusak, atau
+// 'fp-2026-03' bentuk id API) TIDAK boleh menghasilkan "undefined NaN" —
+// kembalikan id apa adanya agar UI tetap terbaca.
 export const formatPeriodLabel = (periodId: string) => {
   const [y, m] = periodId.split('-').map(Number)
-  return `${MONTHS_ID[m - 1]} ${y}`
+  const month = m >= 1 && m <= 12 ? MONTHS_ID[m - 1] : null
+  return month !== null && Number.isFinite(y) && y > 0 ? `${month} ${y}` : periodId
 }
 
 // "2026-03-15" -> "15/03"

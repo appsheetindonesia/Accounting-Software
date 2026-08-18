@@ -81,6 +81,22 @@ describe('migratePersistedState — migrasi saat mock data (seed) berubah', () =
     expect(migrated.activePeriod).toBe('2026-02') // field user dipertahankan
   })
 
+  it('activePeriod korup (\'0\', bukan YYYY-MM) → ditolak, diganti default \'2026-03\'', () => {
+    // Anomali "undefined 0" di subtitle halaman Jurnal: state persist lama/rusak
+    // menyimpan activePeriod '0' — normalizePersisted lama hanya memeriksa
+    // typeof string sehingga lolos ke formatPeriodLabel('0'). Kini nilai di luar
+    // format YYYY-MM diganti default, bukan diteruskan ke UI.
+    for (const bad of ['0', '', 'fp-2026-03', '2026', 'bukan-periode']) {
+      const migrated = migratePersistedState({ journals: [userJournal()], activePeriod: bad }, 6)
+      expect(migrated.activePeriod).toBe('2026-03')
+    }
+  })
+
+  it('activePeriod valid (YYYY-MM) tetap dipertahankan', () => {
+    const migrated = migratePersistedState({ journals: [userJournal()], activePeriod: '2026-02' }, 6)
+    expect(migrated.activePeriod).toBe('2026-02')
+  })
+
   it('data kosong / korup → fresh seed (tanpa crash)', () => {
     for (const bad of [null, undefined, {}, { journals: 'bukan-array' }]) {
       const migrated = migratePersistedState(bad)
