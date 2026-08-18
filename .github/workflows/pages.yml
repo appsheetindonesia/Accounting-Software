@@ -10,13 +10,14 @@
 #   mereferensikan aset dengan base itu SEBELUM artifact di-upload
 #   (base salah → aset 404 setelah deploy; guard menghentikan build).
 #
-# JOB DEPLOY TIDAK PERNAH GAGAL TOTAL saat Pages belum aktif: job deploy
-# tetap berjalan, tapi langkah pertama (pre-flight `gh api repos/.../pages`)
-# mendeteksi situs belum aktif dan MEN-SKIP langkah Deploy dengan pesan
-# petunjuk enablement yang jelas di log — workflow tetap hijau (warning),
-# artifact build tetap tersimpan. Begitu Pages diaktifkan di
-# Settings → Pages → Source: "GitHub Actions", push berikutnya langsung deploy
-# tanpa perlu mengubah workflow.
+# WORKFLOW TIDAK PERNAH GAGAL DI CONFIGURE saat Pages belum aktif: pre-flight
+# `gh api repos/.../pages` (di job BUILD, SEBELUM Configure, dan di job DEPLOY,
+# sebelum Deploy) mendeteksi situs belum aktif → Configure/Deploy di-SKIP total
+# (bukan failure yang ditoleransi via continue-on-error) dengan pesan petunjuk
+# enablement yang jelas di log — tidak ada tanda ❌ di job build, workflow
+# tetap hijau (warning), artifact build tetap tersimpan. Begitu Pages diaktifkan
+# di Settings → Pages → Source: "GitHub Actions", push berikutnya langsung
+# deploy tanpa perlu mengubah workflow.
 #
 # Catatan: repo private plan Free tidak bisa mengaktifkan Pages dari Actions
 # (GITHUB_TOKEN tidak berwenang) — inilah kenapa pre-flight (bukan
@@ -60,16 +61,51 @@ jobs:
           cache: npm
           cache-dependency-path: prototype-accounting/package-lock.json
 
+      # Pre-flight: pastikan situs Pages benar-benar AKTIF sebelum langkah
+      # Configure. Bila belum (mis. repo private — GITHUB_TOKEN tidak
+      # berwenang mengaktifkan dari Actions), Configure di-SKIP total —
+      # bukan gagal yang ditoleransi via continue-on-error — jadi tidak ada
+      # tanda ❌ di log, dan step berikutnya memberi petunjuk aktivasi yang
+      # jelas. Configure tetap dijalankan saat Pages aktif (metadata artifact
+      # + base URL untuk deploy).
+      - name: Cek status GitHub Pages (pre-flight)
+        id: pages-check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          gh api "repos/${{ github.repository }}/pages" >/dev/null 2>&1
+          PAGES_OK=$?
+          set -e
+          if [ "$PAGES_OK" -ne 0 ]; then
+            echo "::warning title=GitHub Pages belum aktif::Langkah Configure dilewati — lihat step 'Petunjuk enablement' di bawah."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::GitHub Pages aktif — lanjut Configure."
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Configure GitHub Pages
+        if: steps.pages-check.outputs.enabled == 'true'
         uses: actions/configure-pages@v6
-        continue-on-error: true # Pages belum aktif & token tak bisa mengaktifkan → jangan gagalkan build
         with:
-          # Aktifkan fitur Pages bila sebelumnya nonaktif (default true,
-          # eksplisit di sini agar langkah tidak bergantung pada default).
-          # Gagal saat GITHUB_TOKEN tidak berwenang (repo private) — di-
-          # toleransi lewat continue-on-error; job deploy yang memutuskan
-          # skip/deploy via pre-flight gh api.
           enablement: true
+
+      # Pages belum aktif: petunjuk aktivasi jelas di log job build (bukan
+      # failure Configure). Build tetap jalan — artifact tetap tersimpan.
+      - name: Petunjuk enablement GitHub Pages
+        if: steps.pages-check.outputs.enabled != 'true'
+        run: |
+          echo "GitHub Pages belum diaktifkan di repo ini."
+          echo ""
+          echo "Langkah aktivasi (sekali saja):"
+          echo "  1. Buka https://github.com/${{ github.repository }}/settings/pages"
+          echo "  2. Source: pilih 'GitHub Actions' (bukan branch)"
+          echo "  3. Save"
+          echo "  4. Push ulang commit mana pun (atau workflow_dispatch) —"
+          echo "     workflow ini langsung men-deploy tanpa perlu mengubah file."
+          echo ""
+          echo "Build prototipe TETAP dijalankan & artifact tetap tersimpan — tidak ada yang gagal."
 
       - name: Install dependencies
         working-directory: prototype-accounting
