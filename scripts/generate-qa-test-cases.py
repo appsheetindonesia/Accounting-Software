@@ -460,11 +460,16 @@ def write_tracker_csv(records: list[dict], path: Path | None = None) -> Path:
 
 
 def write_xlsx(records: list[dict], path: Path | None = None) -> Path:
+    from datetime import datetime, timezone
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
     from openpyxl.utils import get_column_letter
 
     wb = Workbook()
+    # Pin timestamps agar XLSX byte-deterministik (hash stabil antar run)
+    _epoch = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    wb.properties.created = _epoch
+    wb.properties.modified = _epoch
     ws = wb.active
     ws.title = "Test Cases"
 
@@ -641,12 +646,17 @@ def write_results_template_xlsx(records: list[dict]) -> Path:
     """Workbook eksekusi per run: isi Status (dropdown), ringkasan otomatis
     via COUNTIF, dan release gate S1 (formula COUNTIFS).
     """
+    from datetime import datetime, timezone
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
     from openpyxl.utils import get_column_letter
     from openpyxl.worksheet.datavalidation import DataValidation
 
     wb = Workbook()
+    # Pin timestamps agar XLSX byte-deterministik (hash stabil antar run)
+    _epoch = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    wb.properties.created = _epoch
+    wb.properties.modified = _epoch
     ws = wb.active
     ws.title = "Hasil Run"
 
