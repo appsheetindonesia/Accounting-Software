@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist, type PersistOptions } from 'zustand/middleware'
 import { useMemo } from 'react'
 import type { Account, JournalEntry, JournalStatus, NewJournalInput, OfflineJournalOp, OfflineOpInput, PageKey } from '../types'
-import { mockAccounts, mockJournals, SEED_JOURNAL_IDS, SEED_VERSION } from '../data/mock'
+import { DEMO_DATA_BY_ENTITY, mockAccounts, mockJournals, SEED_JOURNAL_IDS, SEED_VERSION } from '../data/mock'
 import { api, ApiError, isNetworkError, toJournalEntry, type Entity, type PeriodInfo } from '../api'
 import { setAuth, setRefreshToken, setSessionExpiredHandler, setTokensRefreshedHandler } from '../api/client'
 import type { AuthUser } from '../api'
@@ -25,9 +25,12 @@ export type ApiStatus = 'idle' | 'connecting' | 'online' | 'offline'
 const DEMO_EMAIL = 'rina@estetikakreasi.co.id'
 const DEMO_PASSWORD = 'password123'
 
-// Entitas fallback saat offline / daftar belum termuat — entitas utama demo.
+// Entitas fallback saat offline / daftar belum termuat — kedua entitas demo
+// (ent-001 + ent-002), agar entity switcher tetap menawarkan ent-002 walau
+// tanpa server. Saat online, daftar asli dari GET /entities menggantikan.
 const DEFAULT_ENTITIES: Entity[] = [
   { id: 'ent-001', name: 'PT. Kreasi Inovasi Estetika', code: 'KI-001', isActive: true },
+  { id: 'ent-002', name: 'CV Karya Mandiri', code: 'KM-002', isActive: true },
 ]
 
 interface AccountingState {
@@ -43,6 +46,12 @@ interface AccountingState {
   // mengubah header X-Entity-Id client (setAuth) lalu re-fetch data server.
   entities: Entity[]
   activeEntityId: string
+  // Cache data per-entitas (dipersist): snapshot akun+jurnal terakhir per
+  // entitas. Dipakai FALLBACK OFFLINE — saat ganti entitas tanpa server,
+  // store memuat data entitas AKTIF dari cache ini (bukan selalu ent-001),
+  // sehingga laporan/dashboard/buku besar menampilkan tenant yang benar.
+  // Key = entityId; nilai = snapshot terakhir yang pernah dimuat/di-fetch.
+  entityDataCache: Record<string, { accounts: Account[]; journals: JournalEntry[] }>
   // TRUE selama setActiveEntity sedang re-fetch data entitas baru — halaman
   // menampilkan skeleton (konsisten dengan fetch pertama). Transient, tidak
   // dipersist. false saat idle / offline (offline tidak refetch).
@@ -173,6 +182,7 @@ const persistOptions: PersistOptions<AccountingState, PersistedShape> = {
     user: s.user,
     offlineQueue: s.offlineQueue,
     lastSyncedAt: s.lastSyncedAt,
+    entityDataCache: s.entityDataCache,
   }),
   migrate: (persisted, version) => migratePersistedState(persisted, version),
 }
@@ -400,25 +410,43 @@ export const useStore = create<AccountingState>()(
 
         entities: DEFAULT_ENTITIES,
         activeEntityId: 'ent-001',
+        entityDataCache: structuredClone(DEMO_DATA_BY_ENTITY),
         entityRefetching: false,
         periods: [],
         // Ganti entitas aktif: sinkronkan header X-Entity-Id client (setAuth)
         // lalu re-fetch journals/accounts dari server (online) agar semua
         // halaman menampilkan data entitas baru. Selama refetch, entityRefetching
         // = true → halaman menampilkan skeleton (bukan data entitas lama),
-        // konsisten dengan indikator loading fetch pertama. Saat offline, hanya
-        // ganti penanda aktif — data lokal demo (ent-001) tetap ditampilkan.
+        // konsisten dengan indikator loading fetch pertama. Saat offline, muat
+        // dari cache data per-entitas (entityDataCache) — tenant AKTIF yang
+        // benar ditampilkan, bukan selalu data demo ent-001.
         setActiveEntity: async (id) => {
           if (id === get().activeEntityId) return
           set({ activeEntityId: id })
           setAuth(get().accessToken, id, get().refreshToken)
-          if (get().apiStatus !== 'online') return
+          if (get().apiStatus !== 'online') {
+            const cached = get().entityDataCache[id]
+            if (cached) set({ accounts: cached.accounts, journals: cached.journals })
+            return
+          }
           set({ entityRefetching: true })
           try {
             const [accRes, jrnRes] = await Promise.all([api.getAccounts(), api.getJournals()])
             const journals = jrnRes.journals.map((j) => enrichCreatedBy(toJournalEntry(j), get().user))
-            set({ accounts: accRes.accounts, journals, lastSyncedAt: nowIso() })
+            set((s) => ({
+              accounts: accRes.accounts,
+              journals,
+              lastSyncedAt: nowIso(),
+              entityDataCache: {
+                ...s.entityDataCache,
+                [id]: { accounts: accRes.accounts, journals },
+              },
+            }))
           } catch {
+            // Fetch gagal (jaringan putus) → tetap tampilkan tenant yang benar
+            // dari cache, bukan data entitas lama.
+            const cached = get().entityDataCache[id]
+            if (cached) set({ accounts: cached.accounts, journals: cached.journals })
             set({ apiStatus: 'offline' })
           } finally {
             set({ entityRefetching: false })
@@ -462,7 +490,7 @@ export const useStore = create<AccountingState>()(
             const journals = jrnRes.journals.map((j) => enrichCreatedBy(toJournalEntry(j), auth?.user ?? get().user))
             const entities = await fetchEntities()
             const periods = await fetchPeriods()
-            set({
+            set((s) => ({
               apiStatus: 'online',
               ...(auth
                 ? {
@@ -477,10 +505,14 @@ export const useStore = create<AccountingState>()(
               periods,
               activePeriod: get().activePeriod,
               lastSyncedAt: nowIso(),
+              entityDataCache: {
+                ...s.entityDataCache,
+                [get().activeEntityId]: { accounts: accRes.accounts, journals },
+              },
               ...(auth && !opts?.silent
                 ? { toast: { message: 'Sesi offline tersambung — login demo otomatis', kind: 'success' as const } }
                 : {}),
-            })
+            }))
           } catch (e) {
             if (isNetworkError(e)) {
               // Jaringan benar-benar mati → offline + toast (perilaku lama)
@@ -555,7 +587,10 @@ export const useStore = create<AccountingState>()(
           }
         },
 
-        // Masuk offline: lanjut dengan data demo lokal (tanpa server).
+        // Masuk offline: lanjut dengan data demo lokal (tanpa server). Cache
+        // per-entitas di-seed dengan data demo KEDUA entitas — entity switcher
+        // tetap menawarkan ent-002, dan ganti entitas menampilkan tenant yang
+        // benar (bukan selalu data ent-001).
         loginOffline: () => {
           set({
             apiStatus: 'offline',
@@ -566,6 +601,7 @@ export const useStore = create<AccountingState>()(
             journals: mockJournals,
             entities: DEFAULT_ENTITIES,
             activeEntityId: 'ent-001',
+            entityDataCache: structuredClone(DEMO_DATA_BY_ENTITY),
             lastSyncedAt: null, // data demo — belum pernah tersinkron
             lastRefreshedAt: null,
             authLoading: false,
@@ -866,6 +902,7 @@ export const useStore = create<AccountingState>()(
             isSyncing: false,
             lastSyncedAt: null,
             lastRefreshedAt: null,
+            entityDataCache: structuredClone(DEMO_DATA_BY_ENTITY),
             toast: {
               message: serverReset
                 ? 'Data demo di-reset ke seed awal (lokal + server mock)'

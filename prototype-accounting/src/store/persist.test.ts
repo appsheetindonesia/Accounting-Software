@@ -147,6 +147,20 @@ describe('migrasi PER-VERSION (registry MIGRATIONS[v])', () => {
     expect(fromV4.offlineQueue).toEqual([op])
   })
 
+  it('v5 → v6: entityDataCache ditambahkan (default data demo kedua entitas)', () => {
+    const migrated = migratePersistedState({ journals: [userJournal()], activePeriod: '2026-03', lastSyncedAt: '2026-03-01T00:00:00Z' }, 5)
+    // Cache per-entitas di-seed dengan demo ent-001 + ent-002 (fallback offline)
+    expect(Object.keys(migrated.entityDataCache!).sort()).toEqual(['ent-001', 'ent-002'])
+    expect(migrated.entityDataCache!['ent-002'].accounts[0].name).toContain('CV')
+    expect(migrated.entityDataCache!['ent-001'].accounts).toEqual(mockAccounts)
+  })
+
+  it('fromVersion 6: entityDataCache yang sudah ada dipertahankan (tidak di-reset)', () => {
+    const custom = { 'ent-002': { accounts: [], journals: [] } }
+    const migrated = migratePersistedState({ journals: [userJournal()], activePeriod: '2026-03', entityDataCache: custom }, 6)
+    expect(migrated.entityDataCache).toEqual(custom)
+  })
+
   it('v4 → v5: lastSyncedAt ditambahkan (null); fromVersion 5 mempertahankan nilai', () => {
     const fromV4 = migratePersistedState({ journals: [], activePeriod: '2026-03' }, 4)
     expect(fromV4.lastSyncedAt).toBeNull()
@@ -155,13 +169,14 @@ describe('migrasi PER-VERSION (registry MIGRATIONS[v])', () => {
     expect(fromV5.lastSyncedAt).toBe('2026-08-15T04:00:00Z')
   })
 
-  it('rantai penuh v1 → v5: source + Kas Kecil + antrian + lastSyncedAt semuanya ada', () => {
+  it('rantai penuh v1 → v6: source + Kas Kecil + antrian + lastSyncedAt + entityDataCache semuanya ada', () => {
     const migrated = migratePersistedState({ journals: [userJournal()], activePeriod: '2026-03' }, 1)
     expect(migrated.journals.find((j) => j.id === 'JNL-2026-03-009')!.source).toBe('manual')
     expect(migrated.accounts.some((a) => a.id === '1-1500')).toBe(true)
     expect(migrated.offlineQueue).toEqual([])
     expect(migrated.lastSyncedAt).toBeNull()
     expect(migrated.seedVersion).toBe(SEED_VERSION)
+    expect(Object.keys(migrated.entityDataCache!).sort()).toEqual(['ent-001', 'ent-002'])
   })
 })
 
@@ -183,7 +198,7 @@ describe('handler migrasi — notifikasi "Data lokal dimigrasi ke versi baru"', 
     }
   })
 
-  it('data versi SEKARANG (v5) TIDAK menembak handler (bukan migrasi)', () => {
+  it('data versi SEKARANG (v6) TIDAK menembak handler (bukan migrasi)', () => {
     const handler = vi.fn()
     setMigrationHandler(handler)
     try {
@@ -221,8 +236,8 @@ describe('handler migrasi — notifikasi "Data lokal dimigrasi ke versi baru"', 
 })
 
 describe('freshPersistedState & CURRENT_VERSION', () => {
-  it('CURRENT_VERSION = 5 (bump saat struktur/seed berubah)', () => {
-    expect(CURRENT_VERSION).toBe(5)
+  it('CURRENT_VERSION = 6 (bump saat struktur/seed berubah)', () => {
+    expect(CURRENT_VERSION).toBe(6)
   })
 
   it('freshPersistedState = seed murni tanpa jurnal user', () => {

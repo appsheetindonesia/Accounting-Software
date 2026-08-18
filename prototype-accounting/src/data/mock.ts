@@ -214,3 +214,70 @@ export const accountTypeLabel: Record<Account['type'], string> = {
 export const SEED_VERSION = 2
 export const SEED_JOURNAL_IDS = mockJournals.map((j) => j.id)
 export const SEED_ACCOUNT_IDS = mockAccounts.map((a) => a.id)
+
+// ---------------------------------------------------------------------------
+// DEMO DATA ENTITAS KEDUA — CV Karya Mandiri (ent-002)
+// Mirror mock-api/src/data.js (ent2Accounts/ent2Journals) & fixture MSW
+// integration/handlers.ts. Dipakai FALLBACK OFFLINE: saat ganti entitas tanpa
+// server, prototipe menampilkan data entitas AKTIF (bukan selalu ent-001) —
+// ent-002 punya COA kecil (3 akun) & jurnal ber-label CV/ent-002 agar isolasi
+// terlihat. Angka konsisten: Kas 25jt +8jt −3jt = 30jt; Laba 18−8 = 10jt.
+// ---------------------------------------------------------------------------
+export const mockEnt2Accounts: Account[] = [
+  { id: '1-1100', code: '1-1100', name: 'Kas CV Karya Mandiri', type: 'asset', category: 'Kas & Bank', normalBalance: 'debit', baseBalance: 25_000_000, isActive: true },
+  { id: '4-1000', code: '4-1000', name: 'Pendapatan Jasa CV', type: 'revenue', category: 'Pendapatan', normalBalance: 'credit', baseBalance: 10_000_000, isActive: true },
+  { id: '5-1000', code: '5-1000', name: 'Beban Gaji CV', type: 'expense', category: 'Beban Operasional', normalBalance: 'debit', baseBalance: 5_000_000, isActive: true },
+]
+
+const ent2Line = (id: string, accountId: string, debit: number, credit: number, description?: string): JournalEntry['lines'][number] => {
+  const account = mockEnt2Accounts.find((a) => a.id === accountId)!
+  return {
+    id,
+    accountId,
+    accountCode: account.code,
+    accountName: account.name,
+    debit,
+    credit,
+    description,
+  }
+}
+
+export const mockEnt2Journals: JournalEntry[] = [
+  {
+    id: 'JNL-2026-03-001',
+    transactionNumber: 'BKM-2026-03-0001',
+    date: '2026-03-06',
+    description: 'Penerimaan jasa CV Karya Mandiri (ent-002)',
+    lines: [
+      ent2Line('e2-1', '1-1100', 8_000_000, 0, 'Penerimaan tunai'),
+      ent2Line('e2-2', '4-1000', 0, 8_000_000, 'Pendapatan jasa'),
+    ],
+    status: 'posted',
+    source: 'manual' as const,
+    createdBy: 'Rina',
+    createdAt: '2026-03-06T09:00:00Z',
+    postedAt: '2026-03-06T09:02:00Z',
+  },
+  {
+    id: 'JNL-2026-03-002',
+    transactionNumber: 'BKK-2026-03-0002',
+    date: '2026-03-11',
+    description: 'Pembayaran gaji CV Karya Mandiri (ent-002)',
+    lines: [
+      ent2Line('e2-3', '5-1000', 3_000_000, 0, 'Gaji karyawan'),
+      ent2Line('e2-4', '1-1100', 0, 3_000_000, 'Pembayaran tunai'),
+    ],
+    status: 'posted',
+    source: 'manual' as const,
+    createdBy: 'Rina',
+    createdAt: '2026-03-11T10:00:00Z',
+    postedAt: '2026-03-11T10:02:00Z',
+  },
+]
+
+// Data demo per entitas — fallback OFFLINE. Saat ganti entitas tanpa server,
+// store memuat data entitas AKTIF dari peta ini (bukan selalu ent-001).
+export const DEMO_DATA_BY_ENTITY: Record<string, { accounts: Account[]; journals: JournalEntry[] }> = {
+  'ent-001': { accounts: mockAccounts, journals: mockJournals },
+  'ent-002': { accounts: mockEnt2Accounts, journals: mockEnt2Journals },
+}

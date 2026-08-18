@@ -102,7 +102,7 @@ describe('rehidrasi penuh via localStorage — upgrade seed v1 → v2', () => {
     expect(stored.version).toBe(CURRENT_VERSION)
     // 10. TOAST: user diberi tahu data lokalnya TIDAK hilang (migrasi v1 → v5)
     expect(s.toast?.kind).toBe('success')
-    expect(s.toast?.message).toContain('Data lokal dimigrasi ke versi baru (v1 → v5)')
+    expect(s.toast?.message).toContain('Data lokal dimigrasi ke versi baru (v1 → v6)')
     expect(s.toast?.message).toContain('1 jurnal pengguna dipertahankan')
   })
 

@@ -11,10 +11,11 @@
 //   v3 — CONTOH 2: akun seed baru `1-1500 · Kas Kecil`
 //   v4 — antrian offline (offlineQueue)
 //   v5 — waktu sinkron terakhir (lastSyncedAt)
+//   v6 — cache data per-entitas (entityDataCache) untuk fallback offline
 // (Metadata seed + sesi login bukan bagian versi — diurus langkah refresh
 //  seed & normalisasi, sehingga menaikkan SEED_VERSION cukup dipicu dengan
 //  bump CURRENT_VERSION agar refresh seed dijalankan.)
-import { mockAccounts, mockJournals, SEED_JOURNAL_IDS, SEED_VERSION } from '../data/mock'
+import { DEMO_DATA_BY_ENTITY, mockAccounts, mockJournals, SEED_JOURNAL_IDS, SEED_VERSION } from '../data/mock'
 import type { Account, JournalEntry, OfflineJournalOp } from '../types'
 
 // Bentuk data yang tersimpan di localStorage (subset dari AccountingState +
@@ -34,9 +35,13 @@ export interface PersistedShape {
   offlineQueue?: OfflineJournalOp[]
   // Waktu sinkronisasi terakhir: indikator "Data dari cache · sinkron X".
   lastSyncedAt?: string | null
+  // Cache data per-entitas (fallback offline): snapshot akun+jurnal terakhir
+  // per entityId. Diisi saat fetch online sukses / switch entitas; dipakai
+  // saat ganti entitas tanpa server agar tenant aktif tetap ditampilkan.
+  entityDataCache?: Record<string, { accounts: Account[]; journals: JournalEntry[] }>
 }
 
-export const CURRENT_VERSION = 5
+export const CURRENT_VERSION = 6
 
 // Info migrasi yang benar-benar terjadi (upgrade versi) — dipakai untuk
 // memberitahu user lewat toast bahwa state lokal TIDAK hilang. Handler
@@ -89,6 +94,14 @@ const addLastSyncedAt: Migration = (s) => ({
   lastSyncedAt: typeof s.lastSyncedAt === 'string' ? s.lastSyncedAt : null,
 })
 
+// v5 → v6: cache data per-entitas (field baru). Default = data demo entitas
+// yang dikenal (ent-001 + ent-002) — sehingga ganti entitas OFFLINE langsung
+// menampilkan tenant aktif bahkan sebelum pernah fetch online.
+const addEntityDataCache: Migration = (s) => ({
+  ...s,
+  entityDataCache: s.entityDataCache ?? structuredClone(DEMO_DATA_BY_ENTITY),
+})
+
 // Rantai migrasi: dari versi v → v+1. Versi tanpa entri = tidak ada perubahan
 // struktur pada langkah itu (data langsung lolos ke versi berikutnya).
 const MIGRATIONS: Record<number, Migration> = {
@@ -96,6 +109,7 @@ const MIGRATIONS: Record<number, Migration> = {
   2: addSeedAccounts, // v2 → v3 (contoh 2)
   3: addOfflineQueue, // v3 → v4
   4: addLastSyncedAt, // v4 → v5
+  5: addEntityDataCache, // v5 → v6
 }
 
 export const freshPersistedState = (): PersistedShape => ({
@@ -106,6 +120,7 @@ export const freshPersistedState = (): PersistedShape => ({
   seedJournalIds: SEED_JOURNAL_IDS,
   offlineQueue: [],
   lastSyncedAt: null,
+  entityDataCache: structuredClone(DEMO_DATA_BY_ENTITY),
 })
 
 // Normalisasi input tersimpan → bentuk dasar PersistedShape (defensif:
@@ -124,6 +139,10 @@ const normalizePersisted = (persisted: unknown): PersistedShape | null => {
     user: p.user && typeof p.user === 'object' ? p.user : null,
     offlineQueue: Array.isArray(p.offlineQueue) ? p.offlineQueue : [],
     lastSyncedAt: typeof p.lastSyncedAt === 'string' ? p.lastSyncedAt : null,
+    entityDataCache:
+      p.entityDataCache && typeof p.entityDataCache === 'object'
+        ? p.entityDataCache
+        : structuredClone(DEMO_DATA_BY_ENTITY),
   }
 }
 
@@ -154,6 +173,7 @@ const refreshSeed = (p: PersistedShape): PersistedShape => {
     user: p.user ?? null,
     offlineQueue: p.offlineQueue ?? [],
     lastSyncedAt: p.lastSyncedAt ?? null,
+    entityDataCache: p.entityDataCache ?? structuredClone(DEMO_DATA_BY_ENTITY),
   }
 }
 

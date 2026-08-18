@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { mockAccounts, mockJournals } from '../data/mock'
+import { DEMO_DATA_BY_ENTITY, mockAccounts, mockEnt2Accounts, mockEnt2Journals, mockJournals } from '../data/mock'
 import { computeBalances, isEffectJournal, useStore } from './useStore'
 
 // Mock lapisan API — path online memakai modul ini, path lokal (offline) tidak.
@@ -64,6 +64,9 @@ const resetStore = () =>
     lastSyncedAt: null,
     focusJournalId: null,
     focusAccountId: null,
+    // Cache per-entitas di-seed ulang dengan data demo KEDUA entitas —
+    // test sebelumnya boleh mengisi cache dengan data mock lain.
+    entityDataCache: structuredClone(DEMO_DATA_BY_ENTITY),
   })
 
 const bal = () => computeBalances(useStore.getState().accounts, useStore.getState().journals)
@@ -510,7 +513,7 @@ describe('setActiveEntity — ganti entitas aktif (multi-tenant)', () => {
     setAuthSpy.mockRestore()
   })
 
-  it('offline: hanya ganti penanda entitas — TIDAK refetch, data demo lokal tetap', async () => {
+  it('offline: ganti entitas → TIDAK refetch, muat DATA ENTITAS AKTIF dari cache (ent-002, bukan ent-001)', async () => {
     useStore.setState({ apiStatus: 'offline', accessToken: 'local.demo', activeEntityId: 'ent-001' })
 
     await useStore.getState().setActiveEntity('ent-002')
@@ -519,18 +522,54 @@ describe('setActiveEntity — ganti entitas aktif (multi-tenant)', () => {
     expect(s.activeEntityId).toBe('ent-002')
     expect(mockedApi.getAccounts).not.toHaveBeenCalled()
     expect(mockedApi.getJournals).not.toHaveBeenCalled()
-    expect(s.journals).toEqual(mockJournals)
+    // Data entitas AKTIF dari cache (demo ent-002) — BUKAN data ent-001
+    expect(s.accounts).toEqual(mockEnt2Accounts)
+    expect(s.journals).toEqual(mockEnt2Journals)
+    expect(s.journals.every((j) => j.description.includes('ent-002'))).toBe(true)
   })
 
-  it('fetch gagal saat online → entitas tetap terganti, status offline', async () => {
+  it('offline: ganti entitas → data entitas AKTIF dimuat dari cache (tidak tercampur ent-001)', async () => {
+    useStore.setState({ apiStatus: 'offline', accessToken: 'local.demo', activeEntityId: 'ent-001' })
+
+    await useStore.getState().setActiveEntity('ent-002')
+    const ent2 = useStore.getState()
+    expect(ent2.accounts).toEqual(mockEnt2Accounts)
+    expect(ent2.journals).toEqual(mockEnt2Journals)
+
+    // Ganti balik ke ent-001 offline → data ent-001 dari cache dipulihkan
+    await useStore.getState().setActiveEntity('ent-001')
+    const ent1 = useStore.getState()
+    expect(ent1.accounts).toEqual(mockAccounts)
+    expect(ent1.journals).toEqual(mockJournals)
+  })
+
+  it('offline: cache berisi data server terakhir per entitas (setActiveEntity online → isi cache)', async () => {
     useStore.setState({ apiStatus: 'online', activeEntityId: 'ent-001' })
+    mockedApi.getAccounts.mockResolvedValue({ accounts: mockEnt2Accounts })
+    mockedApi.getJournals.mockResolvedValue({ journals: mockEnt2Journals, totals: { debit: 0, credit: 0, difference: 0 } })
+
+    await useStore.getState().setActiveEntity('ent-002')
+    expect(useStore.getState().entityDataCache['ent-002']).toEqual({ accounts: mockEnt2Accounts, journals: mockEnt2Journals })
+
+    // Putus koneksi → ganti ke ent-002 lagi → data cache (server) tetap dimuat
+    useStore.setState({ apiStatus: 'offline' })
+    await useStore.getState().setActiveEntity('ent-001')
+    await useStore.getState().setActiveEntity('ent-002')
+    expect(useStore.getState().accounts).toEqual(mockEnt2Accounts)
+    expect(useStore.getState().journals).toEqual(mockEnt2Journals)
+  })
+
+  it('fetch gagal saat online → entitas tetap terganti, data cache entitas tsb dimuat, status offline', async () => {
+    useStore.setState({ apiStatus: 'online', activeEntityId: 'ent-001', entityDataCache: { 'ent-002': { accounts: mockEnt2Accounts, journals: mockEnt2Journals } } })
     // beforeEach: getAccounts/getJournals reject TypeError (network)
 
     await useStore.getState().setActiveEntity('ent-002')
 
-    const s = useStore.getState()
-    expect(s.activeEntityId).toBe('ent-002')
-    expect(s.apiStatus).toBe('offline')
+    expect(useStore.getState().activeEntityId).toBe('ent-002')
+    expect(useStore.getState().apiStatus).toBe('offline')
+    // Tenant yang benar tetap tampil dari cache, bukan data entitas lama
+    expect(useStore.getState().accounts).toEqual(mockEnt2Accounts)
+    expect(useStore.getState().journals).toEqual(mockEnt2Journals)
   })
 
   it('entityRefetching: true SELAMA refetch (indikator skeleton), false setelah selesai', async () => {
@@ -683,7 +722,10 @@ describe('handleSessionExpired — refresh gagal → logout otomatis + modal "Se
     // Sesi berakhir → pilihan entitas dikembalikan ke default (mirror logout),
     // sehingga login berikutnya tidak mewarisi tenant user sebelumnya.
     expect(s.activeEntityId).toBe('ent-001')
-    expect(s.entities).toEqual([{ id: 'ent-001', name: 'PT. Kreasi Inovasi Estetika', code: 'KI-001', isActive: true }])
+    expect(s.entities).toEqual([
+      { id: 'ent-001', name: 'PT. Kreasi Inovasi Estetika', code: 'KI-001', isActive: true },
+      { id: 'ent-002', name: 'CV Karya Mandiri', code: 'KM-002', isActive: true },
+    ])
   })
 
   it('login baru & logout me-reset sessionExpired (modal tidak menempel)', async () => {
@@ -719,7 +761,10 @@ describe('handleSessionExpired — refresh gagal → logout otomatis + modal "Se
     useStore.getState().logout()
     const s = useStore.getState()
     expect(s.activeEntityId).toBe('ent-001')
-    expect(s.entities).toEqual([{ id: 'ent-001', name: 'PT. Kreasi Inovasi Estetika', code: 'KI-001', isActive: true }])
+    expect(s.entities).toEqual([
+      { id: 'ent-001', name: 'PT. Kreasi Inovasi Estetika', code: 'KI-001', isActive: true },
+      { id: 'ent-002', name: 'CV Karya Mandiri', code: 'KM-002', isActive: true },
+    ])
     // setAuth(null, null, null): entityId API-layer dibersihkan → request tenant
     // berikutnya TIDAK membawa X-Entity-Id ent-002 yang basi (kebocoran lintas tenant)
     expect(setAuthSpy).toHaveBeenLastCalledWith(null, null, null)

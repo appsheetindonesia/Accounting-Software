@@ -281,8 +281,8 @@ describe('flushOfflineQueue — replay ke API saat koneksi pulih', () => {
 })
 
 describe('persist — antrian offline ikut tersimpan & dimigrasi (v4)', () => {
-  it('CURRENT_VERSION naik ke 5 (antrian offline + lastSyncedAt)', () => {
-    expect(CURRENT_VERSION).toBe(5)
+  it('CURRENT_VERSION naik ke 6 (antrian offline + lastSyncedAt + entityDataCache)', () => {
+    expect(CURRENT_VERSION).toBe(6)
   })
 
   it('freshPersistedState memuat antrian kosong + lastSyncedAt null', () => {
