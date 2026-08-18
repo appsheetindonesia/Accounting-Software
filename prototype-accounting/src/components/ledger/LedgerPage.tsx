@@ -44,10 +44,13 @@ export default function LedgerPage() {
   const clearSearchFocus = useStore((s) => s.clearSearchFocus)
   const [accountId, setAccountId] = useState('1-1100')
   const [periodIdx, setPeriodIdx] = useState(2) // Maret 2026
-  // Rentang export custom (opsional) — kosong → pakai periode aktif.
+  // Rentang tanggal custom (opsional) — kosong → pakai periode aktif. Menggerakkan
+  // TAMPILAN Buku Besar (GET /ledger/accounts/:id?start=&end=) DAN export
+  // (GET /exports/ledger/:id) sekaligus, konsisten di kedua sisi.
   const [rangeStart, setRangeStart] = useState('')
   const [rangeEnd, setRangeEnd] = useState('')
-  const exportRange = rangeStart && rangeEnd ? { start: rangeStart, end: rangeEnd } : undefined
+  const rangeActive = Boolean(rangeStart && rangeEnd)
+  const exportRange = rangeActive ? { start: rangeStart, end: rangeEnd } : undefined
 
   useEffect(() => {
     if (focusAccountId) {
@@ -59,20 +62,24 @@ export default function LedgerPage() {
   const account = accounts.find((a) => a.id === accountId) ?? accounts[0]
   const period = PERIODS[periodIdx]
 
+  // Rentang aktif → ikut rentang (konsisten dengan server & export);
+  // kosong → periode bulanan yang dipilih.
+  const viewRange = rangeActive ? { start: rangeStart, end: rangeEnd } : { start: period.start, end: period.end }
+
   // Fallback offline: hitung saldo berjalan dari data lokal
   const localView = useMemo<LedgerView>(
-    () => computeLedger(accounts, journals, account?.id ?? '', { start: period.start, end: period.end }),
-    [accounts, journals, account, period],
+    () => computeLedger(accounts, journals, account?.id ?? '', viewRange),
+    [accounts, journals, account, viewRange.start, viewRange.end],
   )
 
   // Data via API: GET /ledger/accounts/:id?period= (tunggu koneksi menetap)
   const ready = apiStatus === 'online' || apiStatus === 'offline'
   const { data: apiView, loading, offline } = useApiFetch<LedgerView>(
-    `ledger:${account?.id}:${period.key}:${apiStatus}:${activeEntityId}`,
+    `ledger:${account?.id}:${period.key}:${apiStatus}:${activeEntityId}:${viewRange.start}:${viewRange.end}`,
     ready,
     () => {
       if (!account) return Promise.resolve(localView)
-      return api.getLedger(account.id, period.key).then((d) => ({
+      return api.getLedger(account.id, period.key, rangeActive ? { start: rangeStart, end: rangeEnd } : undefined).then((d) => ({
         opening: d.openingBalance,
         closing: d.closingBalance,
         rows: d.entries.map((e) => ({
@@ -101,7 +108,7 @@ export default function LedgerPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1.5 shadow-card">
-            <span className="text-[11px] font-semibold text-ink-faint">Rentang export</span>
+            <span className="text-[11px] font-semibold text-ink-faint">Rentang tanggal</span>
             <input
               type="date"
               value={rangeStart}
@@ -146,7 +153,9 @@ export default function LedgerPage() {
             >
               <ChevronLeft size={15} />
             </button>
-            <span className="min-w-[130px] text-center text-sm font-semibold text-ink">{period.label}</span>
+            <span className="min-w-[130px] text-center text-sm font-semibold text-ink">
+              {rangeActive ? `${rangeStart} s/d ${rangeEnd}` : period.label}
+            </span>
             <button
               type="button"
               onClick={() => setPeriodIdx((i) => Math.min(PERIODS.length - 1, i + 1))}

@@ -229,8 +229,12 @@ export const api = {
   },
 
   // 6–7. Buku Besar & Laporan
-  getLedger(accountId: string, period: string) {
-    return request<LedgerAccount>(`/ledger/accounts/${accountId}`, { query: { period } })
+  //     Rentang custom (start/end, YYYY-MM-DD) override periode bulanan —
+  //     konsisten dengan export (GET /exports/ledger/:accountId).
+  getLedger(accountId: string, period: string, range?: { start: string; end: string }) {
+    return request<LedgerAccount>(`/ledger/accounts/${accountId}`, {
+      query: range ? { start: range.start, end: range.end } : { period },
+    })
   },
   getIncomeStatement(period: string) {
     return request<IncomeStatement>('/reports/income-statement', { query: { period } })

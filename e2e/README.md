@@ -24,7 +24,7 @@ npx playwright install chromium firefox   # sekali saja (browser)
 ## Menjalankan
 
 ```bash
-npm test            # semua: RG-01..RG-19 di chromium + firefox (38 test, ±4 mnt)
+npm test            # semua: RG-01..RG-22 di chromium + firefox (58 test, ±7 mnt)
 npm run test:rg9    # cepat: hanya RG-09 di chromium
 npm run test:headed # dengan browser terlihat
 npm run test:ui     # Playwright UI mode
@@ -47,9 +47,11 @@ login bertahan saat `page.reload()` (RG-02/RG-04/RG-10).
 | RG-01 | Siklus hidup jurnal | draft → posting → hapus; saldo konsisten; edit + optimistic lock via API |
 | RG-02 | Reverse menyeluruh | saldo & laporan kembali; trial balance seimbang; pasangan reversal benar |
 | RG-03 | Posting → laporan → export | Laba Rugi live; **Neraca & Neraca Lajur via UI** (seimbang, 567/678jt); **export PDF/XLSX via tombol UI** (unduhan terpicu, nama file `Laba-Rugi-2026-03.pdf/.xlsx`) |
+| RG-03b | Export Buku Besar via UI | klik Export PDF/XLSX per akun (1-1100) → respons **200** + `Content-Disposition` benar + **toast sukses** `Laporan berhasil diekspor — Buku-Besar-1-1100-2026-03.<fmt>` |
+| RG-03c | Export Buku Besar rentang custom | isi rentang tanggal (start/end) di Buku Besar → export memakai `?start=&end=` → respons **200** + nama file & toast memuat `Buku-Besar-1-1100-2026-03-06..2026-03-11.<fmt>` |
 | RG-04 | Tutup periode | posting diblokir (UI); **draft ter-post & laporan terbaca diverifikasi di UI** (Neraca 549,5jt seimbang) |
 | RG-05 | Multi-entitas | isolasi via `X-Entity-Id` |
-| RG-06 | Approval flow | **via UI**: draft → Submit → Menunggu Approval → Approve (saldo berubah) / **Reject dengan alasan wajib** (dialog, `rejectionReason` tampil di detail); **"Simpan & Ajukan" langsung Menunggu Approval**; audit trail via API |
+| RG-06 | Approval flow | **via UI**: draft → Submit → Menunggu Approval → Approve (saldo berubah) / **Reject dengan alasan wajib** (dialog, `rejectionReason` tampil di detail); **"Simpan & Ajukan" langsung Menunggu Approval**; audit trail via API; **RG-06e NO_APPROVAL_RIGHTS**: akuntan + role cache stale → approve via antrian → toast khusus "Hanya Admin" (server 403), jurnal tetap Menunggu Approval |
 | RG-07 | Filter & search | filter UI + pencarian global API konsisten |
 | RG-08 | Selektor periode | footer/modal sinkron; Laba Rugi & Buku Besar re-fetch per periode |
 | RG-09 | Data besar | 10.000 jurnal: pagination, < 2 detik, filter tetap benar |
@@ -79,7 +81,7 @@ di **setiap push / pull request** (ubuntu-latest, Node 22):
    - tahap **mock API** (integration, Vitest + Supertest, `mock-api`) — 105 test
      (baseline angka §2.3, error envelope vs katalog §13, seed:extra,
      persistence, TOKEN_EXPIRED, kedaluwarsa TTL terjadwal)
-2. **`e2e`** — E2E Playwright RG-01..RG-22 (chromium + firefox) — 46 test
+2. **`e2e`** — E2E Playwright RG-01..RG-22 (chromium + firefox) — 58 test
 
 Job `test` berjalan **sekaligus** dengan `e2e` (tidak berurutan) — unit &
 integration selesai dalam hitungan detik tanpa tertahan E2E (~4 menit),

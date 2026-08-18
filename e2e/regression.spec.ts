@@ -250,6 +250,102 @@ test.describe('RG-01 s/d RG-04 — siklus jurnal, reverse, laporan, periode', ()
     }
   })
 
+  test('RG-03b Export Buku Besar via UI: respons 200 + toast sukses (PDF & XLSX)', async ({ page }) => {
+    // Melengkapi RG-03: verifikasi KONTRAK HTTP (status 200) dan umpan balik UI
+    // (toast sukses berisi nama file export) untuk export per akun — RG-03 hanya
+    // memeriksa request terkirim + nama unduhan.
+    await gotoNav(page, 'Buku Besar')
+    await expect(page.getByRole('button', { name: 'Export PDF' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Export XLSX' })).toBeVisible()
+
+    // Firefox headless (Playwright/Juggler) tidak meng-emit event respons/download
+    // untuk navigasi yang membawa Content-Disposition: attachment — verifikasi
+    // status 200 hanya di Chromium; Firefox memverifikasi request terkirim + toast
+    // (nama file dihitung klien, konsisten dengan penamaan server).
+    const isFirefox = test.info().project.name === 'firefox'
+    for (const [label, fmt] of [
+      ['Export PDF', 'pdf'],
+      ['Export XLSX', 'xlsx'],
+    ] as const) {
+      const reqPromise = page.waitForRequest(
+        (r) =>
+          r.method() === 'GET' &&
+          r.url().includes('/exports/ledger/1-1100') &&
+          r.url().includes(`format=${fmt}`) &&
+          r.url().includes('token='),
+      )
+      const resPromise = isFirefox
+        ? null
+        : page.waitForResponse(
+            (r) =>
+              r.url().includes('/exports/ledger/1-1100') &&
+              r.url().includes(`format=${fmt}`) &&
+              r.status() === 200,
+          )
+      await page.getByRole('button', { name: label }).click()
+      const req = await reqPromise
+      expect(req.url()).toContain('token=mock.')
+      if (resPromise) {
+        const res = await resPromise
+        expect(res.status()).toBe(200)
+        expect(res.headers()['content-disposition']).toContain(`Buku-Besar-1-1100-2026-03.${fmt}`)
+      }
+
+      // Toast sukses menampilkan nama file yang sama (transparansi alur export)
+      await expect(page.getByRole('status')).toHaveText(`Laporan berhasil diekspor — Buku-Besar-1-1100-2026-03.${fmt}`)
+    }
+  })
+
+  test('RG-03c Export Buku Besar dengan rentang tanggal: respons 200 + filename & toast berisi rentang', async ({ page }) => {
+    // Rentang custom (start/end) di UI Buku Besar → export per akun memakai
+    // rentang tersebut: request ?start=&end=, nama file & toast memuat
+    // `start..end` (bukan periode bulanan). Tampilan juga ikut rentang, tapi
+    // yang diverifikasi di sini adalah KONTRAK EXPORT + umpan balik UI.
+    await gotoNav(page, 'Buku Besar')
+    await page.getByLabel('Tanggal mulai export').fill('2026-03-06')
+    await page.getByLabel('Tanggal akhir export').fill('2026-03-11')
+
+    const isFirefox = test.info().project.name === 'firefox'
+    for (const [label, fmt] of [
+      ['Export PDF', 'pdf'],
+      ['Export XLSX', 'xlsx'],
+    ] as const) {
+      const reqPromise = page.waitForRequest(
+        (r) =>
+          r.method() === 'GET' &&
+          r.url().includes('/exports/ledger/1-1100') &&
+          r.url().includes('start=2026-03-06') &&
+          r.url().includes('end=2026-03-11') &&
+          r.url().includes(`format=${fmt}`) &&
+          r.url().includes('token='),
+      )
+      const resPromise = isFirefox
+        ? null
+        : page.waitForResponse(
+            (r) =>
+              r.url().includes('/exports/ledger/1-1100') &&
+              r.url().includes(`format=${fmt}`) &&
+              r.url().includes('start=2026-03-06') &&
+              r.url().includes('end=2026-03-11') &&
+              r.status() === 200,
+          )
+      await page.getByRole('button', { name: label }).click()
+      const req = await reqPromise
+      expect(req.url()).toContain('token=mock.')
+      if (resPromise) {
+        const res = await resPromise
+        expect(res.status()).toBe(200)
+        // Nama file memakai rentang, bukan periode bulanan
+        expect(res.headers()['content-disposition']).toContain(`Buku-Besar-1-1100-2026-03-06..2026-03-11.${fmt}`)
+      }
+
+      // Toast sukses memuat rentang yang sama
+      await expect(page.getByRole('status')).toHaveText(
+        `Laporan berhasil diekspor — Buku-Besar-1-1100-2026-03-06..2026-03-11.${fmt}`,
+      )
+    }
+  })
+
   test('RG-04 Tutup periode: posting diblokir, laporan tetap terbaca, draft ter-post', async ({ page }) => {
     // 1. Tutup Maret 2026 via UI (Pengaturan): tombol Tutup → dialog pilihan
     //    aksi draft muncul (2 draft seed) → pilih 'Posting semua draft'
@@ -489,6 +585,63 @@ test.describe('RG-05 s/d RG-08 — entitas, approval, search, periode', () => {
     await expect(page.getByText(/Belum diposting/)).toBeVisible()
     // Dropdown tertutup kembali setelah navigasi
     await expect(page.getByRole('button', { name: /Notifikasi/ })).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  test('RG-06e NO_APPROVAL_RIGHTS: akuntan + role cache STALE → approve via antrian notifikasi → toast "Hanya Admin" (server 403)', async ({ page }) => {
+    // 1. Keluar dari sesi admin (beforeEach) → login sebagai AKUNTAN (dimas)
+    await page.getByRole('button', { name: 'Menu akun' }).click()
+    await page.getByRole('button', { name: 'Keluar' }).click()
+    await expect(page.getByLabel('Email')).toBeVisible()
+    await page.getByLabel('Email').fill('dimas@estetikakreasi.co.id')
+    await page.getByLabel('Password').fill('password123')
+    await page.getByRole('button', { name: 'Masuk', exact: true }).click()
+    await expect(page.locator('footer')).toContainText('Online · Mock API', { timeout: 20_000 })
+    // Bukti role benar: badge Akuntan di header (bukan Admin)
+    await expect(page.locator('header')).toContainText('Akuntan')
+
+    // 2. Buat jurnal → "Simpan & Ajukan" → Menunggu Approval (badge 1)
+    const dialog = await openJournalModal(page)
+    await fillBalancedJournal(dialog, '3000000', 'RG-06e jurnal akuntan stale role')
+    await dialog.getByRole('button', { name: 'Simpan & Ajukan' }).click()
+    await expect(page.getByRole('status')).toContainText('diajukan untuk persetujuan')
+    await expect(page.getByRole('button', { name: /Notifikasi — 1 jurnal menunggu approval/ })).toBeVisible()
+
+    // 3. Sebagai akuntan, tombol Setujui TIDAK tampil di antrian (izin approve hanya admin)
+    await page.getByRole('button', { name: /Notifikasi — 1 jurnal menunggu approval/ }).click()
+    await expect(page.getByText('Menunggu Approval', { exact: true })).toBeVisible()
+    await expect(page.getByText('BKM-2026-03-0009', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Setujui/ })).toHaveCount(0)
+
+    // 4. SIMULASI ROLE CACHE STALE: role client di-overwrite ke 'admin' (token
+    //    akuntan TETAP di localStorage) → setelah reload UI menganggap bisa
+    //    approve, padahal sesi server masih milik akuntan (tanpa journal.approve).
+    await page.evaluate(() => {
+      const key = 'appsheet-accounting-v1'
+      const raw = JSON.parse(localStorage.getItem(key) ?? 'null')
+      if (raw) raw.state.user.role = 'admin'
+      localStorage.setItem(key, JSON.stringify(raw))
+    })
+    await page.reload()
+    await expect(page.locator('footer')).toContainText('Online · Mock API', { timeout: 20_000 })
+    // Role badge kini Admin (stale) → bukti cache role yang basi
+    await expect(page.locator('header')).toContainText('Admin')
+
+    // 5. Tombol Setujui kini MUNCUL di dropdown notifikasi (karena role stale) →
+    //    klik → server menolak 403 NO_APPROVAL_RIGHTS → toast pesan KHUSUS
+    const bell = page.getByRole('button', { name: /Notifikasi — 1 jurnal menunggu approval/ })
+    await bell.click()
+    const approveBtn = page.getByRole('button', { name: 'Setujui BKM-2026-03-0009' })
+    await expect(approveBtn).toBeVisible()
+    await approveBtn.click()
+
+    // 6. Toast "Hanya Admin..." (pesan khusus NO_APPROVAL_RIGHTS, bukan error generik)
+    await expect(page.getByRole('status')).toContainText('Hanya Admin yang dapat menyetujui', { timeout: 10_000 })
+
+    // 7. Jurnal TETAP Menunggu Approval (tidak ter-approve — status di baris
+    //    Jurnal Terbaru Dashboard) + sesi akuntan tetap hidup
+    const row = page.locator('tbody tr', { hasText: 'BKM-2026-03-0009' }).first()
+    await expect(row.getByText('Menunggu Approval', { exact: true })).toBeVisible()
+    await expect(page.locator('footer')).toContainText('Online · Mock API')
   })
 
   test('RG-07 Filter & search: filter jurnal + pencarian global konsisten', async ({ page }) => {

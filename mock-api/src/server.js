@@ -1002,14 +1002,28 @@ app.get('/ledger/accounts/:accountId', requireAuth, (req, res) => {
   const account = entityAccounts(req.entityId).find((a) => a.id === req.params.accountId)
   if (!account) return fail(res, 404, 'ACCOUNT_NOT_FOUND', 'Akun tidak ditemukan')
   const periodKey = req.query.period || '2026-03'
-  const p = periodByKey(periodKey)
-  if (!p) return fail(res, 422, 'INVALID_PERIOD', 'Periode tidak valid')
-  const start = p.startDate
-  const end = p.endDate
+  // Rentang tanggal custom (start/end) — sama dengan GET /exports/ledger/:accountId:
+  // bila diberikan, override periode; tampilan Buku Besar ikut rentang, bukan
+  // hanya export. Tanpa rentang → perilaku lama (periode bulanan).
+  const { start, end } = req.query
+  let p
+  let label = periodKey
+  if (start || end) {
+    const isoDate = /^\d{4}-\d{2}-\d{2}$/
+    if (!start || !end) return fail(res, 422, 'INVALID_DATE_RANGE', 'Rentang tanggal wajib lengkap (start & end)')
+    if (!isoDate.test(start) || !isoDate.test(end)) return fail(res, 422, 'INVALID_DATE_RANGE', 'Format tanggal harus YYYY-MM-DD')
+    if (start > end) return fail(res, 422, 'INVALID_DATE_RANGE', 'start tidak boleh setelah end')
+    label = `${start}..${end}`
+  } else {
+    p = periodByKey(periodKey)
+    if (!p) return fail(res, 422, 'INVALID_PERIOD', 'Periode tidak valid')
+  }
+  const rangeStart = start ?? p.startDate
+  const rangeEnd = end ?? p.endDate
   const relevant = entityJournals(req.entityId).filter((j) => isEffect(j) && j.lines.some((ln) => ln.accountId === account.id))
-  const before = relevant.filter((j) => j.date < start)
+  const before = relevant.filter((j) => j.date < rangeStart)
   const within = relevant
-    .filter((j) => j.date >= start && j.date <= end)
+    .filter((j) => j.date >= rangeStart && j.date <= rangeEnd)
     .sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt))
   let opening = account.baseBalance
   for (const j of before) {
@@ -1023,7 +1037,7 @@ app.get('/ledger/accounts/:accountId', requireAuth, (req, res) => {
     running += account.normalBalance === 'debit' ? ln.debit - ln.credit : ln.credit - ln.debit
     return { journalEntryId: j.id, date: j.date, reference: j.transactionNumber, description: j.description, debit: ln.debit, credit: ln.credit, balance: running }
   })
-  ok(res, { accountId: account.id, accountCode: account.code, accountName: account.name, period: periodKey, openingBalance: opening, closingBalance: running, entries })
+  ok(res, { accountId: account.id, accountCode: account.code, accountName: account.name, period: label, openingBalance: opening, closingBalance: running, entries })
 })
 
 app.get('/ledger', requireAuth, (req, res) => {
