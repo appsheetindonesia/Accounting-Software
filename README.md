@@ -60,6 +60,7 @@ manapun tanpa harus membuka isi folder:
 | [Backlog - Accounting.md](<Backlog - Accounting.md>) | Backlog produk (user story, prioritas, estimasi SP) |
 | [GitHub Projects - Accounting.md](<GitHub Projects - Accounting.md>) | Konfigurasi GitHub Projects / import backlog |
 | [QA Test Plan - Accounting.md](<QA Test Plan - Accounting.md>) | Rencana pengujian QA + artefak hasil (CSV/XLSX) |
+| [VERIFIKASI-BRANDING.md](VERIFIKASI-BRANDING.md) | Verifikasi konsistensi branding nama perusahaan |
 | [CHANGELOG.md](CHANGELOG.md) | Catatan rilis per versi |
 
 ## Menjalankan
