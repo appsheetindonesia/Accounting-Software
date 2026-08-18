@@ -730,6 +730,19 @@ test.describe('RG-05 s/d RG-08 — entitas, approval, search, periode', () => {
     // Navigasi ke Jurnal + baris detail hasil pencarian terbuka otomatis
     await expect(page.getByText('Pencatatan beban gaji karyawan Maret', { exact: true }).first()).toBeVisible()
 
+    // 4b. Jalur keyboard murni (tanpa klik mouse): pindah ke Dashboard →
+    //     ketik 'gaji' → ArrowDown (highlight hasil pertama = JV-0005) →
+    //     Enter → detail jurnal terbuka di halaman Jurnal
+    await gotoNav(page, 'Dashboard')
+    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
+    await globalSearch.fill('gaji')
+    await expect(page.getByRole('option', { name: /JV-2026-03-0005/ })).toBeVisible()
+    await globalSearch.press('ArrowDown') // index 0 = JV-0005 (jurnal sebelum akun)
+    await expect(globalSearch).toHaveAttribute('aria-activedescendant', 'gs-result-0')
+    await globalSearch.press('Enter')
+    await expect(page.getByRole('heading', { name: 'Jurnal' })).toBeVisible()
+    await expect(page.getByText('Pencatatan beban gaji karyawan Maret', { exact: true }).first()).toBeVisible()
+
     // 5. Search global akun: 'Pendapatan Jasa' (bukan akun default) → klik →
     //    Buku Besar memilih akun tsb (membuktikan fokus hasil search bekerja)
     await globalSearch.fill('Pendapatan Jasa')
