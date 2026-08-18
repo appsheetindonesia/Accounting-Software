@@ -79,6 +79,44 @@ EXPECTED_RG = 15
 # Status yang memicu peringatan S1
 OPEN_STATUSES = {"Not Run", "Fail"}
 
+# Epoch timestamp untuk byte-determinism XLSX — openpyxl selalu menulis
+# dcterms:modified di core.xml dengan datetime.now() saat wb.save(), jadi
+# kita perlu post-process ZIP agar timestamp-nya tetap stabil antar run.
+_XLSX_EPOCH = "2026-01-01T00:00:00Z"
+
+
+def _pin_xlsx_modified(path: Path) -> None:
+    """Normalize dcterms:modified in docProps/core.xml so the XLSX is
+    byte-deterministic across runs (openpyxl uses wall-clock time)."""
+    import re as _re
+    import zipfile as _zf
+
+    with _zf.ZipFile(path, "r") as zin:
+        core = zin.read("docProps/core.xml").decode("utf-8")
+        patched = _re.sub(
+            r"<dcterms:modified[^>]*>[^<]+</dcterms:modified>",
+            f"<dcterms:modified xmlns:dcterms=\"http://purl.org/dc/terms/\" "
+            f"xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" "
+            f"xsi:type=\"dcterms:W3CDTF\">{_XLSX_EPOCH}</dcterms:modified>",
+            core,
+        )
+        items = []
+        for info in zin.infolist():
+            data = (
+                patched.encode("utf-8")
+                if info.filename == "docProps/core.xml"
+                else zin.read(info.filename)
+            )
+            items.append((info, data))
+
+    tmp = Path(str(path) + ".pin")
+    with _zf.ZipFile(tmp, "w", _zf.ZIP_DEFLATED) as zout:
+        for info, data in items:
+            info.date_time = (2026, 1, 1, 0, 0, 0)  # pin ZIP header timestamps
+            zout.writestr(info, data)
+    tmp.replace(path)
+
+
 # ---------------------------------------------------------------------------
 # Peta story (AAJ-xxx) → sprint, dari matriks traceability (QA Test Plan §5)
 # ---------------------------------------------------------------------------
@@ -585,6 +623,7 @@ def write_xlsx(records: list[dict], path: Path | None = None) -> Path:
 
     path = path or ROOT / "qa-test-cases.xlsx"
     wb.save(path)
+    _pin_xlsx_modified(path)
     return path
 
 
@@ -766,6 +805,7 @@ def write_results_template_xlsx(records: list[dict]) -> Path:
 
     path = ROOT / "qa-test-results-template.xlsx"
     wb.save(path)
+    _pin_xlsx_modified(path)
     return path
 
 
