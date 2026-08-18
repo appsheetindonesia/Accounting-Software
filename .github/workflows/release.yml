@@ -1,0 +1,61 @@
+# ============================================================
+# Release Draft otomatis (tag v*)
+# Setiap kali tag rilis (v0.4.0, v0.4.1, ...) di-push ke origin,
+# workflow ini langsung membuat DRAFT GitHub Release untuk tag itu
+# — catatan rilis diambil VERBATIM dari pesan tag (annotated tag,
+# pola rilis repo ini: judul tag + body berisi fitur/perbaikan/test).
+#
+# Draft (bukan publish) agar ada momen review manual sebelum rilis
+# dipublikasikan — konsisten dengan alur rilis yang selama ini manual
+# via API/gh. Begitu draft disetujui, tinggal "Publish release" di
+# halaman GitHub (tidak perlu mengedit catatan lagi).
+#
+# Judul release = baris pertama pesan tag (subject), body = sisa
+# pesan (contents:body) — sama persis dengan catatan yang dipakai
+# saat tag dibuat, jadi tidak ada dua sumber kebenaran.
+#
+# softprops/action-gh-release@v3 berjalan di runtime Node 24
+# (v2.6.2 memakai Node 20 yang sudah deprecated) — konsisten dengan
+# action lain di repo ini (checkout@v5, setup-node@v5).
+# ============================================================
+name: Release Draft otomatis (tag v*)
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  # Membuat release butuh izin tulis ke contents (GITHUB_TOKEN).
+  contents: write
+
+jobs:
+  release:
+    name: Buat draft GitHub Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # fetch-depth 0: memastikan objek tag (annotated) ikut ter-fetch
+      # sehingga pesan tag bisa dibaca lewat git for-each-ref.
+      - name: Checkout (history penuh — akses pesan tag)
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # Pesan tag → file catatan rilis + judul release (baris pertama).
+      # %(contents:subject) = judul tag; %(contents:body) = isi catatan.
+      # Lightweight tag (tanpa pesan) → catatan kosong, draft tetap dibuat.
+      - name: Ekstrak judul & catatan rilis dari pesan tag
+        id: notes
+        run: |
+          git for-each-ref refs/tags/${GITHUB_REF_NAME} --format='%(contents:subject)' > release-title.txt
+          git for-each-ref refs/tags/${GITHUB_REF_NAME} --format='%(contents:body)' > release-notes.md
+          echo "title=$(cat release-title.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Buat draft GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          draft: true
+          name: ${{ steps.notes.outputs.title }}
+          body_path: release-notes.md
+          generate_release_notes: false # catatan dari pesan tag, bukan auto-generated
