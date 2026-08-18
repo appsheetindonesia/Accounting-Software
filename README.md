@@ -34,7 +34,7 @@ Riwayat perubahan & catatan rilis: **[CHANGELOG.md](CHANGELOG.md)**
 | `prototype-accounting/` | Prototipe web (React + TypeScript + Vite + Zustand), unit test Vitest + MSW |
 | `mock-api/` | Mock API Express (persistence, auth + refresh token, error envelope, rate limit), integration test Vitest + Supertest |
 | `e2e/` | E2E Playwright RG-01..RG-22 (chromium + firefox) |
-| `scripts/` | Skrip dev terpadu (`dev.mjs` + `dev-stop.mjs`), agregat test (`test-all.mjs`), pemantau CI (`check-ci.ps1`) |
+| `scripts/` | Skrip dev terpadu (`dev.mjs` + `dev-stop.mjs`), agregat test (`test-all.mjs`), pemantau CI (`check-ci.ps1`), pembuat GitHub Release (`create-release.mjs`) |
 | Dokumen `*.md` | Semua spesifikasi — lihat [Dokumentasi](#dokumentasi) |
 | `.github/workflows/` | CI (`ci.yml` — unit+integration+lint+qa-sync), E2E Playwright (`e2e.yml`), deploy GitHub Pages (`pages.yml`) |
 
@@ -71,6 +71,7 @@ npm run dev:stop   # hentikan stack — baca .dev/dev.pid, kill seluruh pohon pr
 npm test           # ketiga suite: mock-api + prototype + e2e (paralel)
 npm test -- --only=e2e   # subset: mock-api | prototype | e2e
 #                          (bisa digabung koma: --only=mock-api,prototype)
+npm run release -- v0.4.2   # buat GitHub Release dari annotated tag
 ```
 
 `dev.mjs` menulis `.dev/dev.pid` (PID induk + child) saat stack hidup dan
@@ -91,6 +92,27 @@ powershell -File scripts/check-ci.ps1 -Commit bc5c0ad    # run untuk commit tert
 powershell -File scripts/check-ci.ps1 -Workflow CI -Limit 1  # filter workflow (nama run)
 powershell -File scripts/check-ci.ps1 -Watch             # poll sampai semua selesai
 ```
+
+### Membuat GitHub Release dari tag (satu perintah)
+
+`scripts/create-release.mjs` membuat (atau meng-update, bila sudah ada)
+GitHub Release dari **annotated tag** — catatan rilis diambil verbatim dari
+pesan tag (`%(contents:subject)` → judul, `%(contents:body)` → isi), jadi
+release selalu konsisten dengan apa yang tertulis di tag. Idempoten: run
+ulang untuk tag yang sama meng-update release yang ada (termasuk draft),
+ bukan membuat duplikat.
+
+```bash
+npm run release -- v0.4.2              # rilis tag tertentu (langsung publish)
+npm run release -- v0.4.2 --draft      # draft — review dulu, baru publish manual
+npm run release -- --draft             # tanpa tag → tag terakhir (git describe)
+```
+
+Auth berurutan: env `GH_TOKEN`/`GITHUB_TOKEN` → `gh auth token` → Git
+Credential Manager. Repo dibaca dari `git remote`. Catatan: workflow
+`release.yml` membuat draft otomatis setiap tag `v*` di-push — script ini
+berguna untuk rilis manual tanpa push tag baru atau untuk mem-publish draft
+(atau membuat release untuk tag yang lama).
 
 Detail lebih lanjut ada di README masing-masing sub-proyek (`mock-api/`, `prototype-accounting/`, `e2e/`).
 

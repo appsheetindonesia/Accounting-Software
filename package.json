@@ -9,6 +9,7 @@
     "dev:reset": "node scripts/dev.mjs --reset",
     "dev:no-persist": "node scripts/dev.mjs --no-persist",
     "dev:stop": "node scripts/dev-stop.mjs",
+    "release": "node scripts/create-release.mjs",
     "test": "node scripts/test-all.mjs",
     "test:all": "node scripts/test-all.mjs",
     "test:mock-api": "npm --prefix mock-api test",
