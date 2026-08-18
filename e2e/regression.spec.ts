@@ -248,6 +248,29 @@ test.describe('RG-01 s/d RG-04 — siklus jurnal, reverse, laporan, periode', ()
       expect(req.url()).toContain('token=mock.')
       if (dlPromise) expect((await dlPromise).suggestedFilename()).toBe(`Buku-Besar-1-1100-2026-03.${fmt}`)
     }
+
+    // 7. Rentang custom tersedia di UI Buku Besar: input tanggal tampil, dan
+    //    export dengan rentang mengirim start/end (bukan period bulanan) —
+    //    kontrak lengkap (200 + toast + filename berisi rentang) di RG-03c.
+    await expect(page.getByText('Rentang tanggal', { exact: true })).toBeVisible()
+    await expect(page.getByLabel('Tanggal mulai export')).toBeVisible()
+    await expect(page.getByLabel('Tanggal akhir export')).toBeVisible()
+    await page.getByLabel('Tanggal mulai export').fill('2026-03-06')
+    await page.getByLabel('Tanggal akhir export').fill('2026-03-11')
+    const rangeReqPromise = page.waitForRequest(
+      (r) =>
+        r.method() === 'GET' &&
+        r.url().includes('/exports/ledger/1-1100') &&
+        r.url().includes('start=2026-03-06') &&
+        r.url().includes('end=2026-03-11') &&
+        r.url().includes('format=pdf') &&
+        r.url().includes('token='),
+    )
+    await page.getByRole('button', { name: 'Export PDF' }).click()
+    const rangeReq = await rangeReqPromise
+    expect(rangeReq.url()).toContain('start=2026-03-06')
+    expect(rangeReq.url()).toContain('end=2026-03-11')
+    expect(rangeReq.url()).not.toContain('period=')
   })
 
   test('RG-03b Export Buku Besar via UI: respons 200 + toast sukses (PDF & XLSX)', async ({ page }) => {
