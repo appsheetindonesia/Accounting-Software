@@ -10,6 +10,13 @@ Sistem akuntansi **PT. Kreasi Inovasi Estetika** — prototipe web (React + Vite
 
 > Repo ini privat — badge hanya tampil bagi pengguna yang punya akses.
 
+> **Status badge Pages (saat ini merah/gagal):** GitHub Pages belum diaktifkan.
+> Repo privat di plan Free tidak mendukung Pages (API mengembalikan `422 Your
+> current plan does not support GitHub Pages`), sehingga step Configure di
+> `pages.yml` gagal dan deploy tidak berjalan. Perbaikan: aktifkan Pages via
+> Settings → Pages (repo privat butuh paket berbayar) atau jadikan repo public,
+> lalu push ulang.
+
 ### Laporan per tahap (debug CI)
 
 Job `test` di `ci.yml` berjalan sebagai **matrix per tahap** — unit test prototipe dan
@@ -26,8 +33,32 @@ agar debug cukup mengunduh satu artifact tanpa membuka ulang seluruh log.
 | `mock-api/` | Mock API Express (persistence, auth + refresh token, error envelope, rate limit), integration test Vitest + Supertest |
 | `e2e/` | E2E Playwright RG-01..RG-22 (chromium + firefox) |
 | `scripts/` | Skrip dev terpadu (`dev.mjs` + `dev-stop.mjs`) & agregat test (`test-all.mjs`) |
-| Dokumen `*.md` | BRD, PRD, FRD, API contract, Database Schema, QA Test Plan, dll. |
+| Dokumen `*.md` | Semua spesifikasi — lihat [Dokumentasi](#dokumentasi) |
 | `.github/workflows/` | CI (`ci.yml`), verifikasi manual (`e2e.yml`), deploy GitHub Pages (`pages.yml`) |
+
+## Dokumentasi
+
+Daftar isi semua dokumen spesifikasi di repo ini — navigasi cepat ke dokumen
+manapun tanpa harus membuka isi folder:
+
+| Dokumen | Isi |
+|---------|-----|
+| [Executive Summary - Accounting.md](<Executive Summary - Accounting.md>) | Ringkasan eksekutif produk (Bahasa Indonesia) |
+| [Executive Summary EN - Accounting.md](<Executive Summary EN - Accounting.md>) | Executive summary (English) |
+| [Pitch Deck - Accounting.md](<Pitch Deck - Accounting.md>) | Deck presentasi produk |
+| [BRD - Accounting.md](<BRD - Accounting.md>) | Business Requirements Document — kebutuhan bisnis & kompetitor |
+| [FRD - Accounting.md](<FRD - Accounting.md>) | Functional Requirements Document — kebutuhan fungsional |
+| [PRD Ver 1- Accounting.md](<PRD Ver 1- Accounting.md>) | Product Requirements Document v1 |
+| [PRD Ver 2 - Accounting.md](<PRD Ver 2 - Accounting.md>) | Product Requirements Document v2 |
+| [PRD Ver 3 - Accounting.md](<PRD Ver 3 - Accounting.md>) | Product Requirements Document v3 (terbaru) |
+| [TRD - Accounting.md](<TRD - Accounting.md>) | Technical Requirements Document |
+| [API - Accounting.md](<API - Accounting.md>) | Kontrak REST API (server mock + klien) |
+| [Database Schema - Accounting.md](<Database Schema - Accounting.md>) | Skema database & aturan integritas |
+| [Color Palette - Accounting.md](<Color Palette - Accounting.md>) | Desain sistem warna, kontras & aksesibilitas |
+| [Backlog - Accounting.md](<Backlog - Accounting.md>) | Backlog produk (user story, prioritas, estimasi SP) |
+| [GitHub Projects - Accounting.md](<GitHub Projects - Accounting.md>) | Konfigurasi GitHub Projects / import backlog |
+| [QA Test Plan - Accounting.md](<QA Test Plan - Accounting.md>) | Rencana pengujian QA + artefak hasil (CSV/XLSX) |
+| [CHANGELOG.md](CHANGELOG.md) | Catatan rilis per versi |
 
 ## Menjalankan
 
