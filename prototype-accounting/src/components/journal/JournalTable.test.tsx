@@ -124,3 +124,28 @@ describe('JournalTable — Tolak langsung di baris (dialog alasan wajib, tanpa b
     expect(screen.queryByRole('button', { name: /Tolak/ })).toBeNull()
   })
 })
+
+describe('JournalTable — scroll-into-view saat focusJournalId di-set', () => {
+  it('baris yang di-fokuskan di-scroll ke tengah viewport (id journal-row-<id>)', () => {
+    // happy-dom: requestAnimationFrame async — jalankan sinkron agar rAF callback
+    // dieksekusi segera di dalam test (bukan menunggu frame berikutnya).
+    const origRaf = window.requestAnimationFrame
+    window.requestAnimationFrame = (cb: FrameRequestCallback) => {
+      cb(0)
+      return 1
+    }
+    const scrollSpy = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {})
+
+    useStore.setState({ focusJournalId: 'JNL-2026-03-002', clearSearchFocus: () => {} })
+    render(<JournalTable journals={[mockJournals[0], mockJournals[1], mockJournals[2]]} />)
+
+    // Efek scroll berjalan setelah render + rAF sinkron
+    expect(scrollSpy).toHaveBeenCalledTimes(1)
+    expect(scrollSpy.mock.calls[0][0]).toEqual({ block: 'center', behavior: 'smooth' })
+    // Baris target ter-expand (detail terbuka) + punya id yang di-scroll
+    expect(document.getElementById('journal-row-JNL-2026-03-002')).not.toBeNull()
+
+    scrollSpy.mockRestore()
+    window.requestAnimationFrame = origRaf
+  })
+})

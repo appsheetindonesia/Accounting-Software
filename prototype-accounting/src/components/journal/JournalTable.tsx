@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { Check, ChevronDown, ChevronRight, Inbox, Send, Undo2, X } from 'lucide-react'
 import type { JournalEntry } from '../../types'
 import { useStore } from '../../store/useStore'
@@ -61,6 +61,20 @@ export default function JournalTable({ journals }: { journals: JournalEntry[] })
     }
   }, [focusJournalId, clearSearchFocus])
 
+  // Scroll-into-view: baris yang dibuka dari Dashboard/global search selalu
+  // terlihat di viewport (bukan di luar layar jika daftar jurnal panjang).
+  // Efek terpisah + rAF agar baris detail (expanded) sudah ter-render dulu.
+  const scrolledRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!focusJournalId || scrolledRef.current === focusJournalId) return
+    scrolledRef.current = focusJournalId
+    const id = focusJournalId
+    const raf = requestAnimationFrame(() => {
+      document.getElementById(`journal-row-${id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [focusJournalId])
+
   const toggle = (id: string) =>
     setExpanded((prev) => {
       const next = new Set(prev)
@@ -104,7 +118,10 @@ export default function JournalTable({ journals }: { journals: JournalEntry[] })
               const [first, ...rest] = journal.lines
               return (
                 <Fragment key={journal.id}>
-                  <tr className={`border-b border-line/70 ${isOpen ? 'bg-primary/5' : 'hover:bg-surface-hover/60'}`}>
+                  <tr
+                    id={`journal-row-${journal.id}`}
+                    className={`border-b border-line/70 ${isOpen ? 'bg-primary/5' : 'hover:bg-surface-hover/60'}`}
+                  >
                     <td className="whitespace-nowrap px-5 py-3 text-sm text-ink-soft">{formatDateShort(journal.date)}</td>
                     <td className="num whitespace-nowrap px-3 py-3 text-xs text-ink">{journal.transactionNumber}</td>
                     <td className="px-3 py-3">
