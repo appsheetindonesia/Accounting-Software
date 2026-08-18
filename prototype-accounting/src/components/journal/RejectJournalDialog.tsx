@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { useStore } from '../../store/useStore'
+import { useActionGuard } from '../../hooks/useActionGuard'
 import type { JournalEntry } from '../../types'
 
 interface RejectJournalDialogProps {
@@ -17,6 +18,11 @@ export default function RejectJournalDialog({ journal, onClose }: RejectJournalD
   const rejectJournal = useStore((s) => s.rejectJournal)
   const [reason, setReason] = useState('')
   const [rejecting, setRejecting] = useState(false)
+  // Guard anti double-click SINKRON (ref) — klik ganda tombol Reject dalam satu
+  // frame tidak boleh reject dua kali (state `rejecting` di-batch). Pola sama
+  // dengan guard busyRef di ExportButtons. WAJIB dipanggil di atas early return
+  // (aturan hooks: jumlah hook harus sama tiap render).
+  const confirmGuard = useActionGuard()
 
   // Reset input tiap dialog dibuka (journal berubah null → objek)
   useEffect(() => {
@@ -28,12 +34,17 @@ export default function RejectJournalDialog({ journal, onClose }: RejectJournalD
   const canConfirm = reason.trim().length > 0 && !rejecting
 
   const handleConfirm = async () => {
-    if (!canConfirm) return
+    if (!confirmGuard.start()) return
+    if (!canConfirm) {
+      confirmGuard.end()
+      return
+    }
     setRejecting(true)
     try {
       await rejectJournal(journal.id, reason.trim())
     } finally {
       setRejecting(false)
+      confirmGuard.end()
       onClose()
     }
   }

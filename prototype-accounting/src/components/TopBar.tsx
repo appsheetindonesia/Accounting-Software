@@ -3,6 +3,7 @@ import { Bell, BookMarked, Check, LogOut, RotateCcw, Settings } from 'lucide-rea
 import { useStore } from '../store/useStore'
 import { canApproveJournal, ROLE_BADGE, ROLE_LABELS } from '../lib/permissions'
 import { formatIDR } from '../lib/format'
+import { useIdActionGuard } from '../hooks/useActionGuard'
 import GlobalSearch from './GlobalSearch'
 import ResetDataModal from './ResetDataModal'
 
@@ -31,6 +32,13 @@ export default function TopBar() {
   const journals = useStore((s) => s.journals)
   const approveJournal = useStore((s) => s.approveJournal)
   const openPendingApproval = useStore((s) => s.openPendingApproval)
+  // Guard anti double-click SINKRON per jurnal (ref) — Setujui di dropdown
+  // tidak boleh approve dua kali dalam satu frame. Pola sama dengan ExportButtons.
+  const approveGuard = useIdActionGuard()
+  const handleApprove = (id: string) => {
+    if (!approveGuard.start(id)) return
+    approveJournal(id).finally(() => approveGuard.end(id))
+  }
   const canApprove = canApproveJournal(role)
   const pendingApprovals = useMemo(
     () => journals.filter((j) => j.status === 'pending-approval'),
@@ -123,7 +131,7 @@ export default function TopBar() {
                           {canApprove && (
                             <button
                               type="button"
-                              onClick={() => approveJournal(j.id)}
+                              onClick={() => handleApprove(j.id)}
                               title="Setujui langsung — tanpa pindah halaman"
                               aria-label={`Setujui ${j.transactionNumber}`}
                               className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-ok px-2 py-1.5 text-xs font-semibold text-white transition hover:bg-ok/90 active:translate-y-px"

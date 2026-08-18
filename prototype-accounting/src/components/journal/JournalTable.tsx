@@ -5,6 +5,7 @@ import { useStore } from '../../store/useStore'
 import StatusBadge from '../StatusBadge'
 import { formatDateShort, formatIDRPlain } from '../../lib/format'
 import { canApproveJournal, canWriteJournal } from '../../lib/permissions'
+import { useIdActionGuard } from '../../hooks/useActionGuard'
 import RejectJournalDialog from './RejectJournalDialog'
 
 const TONE_CLASS = { debit: 'text-debit', credit: 'text-credit' } as const
@@ -35,6 +36,19 @@ export default function JournalTable({ journals }: { journals: JournalEntry[] })
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [rejectingJournal, setRejectingJournal] = useState<JournalEntry | null>(null)
+
+  // Guard anti double-click SINKRON per jurnal (ref) — klik ganda Setujui/
+  // Posting pada baris yang sama dalam satu frame tidak boleh eksekusi dua
+  // kali; baris berbeda tidak saling memblokir. Pola sama dengan ExportButtons.
+  const actionGuard = useIdActionGuard()
+  const handleApprove = (id: string) => {
+    if (!actionGuard.start(id)) return
+    approveJournal(id).finally(() => actionGuard.end(id))
+  }
+  const handlePost = (id: string) => {
+    if (!actionGuard.start(id)) return
+    postJournal(id).finally(() => actionGuard.end(id))
+  }
 
   // Fokus dari global search: hasil jurnal diklik → buka baris detail ini saat
   // halaman Jurnal di-mount, lalu bersihkan fokus agar tidak terulang.
@@ -112,7 +126,7 @@ export default function JournalTable({ journals }: { journals: JournalEntry[] })
                           <>
                             <button
                               type="button"
-                              onClick={() => approveJournal(journal.id)}
+                              onClick={() => handleApprove(journal.id)}
                               title="Setujui langsung — tanpa buka detail"
                               aria-label={`Setujui ${journal.transactionNumber}`}
                               className="inline-flex items-center gap-1 rounded-lg bg-ok px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-ok/90 active:translate-y-px"
@@ -195,7 +209,7 @@ export default function JournalTable({ journals }: { journals: JournalEntry[] })
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => postJournal(journal.id)}
+                                  onClick={() => handlePost(journal.id)}
                                   className="rounded-lg bg-primary px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-primary-light"
                                 >
                                   Posting
@@ -226,7 +240,7 @@ export default function JournalTable({ journals }: { journals: JournalEntry[] })
                               <>
                                 <button
                                   type="button"
-                                  onClick={() => approveJournal(journal.id)}
+                                  onClick={() => handleApprove(journal.id)}
                                   className="inline-flex items-center gap-1.5 rounded-lg bg-ok px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-ok/90"
                                 >
                                   <Check size={13} /> Approve

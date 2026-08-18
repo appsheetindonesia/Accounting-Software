@@ -3,6 +3,7 @@ import { CalendarX2, Lock, ShieldCheck } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { api, ApiError, type PeriodInfo } from '../api'
 import { useApiFetch } from '../hooks/useApiFetch'
+import { useActionGuard } from '../hooks/useActionGuard'
 import { can } from '../lib/permissions'
 import { SkeletonLines } from './Skeleton'
 
@@ -26,6 +27,10 @@ export default function PeriodSettings() {
   const user = useStore((s) => s.user)
   const closePeriod = useStore((s) => s.closePeriod)
   const showToast = useStore((s) => s.showToast)
+  // Guard anti double-click SINKRON (ref) — dua klik Tutup periode / konfirmasi
+  // dialog dalam satu frame tidak boleh close dua kali (state `busy` di-batch,
+  // `disabled` saja tidak cukup). Pola sama dengan guard busyRef di ExportButtons.
+  const closeGuard = useActionGuard()
   const [refresh, setRefresh] = useState(0)
   const [busy, setBusy] = useState<string | null>(null)
   const [pending, setPending] = useState<PeriodInfo | null>(null)
@@ -42,7 +47,11 @@ export default function PeriodSettings() {
   const periods = data?.periods ?? []
 
   const attemptClose = async (period: PeriodInfo) => {
-    if (busy) return
+    if (!closeGuard.start()) return
+    if (busy) {
+      closeGuard.end()
+      return
+    }
     setBusy(period.id)
     try {
       await closePeriod(period.id)
@@ -56,11 +65,16 @@ export default function PeriodSettings() {
       }
     } finally {
       setBusy(null)
+      closeGuard.end()
     }
   }
 
   const confirmClose = async () => {
-    if (!pending) return
+    if (!closeGuard.start()) return
+    if (!pending) {
+      closeGuard.end()
+      return
+    }
     setBusy(pending.id)
     try {
       await closePeriod(pending.id, action)
@@ -70,6 +84,7 @@ export default function PeriodSettings() {
       showToast(e instanceof ApiError ? e.message : 'Gagal menutup periode', 'error')
     } finally {
       setBusy(null)
+      closeGuard.end()
     }
   }
 

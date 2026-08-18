@@ -2,7 +2,7 @@
 // Test tombol 'Setujui' inline di baris jurnal Menunggu Approval (tanpa buka
 // detail): tampil untuk admin, klik → status posted; tidak tampil untuk viewer
 // atau jurnal draft/posted.
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { mockAccounts, mockJournals } from '../../data/mock'
 import { useStore } from '../../store/useStore'
@@ -48,6 +48,21 @@ describe('JournalTable — Setujui langsung di baris (tanpa buka detail)', () =>
     expect(s.journals[0].status).toBe('posted')
     expect(s.journals[0].postedAt).toBeTruthy()
     expect(s.toast?.kind).toBe('success')
+  })
+
+  it('klik ganda cepat pada Setujui baris yang SAMA (satu frame) → approve hanya SEKALI (guard ref)', () => {
+    const approveSpy = vi.spyOn(useStore.getState(), 'approveJournal')
+    render(<JournalTable journals={[pendingJournal]} />)
+
+    const btn = screen.getByRole('button', { name: `Setujui ${pendingJournal.transactionNumber}` })
+    fireEvent.click(btn)
+    fireEvent.click(btn) // frame yang sama — state React di-batch, guard ref menolak
+
+    expect(approveSpy).toHaveBeenCalledTimes(1)
+    const s = useStore.getState()
+    expect(s.journals[0].status).toBe('posted')
+    expect(s.toast?.kind).toBe('success')
+    approveSpy.mockRestore()
   })
 
   it('viewer TIDAK melihat tombol Setujui (tanpa izin approve)', () => {

@@ -6,6 +6,7 @@ import { journalPrefixes } from '../../data/mock'
 import { formatIDR } from '../../lib/format'
 import { computeLineTotals, toNumber } from '../../lib/accounting'
 import { canWriteJournal } from '../../lib/permissions'
+import { useActionGuard } from '../../hooks/useActionGuard'
 
 interface LineDraft {
   key: number
@@ -91,17 +92,26 @@ export default function JournalEntryModal() {
 
   const removeLine = (key: number) => setLines((prev) => (prev.length > 1 ? prev.filter((l) => l.key !== key) : prev))
 
+  // Guard anti double-click SINKRON (ref) — dua klik Posting/Simpan & Ajukan/
+  // Simpan Draft dalam satu frame tidak boleh submit dua kali (state di-batch,
+  // `disabled` saja tidak cukup). Pola sama dengan guard busyRef di ExportButtons.
+  const actionGuard = useActionGuard()
   const submit = (action: 'draft' | 'submit' | 'post') => {
-    if (!canSave) return
-    saveJournal(
-      {
-        date,
-        transactionNumber: nextNumber,
-        description,
-        lines: lines.map((l) => ({ accountId: l.accountId, debit: toNumber(l.debit), credit: toNumber(l.credit), description: l.description })),
-      },
-      action,
-    )
+    if (!actionGuard.start()) return
+    try {
+      if (!canSave) return
+      saveJournal(
+        {
+          date,
+          transactionNumber: nextNumber,
+          description,
+          lines: lines.map((l) => ({ accountId: l.accountId, debit: toNumber(l.debit), credit: toNumber(l.credit), description: l.description })),
+        },
+        action,
+      )
+    } finally {
+      actionGuard.end()
+    }
   }
 
   return (
