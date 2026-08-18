@@ -434,6 +434,63 @@ test.describe('RG-05 s/d RG-08 — entitas, approval, search, periode', () => {
     await expect(row9Reload.getByText('Ditolak — Bukti E2E kurang lengkap')).toBeVisible()
   })
 
+  test('RG-06c Tombol Setujui INLINE di baris Jurnal: approve tanpa buka detail', async ({ page }) => {
+    // 1. Buat jurnal 2jt → "Simpan & Ajukan" → Menunggu Approval
+    const dialog = await openJournalModal(page)
+    await fillBalancedJournal(dialog, '2000000', 'RG-06c jurnal inline approve')
+    await dialog.getByRole('button', { name: 'Simpan & Ajukan' }).click()
+    await expect(page.getByRole('status')).toContainText('diajukan untuk persetujuan')
+
+    // 2. Halaman Jurnal: klik tombol Setujui INLINE di baris (tanpa "Buka detail")
+    await gotoNav(page, 'Jurnal')
+    const row = page.locator('tbody tr', { hasText: 'BKM-2026-03-0009' }).first()
+    const inlineApprove = row.getByRole('button', { name: 'Setujui BKM-2026-03-0009' })
+    await expect(inlineApprove).toBeVisible()
+    // Baris BELUM diperluas → tombol Setujui benar-benar di baris, bukan di area detail
+    await expect(row.getByRole('button', { name: 'Buka detail' })).toBeVisible()
+    await inlineApprove.click()
+
+    // 3. Status berubah Posted tanpa membuka detail; aksi inline hilang
+    await expect(page.getByRole('status')).toContainText('disetujui dan diposting')
+    await expect(row.getByText('Posted', { exact: true })).toBeVisible()
+    await expect(row.getByRole('button', { name: /Setujui/ })).toHaveCount(0)
+    await expect(row.getByRole('button', { name: /Tolak/ })).toHaveCount(0)
+
+    // 4. Saldo berubah: Aset 557 → 559jt (jurnal 2jt ter-posting)
+    await gotoNav(page, 'Dashboard')
+    await expect(page.getByText('Rp 559.000.000', { exact: true }).first()).toBeVisible()
+  })
+
+  test('RG-06d Notifikasi TopBar: Simpan & Ajukan → badge naik → klik item → detail jurnal terbuka', async ({ page }) => {
+    // 1. Baseline: badge notifikasi 0
+    await expect(page.getByRole('button', { name: /Notifikasi — 0 jurnal menunggu approval/ })).toBeVisible()
+
+    // 2. Buat jurnal → "Simpan & Ajukan" → langsung Menunggu Approval
+    const dialog = await openJournalModal(page)
+    await fillBalancedJournal(dialog, '1500000', 'RG-06d jurnal notifikasi')
+    await dialog.getByRole('button', { name: 'Simpan & Ajukan' }).click()
+    await expect(page.getByRole('status')).toContainText('diajukan untuk persetujuan')
+
+    // 3. Badge notifikasi NAIK 0 → 1 (store journals ter-update → TopBar re-render)
+    const bell = page.getByRole('button', { name: /Notifikasi — 1 jurnal menunggu approval/ })
+    await expect(bell).toBeVisible()
+
+    // 4. Buka dropdown → item jurnal tampil (no. bukti + deskripsi)
+    await bell.click()
+    await expect(page.getByText('Menunggu Approval', { exact: true })).toBeVisible()
+    await expect(page.getByText('BKM-2026-03-0009', { exact: true })).toBeVisible()
+
+    // 5. Klik item (tombol navigasi berisi deskripsi) → halaman Jurnal +
+    //    baris detail jurnal otomatis terbuka (fokus seperti global search)
+    await page.getByRole('button', { name: /RG-06d jurnal notifikasi/ }).click()
+    await expect(page.getByRole('heading', { name: 'Jurnal Umum' })).toBeVisible()
+    await expect(page.getByText('RG-06d jurnal notifikasi', { exact: true }).first()).toBeVisible()
+    await expect(page.getByText(/Dibuat oleh/)).toBeVisible()
+    await expect(page.getByText(/Belum diposting/)).toBeVisible()
+    // Dropdown tertutup kembali setelah navigasi
+    await expect(page.getByRole('button', { name: /Notifikasi/ })).toHaveAttribute('aria-expanded', 'false')
+  })
+
   test('RG-07 Filter & search: filter jurnal + pencarian global konsisten', async ({ page }) => {
     // 1. Filter teks di halaman Jurnal (UI)
     await gotoNav(page, 'Jurnal')
