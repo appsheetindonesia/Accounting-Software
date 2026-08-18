@@ -8,14 +8,14 @@ Sistem akuntansi **PT. Kreasi Inovasi Estetika** — prototipe web (React + Vite
 [![Build & Deploy prototipe ke GitHub Pages](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/pages.yml/badge.svg)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/pages.yml)
 [![E2E Playwright (chromium + firefox)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/e2e.yml/badge.svg)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/e2e.yml)
 
-> Repo ini privat — badge hanya tampil bagi pengguna yang punya akses.
-
-> **Status badge Pages (saat ini merah/gagal):** GitHub Pages belum diaktifkan.
-> Repo privat di plan Free tidak mendukung Pages (API mengembalikan `422 Your
-> current plan does not support GitHub Pages`), sehingga step Configure di
-> `pages.yml` gagal dan deploy tidak berjalan. Perbaikan: aktifkan Pages via
-> Settings → Pages (repo privat butuh paket berbayar) atau jadikan repo public,
-> lalu push ulang.
+> **Status badge Pages:** Workflow `pages.yml` dilengkapi pre-flight guard —
+> jika GitHub Pages belum diaktifkan (mis. repo privat di plan Free), step
+> **Configure** dan **Deploy** di-skip otomatis dengan pesan petunjuk enablement
+> yang jelas di log, bukan gagal merah. Workflow tetap hijau. Setelah Pages
+> diaktifkan di Settings → Pages (Source: GitHub Actions), push berikutnya
+> langsung deploy. Untuk repo privat di plan Free, Pages hanya tersedia di
+> paket berbayar — alternatif: jadikan repo public atau deploy ke provider
+> lain (Netlify/Vercel/Cloudflare via `deploy-static.yml`).
 
 ### Laporan per tahap (debug CI)
 
