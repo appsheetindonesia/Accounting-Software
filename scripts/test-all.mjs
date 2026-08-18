@@ -17,6 +17,9 @@
 //                              # (bisa juga koma: --only=mock-api,prototype)
 //
 // Perilaku:
+//   - Argumen selain --only= DITOLAK dengan pesan error yang membantu
+//     (typo terdeteksi dini, tidak diabaikan)
+//   - --only berulang juga ditolak (berikan sekali dengan koma)
 //   - Paralel → total durasi ≈ suite terlama (E2E), bukan penjumlahan
 //   - Output live di-prefix per suite: [mock-api] [prototype] [e2e]
 //   - E2E dijalankan dengan MOCK_API_PERSIST=0 (state hermetis per run,
@@ -40,7 +43,23 @@ const allSuites = [
 
 // Parse --only=<suite> (atau daftar koma) untuk menjalankan subset suite
 // tanpa mengubah perintah npm. Nilai tidak valid → error + exit 1.
-const onlyArg = process.argv.find((a) => a.startsWith('--only='))
+// Argumen LAIN ditolak dengan pesan yang membantu — typo (mis.
+// `--onl=e2e` atau `--only e2e`) terdeteksi dini, bukan diabaikan diam-diam.
+const args = process.argv.slice(2)
+const onlyArgs = args.filter((a) => a.startsWith('--only='))
+const unknownArgs = args.filter((a) => !a.startsWith('--only='))
+if (unknownArgs.length) {
+  console.error(`[test-all] Argumen tidak dikenal: ${unknownArgs.join(' ')}`)
+  console.error('[test-all] Satu-satunya argumen yang didukung: --only=<suite>')
+  console.error('[test-all]   suite valid: mock-api | prototype | e2e (bisa digabung koma, mis. --only=mock-api,prototype)')
+  console.error('[test-all] Contoh: npm test -- --only=e2e')
+  process.exit(1)
+}
+if (onlyArgs.length > 1) {
+  console.error(`[test-all] --only diberikan ${onlyArgs.length} kali — berikan SEKALI dengan koma (mis. --only=mock-api,prototype)`)
+  process.exit(1)
+}
+const onlyArg = onlyArgs[0]
 let suites = allSuites
 if (onlyArg) {
   const requested = onlyArg.slice('--only='.length).split(',').map((s) => s.trim()).filter(Boolean)
