@@ -64,6 +64,7 @@ login bertahan saat `page.reload()` (RG-02/RG-04/RG-10).
 | RG-18 | Auto-reconnect polling | server mati → banner offline → server hidup → banner hilang **SENDIRI dalam ~10 detik** (polling `GET /health` tiap 10s) **tanpa klik "Coba lagi"**, token server asli tersimpan |
 | RG-19 | TTL terjadwal | access token basi setelah **N detik** (`POST /admin/set-token-ttl`) → **auto-refresh di sesi AKTIF tanpa reload**: 401 → refresh → retry 200, token baru tersimpan, indikator "Sesi diperbarui otomatis" tampil |
 | RG-20 | SESSION_EXPIRED | refresh token kedaluwarsa **di server** (`POST /admin/expire-refresh-tokens`) → refresh gagal 401 `SESSION_EXPIRED` → logout otomatis + **modal "Sesi Berakhir"** → "Masuk kembali" → halaman login → **login ulang wajib** (token baru) |
+| RG-20b | SESSION_EXPIRED (sesi aktif) | **tanpa reload**: `expire-tokens` + `expire-refresh-tokens` saat sesi masih aktif → fetch berikutnya 401 → auto-refresh **gagal** `SESSION_EXPIRED` → modal "Sesi Berakhir" muncul di tengah pemakaian → kembali ke login, **login ulang wajib** |
 | RG-21 | RATE_LIMITED (retry pulih) | ambang **1 req/endpoint** (`POST /admin/set-rate-limit`) → 429 saat simpan jurnal → **retry otomatis klien** (+800ms) → ambang dinaikkan → retry **200**, jurnal tersimpan **tanpa error** |
 | RG-22 | RATE_LIMITED (diblokir) | ambang 1 + window panjang → 429 **×3** (1 + 2 retry) → toast **"Terlalu banyak permintaan"**, jurnal **tidak tersimpan**, sesi tetap aktif |
 
@@ -78,7 +79,7 @@ di **setiap push / pull request** (ubuntu-latest, Node 22):
    - tahap **mock API** (integration, Vitest + Supertest, `mock-api`) — 105 test
      (baseline angka §2.3, error envelope vs katalog §13, seed:extra,
      persistence, TOKEN_EXPIRED, kedaluwarsa TTL terjadwal)
-2. **`e2e`** — E2E Playwright RG-01..RG-22 (chromium + firefox) — 44 test
+2. **`e2e`** — E2E Playwright RG-01..RG-22 (chromium + firefox) — 46 test
 
 Job `test` berjalan **sekaligus** dengan `e2e` (tidak berurutan) — unit &
 integration selesai dalam hitungan detik tanpa tertahan E2E (~4 menit),

@@ -21,6 +21,10 @@
 //                                          (POST /admin/expire-refresh-tokens) →
 //                                          refresh gagal 401 SESSION_EXPIRED →
 //                                          modal "Sesi Berakhir" + login ulang wajib
+//   RG-20b SESSION_EXPIRED (sesi AKTIF)     → SAMA, TANPA reload: expire-tokens +
+//                                          expire-refresh-tokens saat sesi aktif →
+//                                          fetch berikutnya 401 → refresh gagal →
+//                                          modal "Sesi Berakhir" + kembali ke login
 //   RG-21 RATE_LIMITED (retry pulih)          → ambang 1 req/endpoint
 //                                          (POST /admin/set-rate-limit) → 429 →
 //                                          retry otomatis klien → sukses TANPA error
@@ -322,6 +326,70 @@ test('RG-20 SESSION_EXPIRED: refresh token kedaluwarsa di server → modal "Sesi
   // Login ulang → sesi BARU aktif (token baru, dashboard + footer Online)
   await loginViaUi(page)
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
+  await expect(page.locator('footer')).toContainText('Online · Mock API', { timeout: 20_000 })
+  const newTokens = await storedTokens(page)
+  expect(newTokens?.accessToken).toMatch(/^mock\.user-001\./)
+  expect(newTokens?.accessToken).not.toBe(real?.accessToken)
+
+  expect(errors).toEqual([])
+})
+
+test('RG-20b SESSION_EXPIRED (sesi aktif): refresh gagal saat user masih memakai aplikasi → modal "Sesi Berakhir" + kembali ke login TANPA reload', async ({ page }) => {
+  const errors = watchPageErrors(page)
+  await page.addInitScript(() => localStorage.clear())
+
+  // Login normal → sesi AKTIF (access + refresh token valid di memori/store)
+  await page.goto('/')
+  await loginViaUi(page)
+  await expect(page.locator('footer')).toContainText('Online · Mock API', { timeout: 20_000 })
+  const real = await storedTokens(page)
+  expect(real?.accessToken).toMatch(/^mock\.user-001\./)
+
+  // Kedua token di-server di-kedaluwarsakan SAAT SESSION AKTIF (tanpa reload):
+  //   expire-tokens         → access token lama basi (epoch) → fetch berikutnya 401
+  //   expire-refresh-tokens → POST /auth/refresh berikutnya → 401 SESSION_EXPIRED
+  const exp = await page.request.post('http://localhost:4000/admin/expire-tokens')
+  expect(exp.ok()).toBeTruthy()
+  const expRef = await page.request.post('http://localhost:4000/admin/expire-refresh-tokens')
+  expect(expRef.ok()).toBeTruthy()
+
+  // Pantau jaringan: auto-refresh harus DIPICU oleh 401 di sesi aktif, lalu GAGAL
+  const refreshStatuses: number[] = []
+  page.on('response', (res) => {
+    if (res.url().endsWith('/auth/refresh') && res.request().method() === 'POST') refreshStatuses.push(res.status())
+  })
+
+  // Aksi di sesi AKTIF TANPA reload: navigasi ke Buku Besar memicu fetch → token
+  // basi 401 TOKEN_EXPIRED → klien auto-refresh → refresh GAGAL SESSION_EXPIRED
+  // → logout otomatis + modal "Sesi Berakhir" (bukan sekadar error inline)
+  await page.getByRole('button', { name: 'Buku Besar' }).click()
+
+  // Modal "Sesi Berakhir" tampil tanpa reload (role=dialog, aria-label="Sesi berakhir")
+  const dialog = page.getByRole('dialog', { name: 'Sesi berakhir' })
+  await expect(dialog).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText('Sesi Berakhir', { exact: true })).toBeVisible()
+  await expect(page.getByText(/refresh token kedaluwarsa atau tidak valid/)).toBeVisible()
+
+  // Bukti jaringan: refresh dipicu lalu gagal SESSION_EXPIRED di sesi aktif
+  expect(refreshStatuses).toContain(401)
+
+  // Logout otomatis sudah terjadi: token sesi dibersihkan dari localStorage
+  const cleared = await storedTokens(page)
+  expect(cleared?.accessToken).toBeNull()
+
+  // "Masuk kembali" menutup modal → halaman LOGIN (login ulang wajib)
+  await page.getByRole('button', { name: 'Masuk kembali' }).click()
+  await expect(page.getByLabel('Email')).toBeVisible()
+  // Pesan authError di form login (teks sama juga ada di toast → scope form)
+  await expect(page.locator('form').getByText('Sesi berakhir. Silakan login kembali.')).toBeVisible()
+  // Dashboard TIDAK tampil sebelum login ulang
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toHaveCount(0)
+
+  // Login ulang → sesi BARU aktif: token baru tersimpan, rute yang sedang dibuka
+  // (Buku Besar) dipulihkan TANPA reload, data termuat + footer Online.
+  await loginViaUi(page)
+  await expect(page.getByRole('heading', { name: 'Buku Besar' })).toBeVisible()
+  await expect(page.getByText('Saldo Akhir').first()).toBeVisible({ timeout: 15_000 })
   await expect(page.locator('footer')).toContainText('Online · Mock API', { timeout: 20_000 })
   const newTokens = await storedTokens(page)
   expect(newTokens?.accessToken).toMatch(/^mock\.user-001\./)
