@@ -69,6 +69,8 @@ npm install        # install dependensi tiap sub-proyek
 npm run dev        # mock API + Vite sekali jalan (scripts/dev.mjs)
 npm run dev:stop   # hentikan stack — baca .dev/dev.pid, kill seluruh pohon proses
 npm test           # ketiga suite: mock-api + prototype + e2e (paralel)
+npm test -- --only=e2e   # subset: mock-api | prototype | e2e
+#                          (bisa digabung koma: --only=mock-api,prototype)
 ```
 
 `dev.mjs` menulis `.dev/dev.pid` (PID induk + child) saat stack hidup dan

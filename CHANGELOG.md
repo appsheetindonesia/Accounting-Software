@@ -9,8 +9,8 @@ Perubahan sejak tag **v0.1.0-alpha** (commit `9052bf7`).
 ### Ditambahkan
 
 - **Branding PT. Kreasi Inovasi Estetika** di seluruh dokumen & prototipe: palet `#2596BE`, prefix API `AAJ`, email demo `estetikakreasi.co.id`, kop surat & footer dokumen
-- **Alur auth transparan**: polling koneksi (`GET /health` tiap 10 dtk → banner offline hilang otomatis), **TTL token terjadwal** (access token basi → auto-refresh di sesi aktif tanpa reload), logout membersihkan sesi penuh + reset `entityId`
-- **Approval lebih praktis**: reject **wajib isi alasan** (ditampilkan di detail & kartu Dashboard), tombol **"Simpan & Ajukan"** langsung berstatus Menunggu Approval, badge notifikasi di TopBar + tombol **Setujui inline** di halaman Jurnal
+- **Alur auth transparan**: polling koneksi (`GET /health` tiap 10 dtk → banner offline hilang otomatis), **TTL token terjadwal** (access token basi → auto-refresh di sesi aktif tanpa reload), **modal "Sesi Berakhir"** saat refresh gagal (`SESSION_EXPIRED`) — logout otomatis + login ulang wajib (diverifikasi juga di sesi aktif tanpa reload, RG-20b), logout membersihkan sesi penuh + reset `entityId`
+- **Approval lebih praktis**: reject **wajib isi alasan** (ditampilkan di detail & kartu Dashboard), tombol **"Simpan & Ajukan"** langsung berstatus Menunggu Approval, badge notifikasi di TopBar + tombol **Setujui inline** di halaman Jurnal, **pesan khusus `NO_APPROVAL_RIGHTS`** ("Hanya Admin yang dapat menyetujui...") saat viewer/akuntan memaksa approve — bukan error generik (RG-06e)
 - **Export Buku Besar per akun** (PDF/XLSX) + global search + tutup periode — semuanya via UI (RG-03/RG-04/RG-07 pindah dari asersi API)
 - **Skeleton loading** konsisten di semua halaman fetch (Jurnal, Buku Besar, Laba Rugi, Neraca, Neraca Lajur) + unit test `useApiFetch`
 - **QA tooling**: generator hasil test (kolom Pembuat Test & Link Bug, override CLI `--run-date`/`--environment`, preservasi Status + Tanggal Run + Environment per baris, conditional formatting Status di Test Cases & Ringkasan S1), konverter payload TestRail `add_results_for_cases` (`--host`/`--run-id`, auto-konversi setelah regenerasi, contoh `--sample` deterministik dengan seed `SAMPLE_SEED` yang dicetak di output), contoh curl siap salin-tempel di QA Test Plan §8
@@ -31,6 +31,8 @@ Perubahan sejak tag **v0.1.0-alpha** (commit `9052bf7`).
 - **E2E di-shard 2 job paralel** (`--shard=i/2`) di ci.yml & e2e.yml — wall-clock E2E dipotong ±2 menit, artifact per shard (playwright-report/test-results-1/2)
 - **`.gitattributes`** `*.csv text eol=lf` — checkout selalu LF di semua platform (termasuk Windows core.autocrlf), menghilangkan kebutuhan normalisasi di gate
 - **Suite test scripts** diperluas: test otomatis hook pre-commit (SKIP/REJECT/ALLOW di temp repo terisolasi, tanpa commit) + unit test normalisasi line ending `check-qa-sync`
+- **`npm test` mendukung subset suite**: `--only=mock-api|prototype|e2e` (bisa digabung koma, mis. `--only=mock-api,prototype`) — menjalankan satu/dua suite tanpa menulis perintah npm per sub-proyek
+- **E2E baru**: RG-20b (SESSION_EXPIRED di sesi aktif tanpa reload) & RG-06e (NO_APPROVAL_RIGHTS akuntan + role cache stale → toast "Hanya Admin") — 2 browser; **error-envelope.test.js** mem-pin pesan server `NO_APPROVAL_RIGHTS` (API §13) + cek konsistensi pesan khusus UI (dibaca langsung dari `permissions.ts`)
 
 ---
 

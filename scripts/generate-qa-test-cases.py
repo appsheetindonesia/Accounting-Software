@@ -74,7 +74,7 @@ TEST_AUTHOR_DEFAULT = "Tim QA"
 # kode — generator tetap jalan, cukup menampilkan peringatan agar drift jumlah
 # terlihat dan baseline di sini bisa diperbarui bila perubahan disengaja.
 EXPECTED_TC = 137
-EXPECTED_RG = 12
+EXPECTED_RG = 15
 
 # Status yang memicu peringatan S1
 OPEN_STATUSES = {"Not Run", "Fail"}

@@ -314,7 +314,7 @@ Periode: Maret 2026 = aktif & terbuka; Januari & Februari 2026 = tertutup.
 
 ## 4. Skenario Regresi (di jalankan setiap sprint sebelum release)
 
-> Setiap skenario berakhir dengan **verifikasi keseimbangan buku** — aset = utang + modal + laba, dan trial balance seimbang. Nama file: `e2e/regression.spec.ts` (Playwright).
+> Setiap skenario berakhir dengan **verifikasi keseimbangan buku** — aset = utang + modal + laba, dan trial balance seimbang. Nama file: `e2e/regression.spec.ts` (RG-01..12) & `e2e/auth-flow.spec.ts` (RG-13..22, alur auth/refresh — tanpa verifikasi keseimbangan, fokus sesi & token) (Playwright).
 
 | ID | Skenario | Langkah Inti | Verifikasi Kunci |
 |----|----------|--------------|------------------|
@@ -330,6 +330,9 @@ Periode: Maret 2026 = aktif & terbuka; Januari & Februari 2026 = tertutup.
 | **RG-10** | Restart & persistensi | Posting jurnal → restart server | Data kembali ke seed (in-memory) — **dokumentasikan**; tidak ada error UI setelah restart |
 | **RG-11** | Regresi lintas browser | Jalankan suite E2E di Chrome + Firefox | Tidak ada perbedaan perilaku; layout mobile 320px OK |
 | **RG-12** | Error handling | Server mati → semua modul | Banner error + "Muat Ulang"; tidak ada crash/halaman putih |
+| **RG-20** | SESSION_EXPIRED — refresh token kedaluwarsa di server | Login → `POST /admin/expire-refresh-tokens` (semua refresh token basi) + akses token dipaksa basi → pemicu fetch/reload → auto-refresh gagal 401 `SESSION_EXPIRED` → modal "Sesi Berakhir" → "Masuk kembali" → login ulang | Modal "Sesi Berakhir" muncul (bukan sekadar error inline); logout otomatis — token dibersihkan dari localStorage; login ulang wajib → sesi baru dengan token baru |
+| **RG-21** | RATE_LIMITED — retry otomatis pulih | `POST /admin/set-rate-limit` (ambang 1 req/endpoint) → simpan jurnal #1 (200) → simpan jurnal #2 kena 429 → klien retry otomatis (jeda `Retry-After`, cap 5 dtk) → ambang dinaikkan → retry berhasil | Jurnal #1 & #2 tersimpan (8 seed + 2); TIDAK ada toast "Terlalu banyak permintaan"; bukti jaringan 429 → retry 201; sesi tetap aktif |
+| **RG-22** | RATE_LIMITED — tetap diblokir | Ambang 1 + window panjang → simpan #1 (200) → simpan #2 kena 429 ×3 (1 asli + 2 retry, semua 429) | Toast "Terlalu banyak permintaan" tampil; jurnal #2 TIDAK tersimpan (daftar tetap 9 entri); sesi tetap aktif (429 ≠ logout) |
 
 **Smoke test cepat (setiap deploy):** login → dashboard 4 kartu → 1 posting → neraca seimbang → export PDF.
 
