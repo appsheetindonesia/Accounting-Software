@@ -98,7 +98,7 @@ jobs:
 
       - name: Upload hasil test JUnit (saat gagal)
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.dir }}/test-results/
@@ -107,7 +107,7 @@ jobs:
 
       - name: Upload laporan coverage (${{ matrix.dir }})
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ matrix.artifact }}-coverage
           path: ${{ matrix.dir }}/coverage/
@@ -171,7 +171,7 @@ jobs:
 
       - name: Upload Playwright report (shard ${{ matrix.shard }})
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: playwright-report-${{ matrix.shard }}
           path: e2e/playwright-report/
@@ -179,7 +179,7 @@ jobs:
 
       - name: Upload test results (shard ${{ matrix.shard }})
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: test-results-${{ matrix.shard }}
           path: e2e/test-results/
