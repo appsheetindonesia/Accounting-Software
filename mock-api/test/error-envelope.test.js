@@ -17,6 +17,9 @@
 // ============================================================
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import request from 'supertest'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import app from '../src/server.js'
 
 const USERS = {
@@ -28,6 +31,33 @@ const USERS = {
 const tokens = {}
 // Semua kode error yang berhasil dipicu di file ini (untuk cakupan katalog)
 const TRIGGERED = new Set()
+
+// ------------------------------------------------------------
+// KONTRAK NO_APPROVAL_RIGHTS (403) — sinkronisasi pesan server vs UI.
+//
+// Server (API §13): 403 + NO_APPROVAL_RIGHTS + pesan "Role Anda tidak
+// memiliki izin approve" — kontrak API, INFORMATIF untuk konsumen API.
+//
+// UI (prototype): klien TIDAK menampilkan pesan server mentah — ia memetakan
+// KODE NO_APPROVAL_RIGHTS ke pesan khususnya sendiri (NO_APPROVAL_RIGHTS_MESSAGE
+// di prototype-accounting/src/lib/permissions.ts): "Hanya Admin yang dapat
+// menyetujui atau menolak jurnal. Hubungi admin Anda untuk persetujuan."
+// Kedua pesan sengaja BEDA: server = kontrak API, UI = pesan peran yang
+// membantu. Konsistensi end-to-end (kode yang sama → toast UI) diverifikasi
+// integration/approval-flow.test.ts, useStore.test.ts, dan E2E RG-06e.
+//
+// Agar tidak ada dua sumber kebenaran, nilai UI dibaca LANGSUNG dari file
+// prototype di bawah — jika pesan UI berubah, test ini gagal dan memaksa
+// sinkronisasi kedua sisi secara sadar.
+// ------------------------------------------------------------
+const NO_APPROVAL_RIGHTS_SERVER_MSG = 'Role Anda tidak memiliki izin approve'
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const UI_PERMS_PATH = path.resolve(__dirname, '../../prototype-accounting/src/lib/permissions.ts')
+const uiPermsSrc = fs.readFileSync(UI_PERMS_PATH, 'utf8')
+const NO_APPROVAL_RIGHTS_UI_MSG = uiPermsSrc.match(/NO_APPROVAL_RIGHTS_MESSAGE\s*=\s*'([^']+)'/)?.[1]
+if (!NO_APPROVAL_RIGHTS_UI_MSG) {
+  throw new Error(`Tidak dapat membaca NO_APPROVAL_RIGHTS_MESSAGE dari ${UI_PERMS_PATH}`)
+}
 
 beforeAll(async () => {
   for (const [role, creds] of Object.entries(USERS)) {
@@ -155,11 +185,33 @@ describe('403 — Forbidden (role tanpa izin, API §13)', () => {
   it('accountant approve → NO_APPROVAL_RIGHTS (tidak punya journal.approve)', async () => {
     const res = await request(app).post('/journals/JNL-2026-03-006/approve').set(auth('accountant'))
     expectError(res, 403, 'NO_APPROVAL_RIGHTS')
+    // Pesan server = katalog API §13 (bukan FORBIDDEN generik) — UI menampilkan
+    // pesan khususnya sendiri (lihat blok KONTRAK di atas), jadi pesan server
+    // harus tetap stabil sebagai kontrak API.
+    expect(res.body.error.message).toBe(NO_APPROVAL_RIGHTS_SERVER_MSG)
+    expect(res.body.error.message).not.toBe('Tidak memiliki akses')
   })
 
   it('viewer reject → NO_APPROVAL_RIGHTS (tidak punya journal.approve)', async () => {
     const res = await request(app).post('/journals/JNL-2026-03-006/reject').set(auth('viewer')).send({ reason: 'x' })
     expectError(res, 403, 'NO_APPROVAL_RIGHTS')
+    expect(res.body.error.message).toBe(NO_APPROVAL_RIGHTS_SERVER_MSG)
+  })
+
+  it('NO_APPROVAL_RIGHTS — pesan khusus UI konsisten dengan kontrak server (bukan mirror mentah)', async () => {
+    // Server: kode + pesan kontrak API §13.
+    const res = await request(app).post('/journals/JNL-2026-03-006/approve').set(auth('accountant'))
+    expectError(res, 403, 'NO_APPROVAL_RIGHTS')
+    expect(res.body.error.message).toBe(NO_APPROVAL_RIGHTS_SERVER_MSG)
+    // UI: pesan KHUSUS yang ditampilkan toast (dibaca langsung dari
+    // prototype-accounting/src/lib/permissions.ts) — sengaja lebih kaya
+    // daripada pesan server; keduanya terikat oleh KODE yang sama.
+    expect(NO_APPROVAL_RIGHTS_UI_MSG).toContain('Hanya Admin yang dapat menyetujui')
+    expect(NO_APPROVAL_RIGHTS_UI_MSG).toContain('Hubungi admin Anda')
+    // Kedua pesan memang berbeda secara desain — pastikan tidak tersilap
+    // (UI tidak boleh menampilkan pesan server mentah, server tidak boleh
+    // memakai pesan UI).
+    expect(NO_APPROVAL_RIGHTS_UI_MSG).not.toBe(NO_APPROVAL_RIGHTS_SERVER_MSG)
   })
 })
 
@@ -519,6 +571,71 @@ describe('Export Buku Besar per akun — GET /exports/ledger/:accountId', () => 
 })
 
 // ------------------------------------------------------------
+describe('Buku Besar dengan rentang — GET /ledger/accounts/:id?start=&end=', () => {
+  // Baseline 1-1100 Kas Besar Maret: 4 jurnal (03-05 +25, 03-07 −10,
+  // 03-10 −3, 03-12 +15), opening 60jt → closing 87jt. Rentang custom harus
+  // menghitung saldo atas rentang tersebut (konsisten dengan export).
+  it('rentang 2026-03-06..2026-03-11 → opening 85jt (0001 dihitung sebagai saldo awal), entries 0002 & 0003, closing 72jt', async () => {
+    const res = await request(app)
+      .get('/ledger/accounts/1-1100')
+      .query({ start: '2026-03-06', end: '2026-03-11' })
+      .set(auth())
+    expect(res.status).toBe(200)
+    const d = res.body.data
+    expect(d.period).toBe('2026-03-06..2026-03-11')
+    // 03-05 (+25) terjadi SEBELUM rentang → masuk saldo awal: 60 + 25 = 85
+    expect(d.openingBalance).toBe(85_000_000)
+    expect(d.entries.map((e) => e.reference)).toEqual(['BKK-2026-03-0002', 'BKK-2026-03-0003'])
+    expect(d.entries.map((e) => e.balance)).toEqual([75_000_000, 72_000_000])
+    expect(d.closingBalance).toBe(72_000_000)
+  })
+
+  it('rentang penuh bulan (03-01..03-31) → sama dengan periode bulanan (87jt, 4 entries)', async () => {
+    const res = await request(app)
+      .get('/ledger/accounts/1-1100')
+      .query({ start: '2026-03-01', end: '2026-03-31' })
+      .set(auth())
+    expect(res.status).toBe(200)
+    const d = res.body.data
+    expect(d.period).toBe('2026-03-01..2026-03-31')
+    expect(d.openingBalance).toBe(60_000_000)
+    expect(d.entries).toHaveLength(4)
+    expect(d.closingBalance).toBe(87_000_000)
+  })
+
+  it('tanpa start/end → perilaku lama (periode bulanan default 2026-03)', async () => {
+    const res = await request(app).get('/ledger/accounts/1-1100').set(auth())
+    expect(res.status).toBe(200)
+    expect(res.body.data.period).toBe('2026-03')
+    expect(res.body.data.closingBalance).toBe(87_000_000)
+  })
+
+  it('hanya start tanpa end → INVALID_DATE_RANGE', async () => {
+    const res = await request(app)
+      .get('/ledger/accounts/1-1100')
+      .query({ start: '2026-03-01' })
+      .set(auth())
+    expectError(res, 422, 'INVALID_DATE_RANGE')
+  })
+
+  it('start > end → INVALID_DATE_RANGE', async () => {
+    const res = await request(app)
+      .get('/ledger/accounts/1-1100')
+      .query({ start: '2026-03-31', end: '2026-03-01' })
+      .set(auth())
+    expectError(res, 422, 'INVALID_DATE_RANGE')
+  })
+
+  it('format tanggal salah → INVALID_DATE_RANGE', async () => {
+    const res = await request(app)
+      .get('/ledger/accounts/1-1100')
+      .query({ start: '01/03/2026', end: '2026-03-15' })
+      .set(auth())
+    expectError(res, 422, 'INVALID_DATE_RANGE')
+  })
+})
+
+// ------------------------------------------------------------
 describe('Pencarian global — GET /search (jurnal, akun, laporan, halaman)', () => {
   it('query laporan → hasil tipe report (Arus Kas, Neraca, Laba Rugi)', async () => {
     const res = await request(app).get('/search').query({ q: 'arus kas' }).set(auth())
@@ -693,6 +810,7 @@ describe('Kode error katalog yang baru terimplementasi (API §13)', () => {
     expect(create.status).toBe(201)
     const res = await request(app).post(`/journals/${create.body.data.id}/approve`).set(auth('viewer'))
     expectError(res, 403, 'NO_APPROVAL_RIGHTS')
+    expect(res.body.error.message).toBe(NO_APPROVAL_RIGHTS_SERVER_MSG)
   })
 
   it('error server tak terduga → INTERNAL_ERROR (500) dengan kode', async () => {

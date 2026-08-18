@@ -43,6 +43,10 @@ export const canApproveJournal = (role: string | null | undefined): boolean => c
 // Pesan khusus yang ditampilkan UI saat server menolak approve/reject dengan
 // NO_APPROVAL_RIGHTS (403) — "role tidak punya izin approve". Bukan error
 // generik: memberitahu siapa yang berhak + langkah berikutnya (hubungi admin).
-// Mirror pesan mock API (mock-api/src/server.js: requireApprovalRights).
+// Sengaja BUKAN mirror pesan server (mock-api/src/server.js: requireApprovalRights,
+// API §13: "Role Anda tidak memiliki izin approve") — pesan server adalah kontrak
+// API, pesan ini adalah teks yang DITAMPILKAN UI (toast). Keduanya terikat oleh
+// KODE NO_APPROVAL_RIGHTS yang sama; konsistensinya diverifikasi oleh
+// mock-api/test/error-envelope.test.js (membaca konstanta ini langsung) + E2E RG-06e.
 export const NO_APPROVAL_RIGHTS_MESSAGE =
   'Hanya Admin yang dapat menyetujui atau menolak jurnal. Hubungi admin Anda untuk persetujuan.'
