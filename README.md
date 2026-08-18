@@ -6,7 +6,7 @@ Sistem akuntansi **PT. Kreasi Inovasi Estetika** — prototipe web (React + Vite
 
 [![CI (Unit + Integration + E2E)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/ci.yml/badge.svg)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/ci.yml)
 [![Build & Deploy prototipe ke GitHub Pages](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/pages.yml/badge.svg)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/pages.yml)
-[![Verifikasi penuh (unit + e2e, manual)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/e2e.yml/badge.svg)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/e2e.yml)
+[![Verifikasi penuh (unit + e2e)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/e2e.yml/badge.svg)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/e2e.yml)
 
 > Repo ini privat — badge hanya tampil bagi pengguna yang punya akses.
 
@@ -34,7 +34,7 @@ agar debug cukup mengunduh satu artifact tanpa membuka ulang seluruh log.
 | `e2e/` | E2E Playwright RG-01..RG-22 (chromium + firefox) |
 | `scripts/` | Skrip dev terpadu (`dev.mjs` + `dev-stop.mjs`) & agregat test (`test-all.mjs`) |
 | Dokumen `*.md` | Semua spesifikasi — lihat [Dokumentasi](#dokumentasi) |
-| `.github/workflows/` | CI (`ci.yml`), verifikasi manual (`e2e.yml`), deploy GitHub Pages (`pages.yml`) |
+| `.github/workflows/` | CI (`ci.yml`), verifikasi penuh (`e2e.yml`), deploy GitHub Pages (`pages.yml`) |
 
 ## Dokumentasi
 
@@ -76,6 +76,27 @@ sekaligus tanpa harus menebak PID lewat netstat/tasklist. Varian seed:
 persistence aktif), `dev:no-persist` (in-memory, reset tiap boot).
 
 Detail lebih lanjut ada di README masing-masing sub-proyek (`mock-api/`, `prototype-accounting/`, `e2e/`).
+
+## Berkontribusi (konvensi branch & CI)
+
+Nama branch mengikuti konvensi berikut:
+
+| Prefix | Tujuan | Contoh |
+|--------|--------|--------|
+| `fitur/*` | Fitur baru (feature) | `fitur/export-buku-besar` |
+| `fix/*` | Perbaikan bug | `fix/token-refresh` |
+
+Alur kerja yang diharapkan:
+
+1. **Branch dari `main`** dengan prefix di atas → push → CI hanya menjalankan
+   unit + integration (cepat) via `ci.yml`; E2E penuh **tidak** berjalan.
+2. **Buka pull request** ke `main` → `ci.yml` **dan** `e2e.yml` menjalankan
+   E2E penuh (RG-01..RG-22, chromium + firefox) + gate sinkronisasi QA.
+3. **Merge ke `main`** → kedua workflow berjalan sekali lagi memvalidasi batch
+   yang masuk; `pages.yml` men-deploy prototipe ke GitHub Pages.
+
+Skema pemicu ini hemat waktu CI: E2E (~3 menit × 2 browser) hanya untuk jalur
+main/PR yang butuh verifikasi penuh, bukan tiap push branch fitur.
 
 ## Pre-commit QA (hook lokal)
 

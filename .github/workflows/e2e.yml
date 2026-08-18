@@ -1,6 +1,6 @@
 # ============================================================
-# Verifikasi penuh (manual) — Appsheet Accounting Journal
-# Tiga job PARALEL saat di-dispatch manual:
+# Verifikasi penuh — Appsheet Accounting Journal
+# Tiga job PARALEL:
 #   1. unit    — unit + integration test PROTOTIPE (Vitest + MSW) dan
 #                integration test MOCK API (Vitest + Supertest)
 #   2. e2e     — suite Playwright RG-01..RG-19 (chromium + firefox)
@@ -8,18 +8,24 @@
 #   3. qa-sync — gate sinkronisasi artefak QA: CSV/XLSX harus sinkron
 #                dengan QA Test Plan (scripts/check-qa-sync.py).
 #
-# CATATAN: semua ini juga dijalankan OTOMATIS di setiap push/PR oleh
-# workflow terpadu `.github/workflows/ci.yml` (test matrix
-# unit/integration → e2e). Workflow ini untuk menjalankan verifikasi
-# penuh secara manual tanpa harus menunggu pipeline push.
+# Pemicu (skema sama dengan job e2e di ci.yml — E2E hanya untuk jalur
+# yang benar-benar butuh verifikasi penuh):
+#   • push ke main          — setiap batch fitur/fix yang masuk main
+#   • pull request          — verifikasi sebelum merge
+#   • workflow_dispatch     — manual kapan saja tanpa harus push
+# Push ke branch fitur (`fitur/*`, `fix/*`) TIDAK memicu workflow ini —
+# cukup unit+integration dari ci.yml yang jauh lebih cepat.
 #
 # Playwright otomatis menyalakan kedua server lewat konfigurasi
 # `webServer` di e2e/playwright.config.ts (CI=true → reuseExistingServer
 # dimatikan, server selalu di-start fresh oleh runner).
 # ============================================================
-name: Verifikasi penuh (unit + e2e, manual)
+name: Verifikasi penuh (unit + e2e)
 
 on:
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 jobs:
