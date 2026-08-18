@@ -13,12 +13,13 @@ Perubahan sejak tag **v0.1.0-alpha** (commit `9052bf7`).
 - **Approval lebih praktis**: reject **wajib isi alasan** (ditampilkan di detail & kartu Dashboard), tombol **"Simpan & Ajukan"** langsung berstatus Menunggu Approval, badge notifikasi di TopBar + tombol **Setujui inline** di halaman Jurnal
 - **Export Buku Besar per akun** (PDF/XLSX) + global search + tutup periode — semuanya via UI (RG-03/RG-04/RG-07 pindah dari asersi API)
 - **Skeleton loading** konsisten di semua halaman fetch (Jurnal, Buku Besar, Laba Rugi, Neraca, Neraca Lajur) + unit test `useApiFetch`
-- **QA tooling**: generator hasil test (kolom Pembuat Test & Link Bug, override CLI `--run-date`/`--environment`, preservasi Status + Tanggal Run + Environment per baris, conditional formatting Status di Test Cases & Ringkasan S1), konverter payload TestRail `add_results_for_cases` (`--host`/`--run-id`, auto-konversi setelah regenerasi, contoh `--sample` deterministik), contoh curl siap salin-tempel di QA Test Plan §8
+- **QA tooling**: generator hasil test (kolom Pembuat Test & Link Bug, override CLI `--run-date`/`--environment`, preservasi Status + Tanggal Run + Environment per baris, conditional formatting Status di Test Cases & Ringkasan S1), konverter payload TestRail `add_results_for_cases` (`--host`/`--run-id`, auto-konversi setelah regenerasi, contoh `--sample` deterministik dengan seed `SAMPLE_SEED` yang dicetak di output), contoh curl siap salin-tempel di QA Test Plan §8
+- **Generator QA tahan pertumbuhan**: jumlah TC/RG bukan lagi asersi keras — baseline `EXPECTED_TC`/`EXPECTED_RG` hanya memunculkan `[WARN]`, jadi penambahan test case ke QA Test Plan tidak memaksa edit kode generator
 - **Mock API**: 6 kode error katalog (SESSION_EXPIRED, FILE_TOO_LARGE, UNSUPPORTED_FILE_TYPE, RATE_LIMITED, NO_APPROVAL_RIGHTS, INTERNAL_ERROR) + **rate limit 30 req/menit** (API §1.5)
 
 ### Diperbaiki
 
-- Gate `qa-sync` gagal di CI karena **line ending CRLF vs LF** — generator kini menulis LF deterministik, perbandingan CSV dinormalisasi (line ending ≠ perubahan konten)
+- Gate `qa-sync` gagal di CI karena **line ending CRLF vs LF** — generator menulis LF deterministik, `.gitattributes` (`*.csv text eol=lf`) kini menjamin checkout selalu LF di semua platform, normalisasi CSV di gate dipertahankan sebagai safety net (line ending ≠ perubahan konten)
 - Fix tipe `tsc -b` (`useStore.closePeriod` implicit any, duplikat `modalOpen`, tipe `as const` di test) — typecheck asli proyek kini bersih
 
 ### CI & Infrastruktur
@@ -27,6 +28,9 @@ Perubahan sejak tag **v0.1.0-alpha** (commit `9052bf7`).
 - Job **unit** di e2e.yml (manual) + **gate qa-sync** di ci.yml (setiap push/PR): CSV/XLSX harus sinkron dengan QA Test Plan
 - `.npmrc` (`package-lock=false`) mencegah package-lock di root; `.gitignore` log & artefak runtime untuk `e2e/` & `prototype-accounting/`
 - Badge status CI di README
+- **E2E di-shard 2 job paralel** (`--shard=i/2`) di ci.yml & e2e.yml — wall-clock E2E dipotong ±2 menit, artifact per shard (playwright-report/test-results-1/2)
+- **`.gitattributes`** `*.csv text eol=lf` — checkout selalu LF di semua platform (termasuk Windows core.autocrlf), menghilangkan kebutuhan normalisasi di gate
+- **Suite test scripts** diperluas: test otomatis hook pre-commit (SKIP/REJECT/ALLOW di temp repo terisolasi, tanpa commit) + unit test normalisasi line ending `check-qa-sync`
 
 ---
 
