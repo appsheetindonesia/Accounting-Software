@@ -41,8 +41,37 @@ on:
   workflow_dispatch:
 
 jobs:
+  # ----------------------------------------------------------------
+  # Guard: nama branch harus sesuai konvensi (fitur/* atau fix/*)
+  # saat push ke branch selain main. PR dan workflow_dispatch di-skip.
+  # ----------------------------------------------------------------
+  branch-guard:
+    name: 'Validasi nama branch (fitur/* atau fix/*)'
+    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Cek konvensi nama branch
+        run: |
+          BRANCH='${{ github.ref_name }}'
+          if [[ "$BRANCH" =~ ^(fitur\/[a-z0-9._-]+|fix\/[a-z0-9._-]+)$ ]]; then
+            echo "✅ Branch '$BRANCH' sesuai konvensi (fitur/* atau fix/*)"
+          else
+            echo "❌ Branch '$BRANCH' tidak sesuai konvensi"
+            echo ""
+            echo "Konvensi nama branch yang diizinkan:"
+            echo "  • fitur/<nama-fitur>   — fitur baru"
+            echo "  • fix/<nama-bug>       — perbaikan bug"
+            echo "  • main                 — branch utama (push langsung)"
+            echo ""
+            echo "Contoh: fitur/export-pdf, fix/subtitle-undefined"
+            exit 1
+          fi
+
   test:
     name: 'Unit & Integration test — ${{ matrix.tahap }}'
+    needs: branch-guard
+    if: always() && (needs.branch-guard.result == 'success' || needs.branch-guard.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
@@ -121,10 +150,13 @@ jobs:
     # Hanya berjalan di jalur yang butuh verifikasi penuh — push ke main,
     # pull request, dan pemicu manual. Push ke branch fitur cukup dengan
     # unit+integration (job test) yang jauh lebih cepat.
+    needs: branch-guard
     if: |
-      github.event_name == 'pull_request' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      always() &&
+      (needs.branch-guard.result == 'success' || needs.branch-guard.result == 'skipped') &&
+      (github.event_name == 'pull_request' ||
+       github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'push' && github.ref == 'refs/heads/main'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -187,6 +219,8 @@ jobs:
 
   qa-sync:
     name: QA artifacts sinkron dengan QA Test Plan
+    needs: branch-guard
+    if: always() && (needs.branch-guard.result == 'success' || needs.branch-guard.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
