@@ -1,24 +1,22 @@
 # ============================================================
-# Release Draft otomatis (tag v*)
+# Release otomatis (tag v*)
 # Setiap kali tag rilis (v0.4.0, v0.4.1, ...) di-push ke origin,
-# workflow ini langsung membuat DRAFT GitHub Release untuk tag itu
-# — catatan rilis diambil VERBATIM dari pesan tag (annotated tag,
-# pola rilis repo ini: judul tag + body berisi fitur/perbaikan/test).
+# workflow ini langsung membuat GitHub Release untuk tag itu.
 #
-# Draft (bukan publish) agar ada momen review manual sebelum rilis
-# dipublikasikan — konsisten dengan alur rilis yang selama ini manual
-# via API/gh. Begitu draft disetujui, tinggal "Publish release" di
-# halaman GitHub (tidak perlu mengedit catatan lagi).
+# Step pembuatan release memanggil scripts/create-release.mjs —
+# SATU SUMBER KEBENARAN untuk logika release (dipakai juga untuk
+# rilis manual): catatan diambil VERBATIM dari pesan annotated tag
+# (subject → judul, body → isi), idempoten (release yang sudah ada
+# di-update, bukan duplikat), dan membuat release PUBLISHED
+# (draft: false). Kalau mau momen review sebelum publish, buat draft
+# manual: `npm run release -- <tag> --draft` (workflow ini tetap
+# mem-publish karena tag v* di-push = niat merilis).
 #
-# Judul release = baris pertama pesan tag (subject), body = sisa
-# pesan (contents:body) — sama persis dengan catatan yang dipakai
-# saat tag dibuat, jadi tidak ada dua sumber kebenaran.
-#
-# softprops/action-gh-release@v3 berjalan di runtime Node 24
-# (v2.6.2 memakai Node 20 yang sudah deprecated) — konsisten dengan
-# action lain di repo ini (checkout@v5, setup-node@v5).
+# Script butuh: objek tag lokal (fetch-depth 0), Node (setup-node),
+# dan token → di-resolve otomatis dari env GH_TOKEN/GITHUB_TOKEN
+# (di-set ke github.token di sini).
 # ============================================================
-name: Release Draft otomatis (tag v*)
+name: Release otomatis (tag v*)
 
 on:
   push:
@@ -31,7 +29,7 @@ permissions:
 
 jobs:
   release:
-    name: Buat draft GitHub Release
+    name: Buat GitHub Release
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -42,20 +40,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Pesan tag → file catatan rilis + judul release (baris pertama).
-      # %(contents:subject) = judul tag; %(contents:body) = isi catatan.
-      # Lightweight tag (tanpa pesan) → catatan kosong, draft tetap dibuat.
-      - name: Ekstrak judul & catatan rilis dari pesan tag
-        id: notes
-        run: |
-          git for-each-ref refs/tags/${GITHUB_REF_NAME} --format='%(contents:subject)' > release-title.txt
-          git for-each-ref refs/tags/${GITHUB_REF_NAME} --format='%(contents:body)' > release-notes.md
-          echo "title=$(cat release-title.txt)" >> "$GITHUB_OUTPUT"
-
-      - name: Buat draft GitHub Release
-        uses: softprops/action-gh-release@v3
+      - name: Setup Node 24
+        uses: actions/setup-node@v5
         with:
-          draft: true
-          name: ${{ steps.notes.outputs.title }}
-          body_path: release-notes.md
-          generate_release_notes: false # catatan dari pesan tag, bukan auto-generated
+          node-version: 24
+
+      # GITHUB_REF_NAME = nama tag (mis. v0.4.2) pada push tag.
+      # Script: baca catatan dari tag → POST/PATCH release via REST API.
+      - name: Buat GitHub Release dari annotated tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/create-release.mjs ${GITHUB_REF_NAME}
