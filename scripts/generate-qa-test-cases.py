@@ -66,6 +66,10 @@ PLAN = ROOT / "QA Test Plan - Accounting.md"
 # karena ganti tanggal.
 RUN_DATE_DEFAULT = os.environ.get("QA_RUN_DATE") or date.today().isoformat()
 ENVIRONMENT_DEFAULT = os.environ.get("QA_ENVIRONMENT") or "QA Local (mock API)"
+# Saat --run-date di-override via CLI, paksa semua baris memakai tanggal baru
+# (bukan hanya baris kosong). Ini memastikan check-qa-sync tidak gagal karena
+# perbedaan tanggal antara tracker on-disk dan hasil regenerasi.
+_OVERRIDE_RUN_DATE = False
 # Nilai default kolom "Pembuat Test" (bisa diedit per baris di Excel).
 TEST_AUTHOR_DEFAULT = "Tim QA"
 
@@ -373,7 +377,12 @@ def enrich(records: list[dict],
         # ENVIRONMENT). Ini membuat regenerasi tidak menghapus data eksekusi.
         meta = existing.get(r["id"], {})
         r["status"] = meta.get("Status", "Not Run")
-        r["run_date"] = meta.get("Tanggal Run", RUN_DATE_DEFAULT)
+        # Saat --run-date CLI, paksa tanggal baru di semua baris;
+        # tanpa override, pertahankan tanggal lama dari output sebelumnya.
+        if _OVERRIDE_RUN_DATE:
+            r["run_date"] = RUN_DATE_DEFAULT
+        else:
+            r["run_date"] = meta.get("Tanggal Run", RUN_DATE_DEFAULT)
         r["environment"] = meta.get("Environment", ENVIRONMENT_DEFAULT)
         # Pembuat test — default tim QA, bisa diedit per baris di Excel
         r["author"] = TEST_AUTHOR_DEFAULT
@@ -838,9 +847,10 @@ def main() -> None:
 
     # Terapkan override CLI ke nilai default (berlaku untuk seluruh output;
     # disimpan di module global agar dibaca enrich()/write_* saat dipanggil).
-    global RUN_DATE_DEFAULT, ENVIRONMENT_DEFAULT
+    global RUN_DATE_DEFAULT, ENVIRONMENT_DEFAULT, _OVERRIDE_RUN_DATE
     if args.run_date:
         RUN_DATE_DEFAULT = args.run_date
+        _OVERRIDE_RUN_DATE = True
     if args.environment:
         ENVIRONMENT_DEFAULT = args.environment
 
