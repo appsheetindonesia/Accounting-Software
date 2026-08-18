@@ -10,8 +10,18 @@
 #   mereferensikan aset dengan base itu SEBELUM artifact di-upload
 #   (base salah → aset 404 setelah deploy; guard menghentikan build).
 #
-# Persyaratan sekali-setel di GitHub:
-#   Settings → Pages → Source: "GitHub Actions"
+# Ketahanan terhadap Pages yang belum diaktifkan:
+#   - configure-pages memakai enablement: true (coba aktifkan situs
+#     otomatis) + continue-on-error: true — bila GITHUB_TOKEN tidak
+#     berwenang mengaktifkan (mis. repo private), build TIDAK gagal;
+#     artifact tetap ter-upload untuk inspeksi.
+#   - Job deploy punya pre-flight: cek situs via gh api; bila belum
+#     aktif, deploy di-skip dengan peringatan yang jelas (bukan error
+#     cryptic "Resource not accessible by integration").
+#   Setelah situs diaktifkan sekali (Settings → Pages → Source:
+#   "GitHub Actions"), push berikutnya langsung deploy.
+#
+# Semua action memakai versi runtime Node 24 (wajib sejak Jun 2026).
 # ============================================================
 name: Build & Deploy prototipe ke GitHub Pages
 
@@ -40,20 +50,24 @@ jobs:
       PAGES_BASE: /${{ github.event.repository.name }}/
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      - name: Setup Node 22 (Vite 8 butuh ^20.19 || >=22.12)
-        uses: actions/setup-node@v4
+      - name: Setup Node 24 (Vite 8 butuh ^20.19 || >=22.12)
+        uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           cache-dependency-path: prototype-accounting/package-lock.json
 
       - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
+        continue-on-error: true # Pages belum aktif & token tak bisa mengaktifkan → jangan gagalkan build
         with:
           # Aktifkan fitur Pages bila sebelumnya nonaktif (default true,
           # eksplisit di sini agar langkah tidak bergantung pada default).
+          # Gagal saat GITHUB_TOKEN tidak berwenang (repo private) — di-
+          # toleransi lewat continue-on-error; job deploy yang memutuskan
+          # skip/deploy via pre-flight gh api.
           enablement: true
 
       - name: Install dependencies
@@ -79,7 +93,7 @@ jobs:
           echo "OK — aset direferensikan dengan base Pages ($PAGES_BASE)"
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: prototype-accounting/dist
 
@@ -92,6 +106,28 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # Pre-flight: pastikan situs Pages benar-benar aktif sebelum deploy.
+      # Bila belum (mis. repo private — GITHUB_TOKEN tidak berwenang
+      # mengaktifkan Pages dari Actions), workflow TIDAK gagal: deploy
+      # di-skip dengan peringatan yang jelas, artifact tetap tersimpan.
+      # Begitu situs diaktifkan, push berikutnya langsung deploy.
+      - name: Cek status GitHub Pages
+        id: pages-check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          gh api "repos/${{ github.repository }}/pages" >/dev/null 2>&1
+          PAGES_OK=$?
+          set -e
+          if [ "$PAGES_OK" -ne 0 ]; then
+            echo "::warning::GitHub Pages belum diaktifkan — deploy di-skip (artifact build tetap tersimpan). Aktifkan di Settings → Pages → Source: 'GitHub Actions' lalu push ulang."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Deploy
         id: deployment
-        uses: actions/deploy-pages@v4
+        if: steps.pages-check.outputs.enabled == 'true'
+        uses: actions/deploy-pages@v5
