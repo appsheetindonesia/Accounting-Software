@@ -81,7 +81,7 @@ export default function GlobalSearch() {
     return arr
   }, [journals, accounts, reports, pages])
 
-  const select = (type: 'journal' | 'account', id: string) => {
+  const select = (type: 'journal' | 'account' | 'report' | 'page', id: string) => {
     setOpen(false)
     setQuery('')
     setResults([])

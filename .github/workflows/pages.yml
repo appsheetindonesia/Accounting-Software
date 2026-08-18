@@ -10,16 +10,17 @@
 #   mereferensikan aset dengan base itu SEBELUM artifact di-upload
 #   (base salah → aset 404 setelah deploy; guard menghentikan build).
 #
-# Ketahanan terhadap Pages yang belum diaktifkan:
-#   - configure-pages memakai enablement: true (coba aktifkan situs
-#     otomatis) + continue-on-error: true — bila GITHUB_TOKEN tidak
-#     berwenang mengaktifkan (mis. repo private), build TIDAK gagal;
-#     artifact tetap ter-upload untuk inspeksi.
-#   - Job deploy punya pre-flight: cek situs via gh api; bila belum
-#     aktif, deploy di-skip dengan peringatan yang jelas (bukan error
-#     cryptic "Resource not accessible by integration").
-#   Setelah situs diaktifkan sekali (Settings → Pages → Source:
-#   "GitHub Actions"), push berikutnya langsung deploy.
+# STATUS JOB DEPLOY: DINONAKTIFKAN SEMENTARA (if: false) sampai GitHub
+# Pages diaktifkan di Settings → Pages → Source: "GitHub Actions" —
+# repo private plan Free tidak bisa diaktifkan dari Actions (GITHUB_TOKEN
+# tidak berwenang), jadi workflow ini berjalan BUILD-ONLY agar tidak
+# selalu failure. Setelah Pages aktif, hapus `if: false` di job deploy;
+# pre-flight gh api di dalamnya akan langsung mengizinkan deploy.
+#
+# Catatan: kegagalan run Pages sebelumnya BUKAN karena Pages belum aktif
+# (pre-flight skip sudah bekerja) melainkan step Build yang gagal karena
+# error tipe tsc -b (fix: GlobalSearch select type + 2 test file) —
+# sudah diperbaiki, build kini lulus.
 #
 # Semua action memakai versi runtime Node 24 (wajib sejak Jun 2026).
 # ============================================================
@@ -100,6 +101,10 @@ jobs:
   deploy:
     name: Deploy ke GitHub Pages
     needs: build
+    # NONAKTIF SEMENTARA sampai Pages diaktifkan di Settings (lihat header).
+    # Hapus baris ini setelah konfigurasi Pages selesai — pre-flight gh api
+    # di langkah pertama akan mengaktifkan deploy otomatis.
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:

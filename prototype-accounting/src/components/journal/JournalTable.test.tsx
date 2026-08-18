@@ -76,7 +76,7 @@ describe('JournalTable — Tolak langsung di baris (dialog alasan wajib, tanpa b
     // Dialog Reject terbuka dengan tombol konfirmasi nonaktif (alasan belum diisi)
     const dialog = screen.getByRole('dialog', { name: 'Tolak jurnal' })
     expect(dialog).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Reject', exact: true })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Reject' })).toHaveProperty('disabled', true)
   })
 
   it('isi alasan wajib → Reject → status kembali draft + rejectionReason tersimpan + toast', async () => {
@@ -84,7 +84,7 @@ describe('JournalTable — Tolak langsung di baris (dialog alasan wajib, tanpa b
 
     fireEvent.click(screen.getByRole('button', { name: `Tolak ${pendingJournal.transactionNumber}` }))
     fireEvent.change(screen.getByLabelText('Alasan penolakan'), { target: { value: 'Bukti pendukung belum lengkap' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Reject', exact: true }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reject' }))
     await act(async () => {}) // rejectJournal async → tunggu microtask sebelum asersi
 
     const s = useStore.getState()

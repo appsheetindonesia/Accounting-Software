@@ -57,7 +57,7 @@ beforeEach(() => {
   mockedApi.getPeriods.mockReset()
   mockedApi.closePeriod.mockReset()
   mockedApi.getJournals.mockReset()
-  mockedApi.getJournals.mockResolvedValue({ journals: [] })
+  mockedApi.getJournals.mockResolvedValue({ journals: [], totals: { debit: 0, credit: 0, difference: 0 } })
 })
 
 afterEach(() => resetStoreState())
@@ -92,7 +92,7 @@ describe('PeriodSettings — tutup periode & dialog DRAFT_ACTION_REQUIRED', () =
       .mockResolvedValueOnce({ periods: [closedPeriod] })
     mockedApi.closePeriod
       .mockRejectedValueOnce(new ApiError(422, 'DRAFT_ACTION_REQUIRED', 'Masih ada jurnal draft; pilih aksi terlebih dahulu'))
-      .mockResolvedValueOnce({ handledDrafts: { posted: 0, deleted: 1, kept: 0 } })
+      .mockResolvedValueOnce({ id: 'fp-2026-03', isOpen: false, handledDrafts: { posted: 0, deleted: 1, kept: 0 } })
     renderWithStore(<PeriodSettings />, { periods: [openPeriod] })
 
     fireEvent.click(await screen.findByRole('button', { name: 'Tutup periode Maret 2026' }))
