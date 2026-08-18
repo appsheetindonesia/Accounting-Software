@@ -63,6 +63,14 @@ manapun tanpa harus membuka isi folder:
 | [VERIFIKASI-BRANDING.md](VERIFIKASI-BRANDING.md) | Verifikasi konsistensi branding nama perusahaan |
 | [CHANGELOG.md](CHANGELOG.md) | Catatan rilis per versi |
 
+Dokumentasi per-modul:
+
+| Modul | README |
+|-------|--------|
+| Prototipe (React + Vite) | [prototype-accounting/README.md](prototype-accounting/README.md) |
+| Mock API (Express) | [mock-api/README.md](mock-api/README.md) |
+| E2E Playwright | [e2e/README.md](e2e/README.md) |
+
 ## Menjalankan
 
 ```bash
