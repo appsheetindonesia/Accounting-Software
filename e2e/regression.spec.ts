@@ -740,9 +740,45 @@ test.describe('RG-05 s/d RG-08 — entitas, approval, search, periode', () => {
     await expect(page.getByText('Saldo Akhir', { exact: true })).toBeVisible()
   })
 
+  test('RG-07b Navigasi keyboard global search: ketik + ArrowDown + Enter', async ({ page }) => {
+    // 1. Ketik query dengan 3 hasil jurnal (BKM-0001, 0004, 0008 — urutan array)
+    const globalSearch = page.getByLabel('Pencarian global')
+    await globalSearch.fill('BKM')
+    await expect(page.getByRole('option', { name: /BKM-2026-03-0001/ })).toBeVisible()
+    await expect(page.getByRole('option', { name: /BKM-2026-03-0004/ })).toBeVisible()
+    await expect(page.getByRole('option', { name: /BKM-2026-03-0008/ })).toBeVisible()
+
+    // 2. Sebelum navigasi: tidak ada item aktif (aria-activedescendant kosong)
+    await expect(globalSearch).not.toHaveAttribute('aria-activedescendant', /gs-result-/)
+
+    // 3. ArrowDown → highlight item pertama (BKM-0001, index 0)
+    await globalSearch.press('ArrowDown')
+    await expect(globalSearch).toHaveAttribute('aria-activedescendant', 'gs-result-0')
+    await expect(page.getByRole('option', { name: /BKM-2026-03-0001/ })).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByRole('option', { name: /BKM-2026-03-0004/ })).toHaveAttribute('aria-selected', 'false')
+
+    // 4. ArrowDown lagi → pindah ke item kedua (BKM-0004, index 1)
+    await globalSearch.press('ArrowDown')
+    await expect(globalSearch).toHaveAttribute('aria-activedescendant', 'gs-result-1')
+    await expect(page.getByRole('option', { name: /BKM-2026-03-0004/ })).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByRole('option', { name: /BKM-2026-03-0001/ })).toHaveAttribute('aria-selected', 'false')
+
+    // 5. ArrowUp → kembali ke item pertama (navigasi dua arah)
+    await globalSearch.press('ArrowUp')
+    await expect(globalSearch).toHaveAttribute('aria-activedescendant', 'gs-result-0')
+    await expect(page.getByRole('option', { name: /BKM-2026-03-0001/ })).toHaveAttribute('aria-selected', 'true')
+
+    // 6. Enter → pilih item ter-highlight (BKM-0001) → detail jurnal terbuka
+    await globalSearch.press('Enter')
+    await expect(page.getByRole('heading', { name: 'Jurnal' })).toBeVisible()
+    await expect(page.getByText('Penerimaan pembayaran jasa konsultasi dari PT Maju Sejahtera', { exact: true }).first()).toBeVisible()
+  })
+
   test('RG-08 Selektor periode global: footer, modal, dan laporan sinkron', async ({ page }) => {
-    // 1. Ganti periode global di sidebar → footer sinkron
-    await page.getByLabel('Pilih periode').selectOption('2026-02')
+    // 1. Ganti periode global di sidebar (listbox custom — pola sama GlobalSearch)
+    //    → footer sinkron
+    await page.getByRole('button', { name: 'Pilih periode' }).click()
+    await page.getByRole('option', { name: 'Februari 2026' }).click()
     await expect(page.locator('footer')).toContainText('Periode: 2026-02')
 
     // 2. Modal jurnal ikut periode aktif
@@ -776,11 +812,13 @@ test.describe('RG-05 s/d RG-08 — entitas, approval, search, periode', () => {
     await expect(page.getByText(/2026-0[12]-/)).toHaveCount(0)
     await expect(page.getByText('Periode tertutup — mutasi diblokir')).toBeVisible()
     // Januari juga kosong di base seed (seed:extra = 3 jurnal Jan, 4 Feb)
-    await page.getByLabel('Pilih periode').selectOption('2026-01')
+    await page.getByRole('button', { name: 'Pilih periode' }).click()
+    await page.getByRole('option', { name: 'Januari 2026' }).click()
     await expect(page.getByText('0 entri jurnal')).toBeVisible()
     await expect(page.getByText(/2026-0[12]-/)).toHaveCount(0)
     // Kembali ke Maret (terbuka) → tepat 8 jurnal seed base, tanpa badge tertutup
-    await page.getByLabel('Pilih periode').selectOption('2026-03')
+    await page.getByRole('button', { name: 'Pilih periode' }).click()
+    await page.getByRole('option', { name: 'Maret 2026' }).click()
     await expect(page.getByText('8 entri jurnal')).toBeVisible()
     await expect(page.getByText('BKM-2026-03-0001', { exact: true })).toBeVisible()
     await expect(page.getByText('JV-2026-03-0007', { exact: true })).toBeVisible()
