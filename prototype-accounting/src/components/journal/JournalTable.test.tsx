@@ -79,6 +79,42 @@ describe('JournalTable — Setujui langsung di baris (tanpa buka detail)', () =>
   })
 })
 
+describe('JournalTable — rejectionReason di baris EXPAND detail (bukan hanya Dashboard)', () => {
+  // Jurnal ditolak: status kembali draft + rejectionReason terisi (mirror server).
+  const rejectedJournal = {
+    ...mockJournals[5], // draft
+    id: 'JNL-2026-03-099',
+    transactionNumber: 'BKK-2026-03-0099',
+    description: 'Pembelian ATK — ditolak',
+    status: 'draft' as const,
+    rejectionReason: 'Bukti pendukung belum lengkap',
+  }
+
+  it('jurnal ditolak: baris tertutup TIDAK menampilkan badge; setelah expand (Buka detail) badge "Ditolak — alasan" TAMPIL', () => {
+    render(<JournalTable journals={[rejectedJournal]} />)
+
+    // Sebelum expand: badge rejectionReason belum tampil
+    expect(screen.queryByText(/Ditolak — alasan/)).toBeNull()
+
+    // Expand baris detail
+    fireEvent.click(screen.getByRole('button', { name: 'Buka detail' }))
+
+    // Badge tampil di baris expand detail: "Ditolak — alasan: <reason>"
+    const badge = screen.getByText(/Ditolak — alasan:/)
+    expect(badge).toBeTruthy()
+    expect(badge.textContent).toContain('Bukti pendukung belum lengkap')
+    expect(screen.getByText('Bukti pendukung belum lengkap', { exact: true })).toBeTruthy()
+  })
+
+  it('jurnal TANPA rejectionReason: tidak ada badge walau baris di-expand', () => {
+    render(<JournalTable journals={[mockJournals[5]]} />) // draft tanpa rejectionReason
+
+    fireEvent.click(screen.getByRole('button', { name: 'Buka detail' }))
+
+    expect(screen.queryByText(/Ditolak — alasan/)).toBeNull()
+  })
+})
+
 describe('JournalTable — Tolak langsung di baris (dialog alasan wajib, tanpa buka detail)', () => {
   it('admin melihat tombol Tolak di baris Menunggu Approval; klik → dialog alasan wajib muncul', () => {
     render(<JournalTable journals={[pendingJournal]} />)
