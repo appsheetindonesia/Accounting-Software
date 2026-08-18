@@ -68,6 +68,38 @@ jobs:
             exit 1
           fi
 
+  branding-guard:
+    name: 'Verifikasi branding — tolak nama lama'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Cek tidak ada nama lama yang tertinggal
+        run: |
+          echo "=== Mencari pola nama lama (majujaya / MJ-001 / MJ-*) ==="
+          # git grep -inE: case-insensitive, extended regex, hanya file tracked
+          MATCHES=$(git grep -inE 'majujaya|Maju\ Jaya|MJ-001|MJ001|mj-|MJ-' \
+            -- ':(exclude)node_modules' ':(exclude).git' \
+            ':(exclude)VERIFIKASI-BRANDING.md' \
+            ':(exclude).github/workflows/ci.yml' || true)
+          if [ -n "$MATCHES" ]; then
+            echo ""
+            echo "❌ Ditemukan nama lama di repo:"
+            echo "$MATCHES"
+            echo ""
+            echo "Konvensi branding saat ini:"
+            echo "  • Nama entitas : PT. Kreasi Inovasi Estetika"
+            echo "  • Domain email : estetikakreasi.co.id"
+            echo "  • Prefix ent.  : KI-001"
+            echo ""
+            echo "Jika nama lama memang diperlukan (mis. di dokumentasi),"
+            echo "tambahkan file ke exclude di git grep step ini."
+            exit 1
+          fi
+          echo "✅ Tidak ada pola nama lama yang ditemukan"
+
   test:
     name: 'Unit & Integration test — ${{ matrix.tahap }}'
     needs: branch-guard
