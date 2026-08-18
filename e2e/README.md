@@ -24,7 +24,7 @@ npx playwright install chromium firefox   # sekali saja (browser)
 ## Menjalankan
 
 ```bash
-npm test            # semua: RG-01..RG-22 di chromium + firefox (62 test, ±7 mnt)
+npm test            # semua: RG-01..RG-22 di chromium + firefox (63 test, ±7 mnt)
 npm run test:rg9    # cepat: hanya RG-09 di chromium
 npm run test:headed # dengan browser terlihat
 npm run test:ui     # Playwright UI mode
@@ -52,7 +52,8 @@ login bertahan saat `page.reload()` (RG-02/RG-04/RG-10).
 | RG-03d | Klik ganda export | dblclick Export PDF di Laba Rugi → **hanya 1 request** terkirim (guard busyRef + cooldown 350ms) |
 | RG-04 | Tutup periode | posting diblokir (UI); **draft ter-post & laporan terbaca diverifikasi di UI** (Neraca 549,5jt seimbang) |
 | RG-05 | Multi-entitas | isolasi via `X-Entity-Id` |
-| RG-06 | Approval flow | **via UI**: draft → Submit → Menunggu Approval → Approve (saldo berubah) / **Reject dengan alasan wajib** (dialog, `rejectionReason` tampil di detail); **"Simpan & Ajukan" langsung Menunggu Approval**; audit trail via API; **RG-06e NO_APPROVAL_RIGHTS**: akuntan + role cache stale → approve via antrian → toast khusus "Hanya Admin" (server 403), jurnal tetap Menunggu Approval |
+| RG-06 | Approval flow | **via UI**: draft → Submit → Menunggu Approval → Approve (saldo berubah) / **Reject dengan alasan wajib** (dialog, `rejectionReason` tampil di detail); **"Simpan & Ajukan" langsung Menunggu Approval**; audit trail via API; **RG-06d Notifikasi**: klik item dropdown → halaman Jurnal terbuka + **filter Status otomatis "Menunggu Approval"** (daftar tersaring, jurnal posted/draft tidak tampil); **RG-06e NO_APPROVAL_RIGHTS**: akuntan + role cache stale → approve via antrian → toast khusus "Hanya Admin" (server 403), jurnal tetap Menunggu Approval |
+| RG-06f | Baris Jurnal Terbaru → detail | klik baris Jurnal Terbaru di Dashboard → **halaman Jurnal dengan baris detail jurnal tsb TERBUKA** (line kedua tampil), baris lain tetap tertutup; **Enter** pada baris → perilaku sama |
 | RG-07 | Filter & search | filter UI + pencarian global API konsisten |
 | RG-07b | Navigasi keyboard global search | ketik query → ArrowDown/Up pindah highlight (`aria-activedescendant`/`aria-selected`) → Enter pilih → detail jurnal terbuka |
 | RG-08 | Selektor periode | footer/modal sinkron; Laba Rugi & Buku Besar re-fetch per periode |
@@ -83,7 +84,7 @@ di **setiap push / pull request** (ubuntu-latest, Node 22):
    - tahap **mock API** (integration, Vitest + Supertest, `mock-api`) — 105 test
      (baseline angka §2.3, error envelope vs katalog §13, seed:extra,
      persistence, TOKEN_EXPIRED, kedaluwarsa TTL terjadwal)
-2. **`e2e`** — E2E Playwright RG-01..RG-22 (chromium + firefox) — 62 test
+2. **`e2e`** — E2E Playwright RG-01..RG-22 (chromium + firefox) — 63 test
 
 Job `test` berjalan **sekaligus** dengan `e2e` (tidak berurutan) — unit &
 integration selesai dalam hitungan detik tanpa tertahan E2E (~4 menit),

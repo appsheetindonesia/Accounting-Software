@@ -641,6 +641,14 @@ test.describe('RG-05 s/d RG-08 — entitas, approval, search, periode', () => {
     await expect(page.getByText(/Belum diposting/)).toBeVisible()
     // Dropdown tertutup kembali setelah navigasi
     await expect(page.getByRole('button', { name: /Notifikasi/ })).toHaveAttribute('aria-expanded', 'false')
+
+    // 6. Filter Status di halaman Jurnal otomatis terpilih "Menunggu Approval"
+    //    (halaman dibuka dari dropdown notifikasi → journalFilter diterapkan)
+    const statusSelect = page.getByRole('combobox', { name: 'Status' })
+    await expect(statusSelect).toHaveValue('pending-approval')
+    // Daftar tersaring: jurnal pending tampil; jurnal posted/draft lain TIDAK tampil
+    await expect(page.getByText('BKM-2026-03-0009', { exact: true }).first()).toBeVisible()
+    await expect(page.getByText('JV-2026-03-0005', { exact: true }).first()).toHaveCount(0)
   })
 
   test('RG-06e NO_APPROVAL_RIGHTS: akuntan + role cache STALE → approve via antrian notifikasi → toast "Hanya Admin" (server 403)', async ({ page }) => {
@@ -698,6 +706,35 @@ test.describe('RG-05 s/d RG-08 — entitas, approval, search, periode', () => {
     const row = page.locator('tbody tr', { hasText: 'BKM-2026-03-0009' }).first()
     await expect(row.getByText('Menunggu Approval', { exact: true })).toBeVisible()
     await expect(page.locator('footer')).toContainText('Online · Mock API')
+  })
+
+  test('RG-06f Baris Jurnal Terbaru di Dashboard diklik → halaman Jurnal dengan baris detail terbuka', async ({ page }) => {
+    // 1. Dashboard: baris Jurnal Terbaru adalah tombol (role=button, aria-label).
+    //    Recent seed = 5 jurnal terbaru Maret (BKM-0008 s/d BKM-0004)
+    await gotoNav(page, 'Dashboard')
+    const recentRow = page.getByRole('button', { name: 'Buka detail BKM-2026-03-0004' })
+    await expect(recentRow).toBeVisible()
+
+    // 2. Klik baris → halaman Jurnal + baris detail jurnal tsb TERBUKA (expanded):
+    //    deskripsi jurnal PENUH hanya dirender saat baris detail terbuka
+    //    (JournalTable: isOpen && baris Deskripsi) — bukti expanded, bukan navigasi
+    await recentRow.click()
+    await expect(page.getByRole('heading', { name: 'Jurnal Umum' })).toBeVisible()
+    await expect(page.getByText('Penerimaan pembayaran piutang PT ABC', { exact: true }).first()).toBeVisible()
+
+    // 3. Baris lain tetap TERTUTUP (tidak semua baris ikut expanded):
+    //    deskripsi JV-0005 tidak dirender karena barisnya belum dibuka
+    const row5 = page.locator('tbody tr', { hasText: 'JV-2026-03-0005' }).first()
+    await expect(row5).toBeVisible()
+    await expect(page.getByText('Pencatatan beban gaji karyawan Maret', { exact: true }).first()).toHaveCount(0)
+
+    // 4. Navigasi keyboard: Enter pada baris Jurnal Terbaru → detail juga terbuka
+    await gotoNav(page, 'Dashboard')
+    const recentRow5 = page.getByRole('button', { name: 'Buka detail JV-2026-03-0005' })
+    await expect(recentRow5).toBeVisible()
+    await recentRow5.press('Enter')
+    await expect(page.getByRole('heading', { name: 'Jurnal Umum' })).toBeVisible()
+    await expect(page.getByText('Pencatatan beban gaji karyawan Maret', { exact: true }).first()).toBeVisible()
   })
 
   test('RG-07 Filter & search: filter jurnal + pencarian global konsisten', async ({ page }) => {
