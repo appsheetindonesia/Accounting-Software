@@ -161,3 +161,5 @@ Hook memakai `core.hooksPath` absolut, jadi selalu sinkron dengan isi repo
 `scripts/check-qa-sync.py`; commit lain tidak kena dampak (langsung skip).
 Perbaikan saat ditolak: `python scripts/generate-qa-test-cases.py`, lalu commit
 hasilnya bersama perubahan QA Test Plan.
+
+<!-- test: PR trigger E2E -->
