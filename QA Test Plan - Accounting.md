@@ -463,6 +463,10 @@ seed tetap — bisa direproduksi), tanpa menyentuh file asli:
 python scripts/generate-qa-test-cases.py --sample
 ```
 
+Nilai seed yang dipakai `random_statuses` **dicetak di output** (baris
+`Seed status acak: <N>`) dan didefinisikan sebagai konstanta `SAMPLE_SEED`
+di `scripts/generate-qa-test-cases.py` (default `20260816`).
+
 Menghasilkan 4 file contoh di root repo:
 
 | File | Isi |
@@ -487,3 +491,24 @@ Format JSON ini identik dengan yang dihasilkan konverter
 (`scripts/convert-results-to-testrail.py`) untuk run sungguhan — jadi contoh
 `--sample` sekaligus jadi referensi format payload yang siap dikirim via curl
 pada §8.
+
+**Mereproduksi run `--sample` yang sama persis** (mis. untuk membuktikan
+regenerasi deterministik atau membandingkan hasil):
+
+1. **Seed status** sudah tetap (`SAMPLE_SEED`, default `20260816`) — status
+   acak identik setiap kali dijalankan, tanpa argumen tambahan.
+2. **Tanggal & environment** mengikuti prioritas override CLI
+   (`--run-date` / `--environment`) > env (`QA_RUN_DATE` / `QA_ENVIRONMENT`)
+   > default (hari ini / `QA Local (mock API)`). Untuk output **byte-identik
+   lintas hari**, pin tanggalnya saat menjalankan:
+
+   ```bash
+   QA_RUN_DATE=2026-08-18 python scripts/generate-qa-test-cases.py --sample
+   ```
+
+3. **Verifikasi hasil:** `qa-test-cases-sample-tracker.csv`,
+   `qa-test-results-sample-testrail.csv`, dan `qa-test-results-sample.json`
+   byte-identik antar run (cocokkan `sha256sum`). XLSX **isi sel** identik,
+   tapi **byte-nya selalu berbeda** — openpyxl menulis timestamp zip
+   non-deterministik di `docProps/core.xml` (alasan yang sama kenapa
+   `scripts/check-qa-sync.py` membandingkan nilai sel, bukan byte XLSX).

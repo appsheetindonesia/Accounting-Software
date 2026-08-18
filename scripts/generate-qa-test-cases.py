@@ -37,7 +37,10 @@ hasil eksekusi per baris lalu menjalankan ulang generator tanpa kehilangan data.
 `qa-test-cases-sample-tracker.csv`, `qa-test-cases-sample.xlsx`,
 `qa-test-results-sample-testrail.csv`, dan `qa-test-results-sample.json`
 (payload add_results_for_cases) sebagai referensi format import — file asli
-TIDAK disentuh.
+TIDAK disentuh. Status memakai seed TETAP (SAMPLE_SEED) yang dicetak di
+output — run ulang menghasilkan status yang sama persis (reproduksi
+membutuhkan QA_RUN_DATE/QA_ENVIRONMENT yang sama pula, lihat header & QA
+Test Plan §8.1).
 
 Menjalankan:  python scripts/generate-qa-test-cases.py [--sample]
 """
@@ -341,6 +344,11 @@ def enrich(records: list[dict],
 # status_id TestRail — SAMA dengan scripts/convert-results-to-testrail.py
 SAMPLE_STATUS_IDS = {"Passed": 1, "Blocked": 2, "Retest": 4, "Failed": 5, "Skipped": 6}
 
+# Seed status acak untuk --sample. TETAP — jangan ubah: contoh run harus
+# bisa direproduksi persis kapan pun dijalankan ulang (nilai dicetak di
+# output --sample, lihat juga QA Test Plan §8.1).
+SAMPLE_SEED = 20260816
+
 SAMPLE_FILES = {
     "tracker": ROOT / "qa-test-cases-sample-tracker.csv",
     "xlsx": ROOT / "qa-test-cases-sample.xlsx",
@@ -349,7 +357,7 @@ SAMPLE_FILES = {
 }
 
 
-def random_statuses(records: list[dict], seed: int = 20260816) -> list[dict]:
+def random_statuses(records: list[dict], seed: int = SAMPLE_SEED) -> list[dict]:
     """Isi Status dengan nilai acak DETERMINISTIK (seed tetap) agar contoh run
     bisa direproduksi. Distribusi condong ke Passed, sisanya variasi status."""
     import random
@@ -794,6 +802,7 @@ def main() -> None:
         for p in paths:
             print(f"[OK] {p}  (contoh run — status acak, file asli tidak disentuh)")
         print(f"\nContoh run: {len(tc)} TC + {len(rg)} RG = {len(records)} test case dengan status terisi")
+        print(f"         Seed status acak: {SAMPLE_SEED} (tetap) — run ulang menghasilkan status yang sama persis")
         return
 
     existing = load_existing_metadata()
