@@ -1,0 +1,193 @@
+# ============================================================
+# Deploy prototipe ke Netlify / Vercel / Cloudflare Pages
+# Alternatif GitHub Pages untuk plan Free — ketiga provider
+# punya tier gratis untuk situs statis publik.
+#
+# Perbedaan utama vs pages.yml: base path = "/" (root domain),
+# BUKAN "/<nama-repo>/" (subpath GitHub Pages). Vite menulis
+# src/href="/assets/..." di dist/index.html.
+#
+# Satu job per provider, masing-masing di-SKIP otomatis bila
+# secret-nya belum diset — jadi workflow hijau meski hanya satu
+# (atau nol) provider dikonfigurasi. Tidak ada biaya untuk
+# provider yang di-skip (seluruh job dilewati, build tidak jalan).
+#
+# Secret yang diperlukan (Settings → Secrets and variables →
+# Actions) — set hanya untuk provider yang ingin dipakai:
+#
+#   Netlify
+#     NETLIFY_AUTH_TOKEN   (dari https://app.netlify.com/user/applications#personal-access-tokens)
+#     NETLIFY_SITE_ID      (Settings → Site information → API ID, site sudah dibuat dulu)
+#     Deploy: npx netlify-cli deploy --prod --dir=dist
+#
+#   Vercel
+#     VERCEL_TOKEN         (dari https://vercel.com/account/tokens)
+#     VERCEL_ORG_ID        (opsional — bila token punya >1 org)
+#     VERCEL_PROJECT_ID    (opsional — bila repo belum ter-link otomatis)
+#     Deploy: npx vercel deploy --prod --yes --token
+#
+#   Cloudflare Pages
+#     CLOUDFLARE_API_TOKEN (izin "Cloudflare Pages: Edit")
+#     CLOUDFLARE_ACCOUNT_ID
+#     CLOUDFLARE_PROJECT_NAME  (project Pages sudah dibuat via dashboard)
+#     Deploy: npx wrangler pages deploy dist --project-name
+#
+# Pemicu: push ke main + workflow_dispatch. Untuk menguji tanpa
+# push, jalankan "Run workflow" dari tab Actions.
+# ============================================================
+name: Deploy prototipe ke Netlify / Vercel / Cloudflare Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-static
+  cancel-in-progress: true
+
+jobs:
+  netlify:
+    name: Deploy ke Netlify
+    # Job di-skip total bila token belum diset — workflow tetap hijau.
+    if: ${{ secrets.NETLIFY_AUTH_TOKEN != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node 24 (Vite 8 butuh ^20.19 || >=22.12)
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: prototype-accounting/package-lock.json
+
+      - name: Install dependencies
+        working-directory: prototype-accounting
+        run: npm ci
+
+      - name: Build (tsc -b && vite build, base = / root domain)
+        working-directory: prototype-accounting
+        run: npm run build -- --base=/
+
+      # Guard: root domain harus mereferensikan aset di /assets/ —
+      # base salah (mis. subpath GitHub Pages) → aset 404 setelah deploy.
+      - name: Guard — verifikasi base "/" di dist/index.html
+        working-directory: prototype-accounting
+        run: |
+          if ! grep -Eq '(src|href)="/assets/' dist/index.html; then
+            echo "::error::dist/index.html tidak mereferensikan /assets/ — base bukan root. Periksa argumen --base=/"
+            exit 1
+          fi
+          if grep -Eq '"/[A-Za-z0-9_-]+/assets/' dist/index.html; then
+            echo "::error::dist/index.html memakai base subpath (bukan root) — aset akan 404 di Netlify."
+            exit 1
+          fi
+          echo "OK — aset direferensikan di /assets/ (root domain)"
+
+      - name: Deploy ke Netlify (production)
+        working-directory: prototype-accounting
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: |
+          npx --yes netlify-cli deploy --prod --dir=dist --auth="$NETLIFY_AUTH_TOKEN" --site="$NETLIFY_SITE_ID"
+
+  vercel:
+    name: Deploy ke Vercel
+    if: ${{ secrets.VERCEL_TOKEN != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node 24 (Vite 8 butuh ^20.19 || >=22.12)
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: prototype-accounting/package-lock.json
+
+      - name: Install dependencies
+        working-directory: prototype-accounting
+        run: npm ci
+
+      - name: Build (tsc -b && vite build, base = / root domain)
+        working-directory: prototype-accounting
+        run: npm run build -- --base=/
+
+      - name: Guard — verifikasi base "/" di dist/index.html
+        working-directory: prototype-accounting
+        run: |
+          if ! grep -Eq '(src|href)="/assets/' dist/index.html; then
+            echo "::error::dist/index.html tidak mereferensikan /assets/ — base bukan root. Periksa argumen --base=/"
+            exit 1
+          fi
+          if grep -Eq '"/[A-Za-z0-9_-]+/assets/' dist/index.html; then
+            echo "::error::dist/index.html memakai base subpath (bukan root) — aset akan 404 di Vercel."
+            exit 1
+          fi
+          echo "OK — aset direferensikan di /assets/ (root domain)"
+
+      - name: Deploy ke Vercel (production)
+        working-directory: prototype-accounting
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          npx --yes vercel deploy --prod --yes --token="$VERCEL_TOKEN" \
+            ${VERCEL_ORG_ID:+--scope="$VERCEL_ORG_ID"} \
+            ${VERCEL_PROJECT_ID:+--project="$VERCEL_PROJECT_ID"}
+
+  cloudflare:
+    name: Deploy ke Cloudflare Pages
+    if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node 24 (Vite 8 butuh ^20.19 || >=22.12)
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: prototype-accounting/package-lock.json
+
+      - name: Install dependencies
+        working-directory: prototype-accounting
+        run: npm ci
+
+      - name: Build (tsc -b && vite build, base = / root domain)
+        working-directory: prototype-accounting
+        run: npm run build -- --base=/
+
+      - name: Guard — verifikasi base "/" di dist/index.html
+        working-directory: prototype-accounting
+        run: |
+          if ! grep -Eq '(src|href)="/assets/' dist/index.html; then
+            echo "::error::dist/index.html tidak mereferensikan /assets/ — base bukan root. Periksa argumen --base=/"
+            exit 1
+          fi
+          if grep -Eq '"/[A-Za-z0-9_-]+/assets/' dist/index.html; then
+            echo "::error::dist/index.html memakai base subpath (bukan root) — aset akan 404 di Cloudflare Pages."
+            exit 1
+          fi
+          echo "OK — aset direferensikan di /assets/ (root domain)"
+
+      - name: Deploy ke Cloudflare Pages
+        working-directory: prototype-accounting
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_PROJECT_NAME: ${{ secrets.CLOUDFLARE_PROJECT_NAME }}
+        run: |
+          npx --yes wrangler pages deploy dist \
+            --project-name="$CLOUDFLARE_PROJECT_NAME" \
+            --branch=main \
+            --commit-dirty=true
