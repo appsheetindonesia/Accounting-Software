@@ -124,6 +124,42 @@ describe('PeriodSettings — tutup periode & dialog DRAFT_ACTION_REQUIRED', () =
     expect(screen.queryByRole('dialog', { name: 'Tutup periode' })).toBeNull()
   })
 
+  it('periode TANPA draft → langsung tertutup tanpa dialog (closePeriod sukses di panggilan pertama)', async () => {
+    mockedApi.getPeriods
+      .mockResolvedValueOnce({ periods: [openPeriod] })
+      .mockResolvedValueOnce({ periods: [closedPeriod] })
+    // Tanpa 422 DRAFT_ACTION_REQUIRED: server langsung menerima penutupan
+    mockedApi.closePeriod.mockResolvedValue({ id: 'fp-2026-03', isOpen: false, handledDrafts: { posted: 0, deleted: 0, kept: 0 } })
+    renderWithStore(<PeriodSettings />, { periods: [openPeriod] })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Tutup periode Maret 2026' }))
+
+    // Satu panggilan closePeriod tanpa confirmDraftAction — tidak ada dialog
+    await waitFor(() => expect(mockedApi.closePeriod).toHaveBeenCalledWith('fp-2026-03', undefined))
+    expect(screen.queryByRole('dialog', { name: 'Tutup periode' })).toBeNull()
+    // Store: periode ditandai tertutup + toast ringkasan handledDrafts
+    expect(useStore.getState().periods.find((p) => p.id === 'fp-2026-03')?.isOpen).toBe(false)
+    expect(useStore.getState().toast?.message).toContain('0 draft diposting, 0 dipertahankan, 0 dihapus')
+    // List di-refresh (fetch ke-2) → periode kini tampil tertutup, tombol hilang
+    await waitFor(() => expect(screen.getByText('Tertutup — posting diblokir')).toBeTruthy())
+    expect(screen.queryByRole('button', { name: 'Tutup periode Maret 2026' })).toBeNull()
+    expect(mockedApi.getPeriods).toHaveBeenCalledTimes(2)
+  })
+
+  it('role NON-admin (accountant) → tombol Tutup TIDAK ditampilkan + hint izin period.manage', async () => {
+    mockedApi.getPeriods.mockResolvedValue({ periods: [openPeriod] })
+    const accountant = { id: 'user-002', name: 'Dimas', email: 'dimas@estetikakreasi.co.id', role: 'accountant' as const }
+    renderWithStore(<PeriodSettings />, { periods: [openPeriod], user: accountant })
+
+    // Periode terbuka TETAPI tanpa izin period.manage → tidak ada tombol Tutup
+    await screen.findByText('Maret 2026')
+    expect(screen.queryByRole('button', { name: 'Tutup periode Maret 2026' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Tutup/ })).toBeNull()
+    // Hint "hanya admin" tampil; closePeriod tidak pernah dipanggil
+    expect(screen.getByText(/Hanya admin yang dapat menutup periode/)).toBeTruthy()
+    expect(mockedApi.closePeriod).not.toHaveBeenCalled()
+  })
+
   it('Batal menutup dialog tanpa retry closePeriod', async () => {
     mockedApi.getPeriods.mockResolvedValue({ periods: [openPeriod] })
     mockedApi.closePeriod.mockRejectedValue(
