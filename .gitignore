@@ -14,3 +14,8 @@ dist/
 *.log
 .DS_Store
 Thumbs.db
+
+# Runtime dev stack — PID file ditulis scripts/dev.mjs agar `npm run dev:stop`
+# bisa mematikan seluruh pohon proses; file ini basi secara desain dan
+# TIDAK boleh masuk riwayat git.
+.dev/

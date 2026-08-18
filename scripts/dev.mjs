@@ -5,6 +5,12 @@
 //   node scripts/dev.mjs --extra             # seed + jurnal lintas bulan (Jan–Feb 2026)
 //   node scripts/dev.mjs --reset             # paksa reset seed walau persistence aktif
 //   MOCK_API_PERSIST=0 node scripts/dev.mjs  # tanpa persistence (in-memory, reset tiap boot)
+//   npm run dev:stop                         # hentikan stack (baca .dev/dev.pid)
+//
+// PID file: menulis .dev/dev.pid (JSON berisi PID proses ini + child)
+// agar `npm run dev:stop` (scripts/dev-stop.mjs) bisa mematikan seluruh
+// pohon proses dengan satu perintah — tanpa harus menebak PID lewat
+// netstat/tasklist. File dihapus otomatis saat shutdown (Ctrl+C / error).
 //
 // Alur:
 //   1. Spawn mock API (npm run dev — auto-restart saat edit file)
@@ -27,6 +33,7 @@
 // ============================================================
 
 import { spawn } from 'node:child_process'
+import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -57,6 +64,53 @@ const children = new Set()
 let shuttingDown = false
 
 // ------------------------------------------------------------
+// PID file — .dev/dev.pid (JSON) agar `npm run dev:stop` bisa
+// mematikan seluruh pohon proses dengan satu perintah.
+// ------------------------------------------------------------
+const PID_FILE = path.join(root, '.dev', 'dev.pid')
+
+function writePidFile() {
+  // JANGAN menimpa PID file milik instance lain yang masih hidup — kalau
+  // dua `npm run dev` jalan bersamaan, file harus tetap menunjuk stack
+  // PERTAMA (agar `npm run dev:stop` mematikan yang benar, bukan yang baru
+  // lahir lalu bentrok port). Instance kedua cukup di-warn di main().
+  try {
+    if (fs.existsSync(PID_FILE)) {
+      const prev = JSON.parse(fs.readFileSync(PID_FILE, 'utf8'))
+      if (prev.pid && prev.pid !== process.pid) {
+        let alive = false
+        try { process.kill(prev.pid, 0); alive = true } catch { /* sudah mati */ }
+        if (alive) return // file milik stack lain yang hidup → jangan sentuh
+      }
+    }
+  } catch { /* korup → timpa */ }
+  try {
+    fs.mkdirSync(path.dirname(PID_FILE), { recursive: true })
+    fs.writeFileSync(
+      PID_FILE,
+      JSON.stringify(
+        {
+          pid: process.pid,
+          apiPort: API_PORT,
+          startedAt: new Date().toISOString(),
+          children: [...children].map((c) => c.pid),
+        },
+        null,
+        2,
+      ),
+    )
+  } catch (err) {
+    console.error(`[dev] ⚠️  Gagal menulis PID file: ${err.message}`)
+  }
+}
+
+function removePidFile() {
+  try {
+    fs.rmSync(PID_FILE, { force: true })
+  } catch { /* abaikan */ }
+}
+
+// ------------------------------------------------------------
 // Spawn dengan prefix output + pelacakan untuk shutdown
 // ------------------------------------------------------------
 function start(name, cwd, args) {
@@ -68,11 +122,13 @@ function start(name, cwd, args) {
     windowsHide: true,
   })
   children.add(child)
+  writePidFile() // keep .dev/dev.pid in sync saat child lahir/berhenti
   const tag = `[${name}]`
   child.stdout.on('data', (d) => process.stdout.write(`${tag} ${d}`))
   child.stderr.on('data', (d) => process.stderr.write(`${tag} ${d}`))
   child.on('exit', (code, signal) => {
     children.delete(child)
+    writePidFile() // sinkronkan kembali setelah child berhenti
     if (!shuttingDown) {
       console.error(`\n[dev] ${name} berhenti (code=${code ?? 'null'}, signal=${signal ?? 'null'}) — menghentikan semua...`)
       shutdown()
@@ -101,6 +157,7 @@ function shutdown() {
   if (shuttingDown) return
   shuttingDown = true
   for (const child of children) killTree(child)
+  removePidFile() // stack berhenti → PID file tidak boleh tertinggal basi
   setTimeout(() => process.exit(0), 300)
 }
 
@@ -224,8 +281,24 @@ function watchMockApiRestart(api) {
 async function main() {
   console.log('[dev] Menjalankan mock API + prototipe Vite bersamaan...\n')
 
+  // Instance ganda? PID file yang masih hidup berarti stack lain berjalan —
+  // beri tahu pengguna (dev:stop bisa mematikannya) tapi jangan hentikan.
+  if (fs.existsSync(PID_FILE)) {
+    try {
+      const prev = JSON.parse(fs.readFileSync(PID_FILE, 'utf8'))
+      const alive = prev.pid && (() => {
+        try { process.kill(prev.pid, 0); return true } catch { return false }
+      })()
+      if (alive) {
+        console.warn(`[dev] ⚠️  Dev stack lain sepertinya masih berjalan (PID ${prev.pid}).`)
+        console.warn(`[dev]    Hentikan dulu dengan: npm run dev:stop  — atau biarkan port bentrok.`)
+      }
+    } catch { /* PID file korup/basi — timpa saja */ }
+  }
+
   const api = start('mock-api', MOCK_API_DIR, ['dev'])
   const vite = start('vite', PROTOTYPE_DIR, ['dev'])
+  writePidFile() // tulis segera setelah kedua child lahir
 
   // Seed ulang otomatis SETIAP kali node --watch me-restart mock API,
   // bukan hanya saat boot pertama (lihat watchMockApiRestart di atas).
