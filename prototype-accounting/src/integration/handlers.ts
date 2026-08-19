@@ -363,6 +363,58 @@ export const handlers = [
     return ok({ accounts: entityAccounts(entityId) })
   }),
 
+  http.post('*/accounts', async ({ request }) => {
+    const user = currentUser(request)
+    if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
+    const entityId = currentEntityId(request, user)
+    const body = (await request.json()) as Record<string, unknown>
+    const code = String(body.code ?? '')
+    const name = String(body.name ?? '')
+    if (!/^-\d+$/.test(code.slice(code.indexOf('-')))) return fail(422, 'INVALID_CODE_FORMAT', 'Format kode {{GOL}}-{{NOMOR}}')
+    if (db.accounts.some((a) => a.entityId === entityId && a.code === code)) return fail(409, 'ACCOUNT_CODE_EXISTS', 'Kode akun sudah digunakan')
+    const account = {
+      id: code, code, name, type: body.type ?? 'asset', group: body.group ?? body.type ?? 'asset',
+      category: body.category ?? 'Umum', normalBalance: body.normalBalance ?? (body.type === 'asset' || body.type === 'expense' ? 'debit' : 'credit'),
+      baseBalance: 0, parentId: body.parentId ?? null, isHeader: false, isActive: true, entityId,
+    }
+    db.accounts.push(account as DbAccount)
+    return ok({ ...account, balance: 0 }, null, 201)
+  }),
+
+  http.put('*/accounts/:id', async ({ params, request }) => {
+    const user = currentUser(request)
+    if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
+    const entityId = currentEntityId(request, user)
+    const account = db.accounts.find((a) => a.entityId === entityId && a.id === params.id)
+    if (!account) return fail(404, 'ACCOUNT_NOT_FOUND', 'Akun tidak ditemukan')
+    const body = (await request.json()) as Record<string, unknown>
+    Object.assign(account, {
+      code: body.code ?? account.code, name: body.name ?? account.name,
+      category: body.category ?? account.category, normalBalance: body.normalBalance ?? account.normalBalance,
+    })
+    return ok({ ...account, balance: 0 })
+  }),
+
+  http.delete('*/accounts/:id', ({ params, request }) => {
+    const user = currentUser(request)
+    if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
+    const entityId = currentEntityId(request, user)
+    const account = db.accounts.find((a) => a.entityId === entityId && a.id === params.id)
+    if (!account) return fail(404, 'ACCOUNT_NOT_FOUND', 'Akun tidak ditemukan')
+    account.isActive = false
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.patch('*/accounts/:id/activate', ({ params, request }) => {
+    const user = currentUser(request)
+    if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
+    const entityId = currentEntityId(request, user)
+    const account = db.accounts.find((a) => a.entityId === entityId && a.id === params.id)
+    if (!account) return fail(404, 'ACCOUNT_NOT_FOUND', 'Akun tidak ditemukan')
+    account.isActive = true
+    return ok({ id: account.id, isActive: true })
+  }),
+
   // 5. Jurnal — HANYA jurnal entitas aktif (X-Entity-Id)
   http.get('*/journals', ({ request }) => {
     const user = currentUser(request)

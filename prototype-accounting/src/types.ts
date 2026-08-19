@@ -11,6 +11,8 @@ export type PageKey =
   | 'neraca'
   | 'arus-kas'
   | 'laporan-lain'
+  | 'akun'
+  | 'glossary'
   | 'pengaturan'
 
 export interface Account {

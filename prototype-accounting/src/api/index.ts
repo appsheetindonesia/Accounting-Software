@@ -165,6 +165,27 @@ export const api = {
   getAccounts() {
     return request<{ accounts: Account[] }>('/accounts', { query: { pageSize: 200 } })
   },
+  createAccount(input: {
+    code: string
+    name: string
+    type: Account['type']
+    group?: string
+    category?: string
+    normalBalance?: 'debit' | 'credit'
+    parentId?: string | null
+    description?: string
+  }) {
+    return request<Account & { balance: number }>('/accounts', { method: 'POST', body: input })
+  },
+  updateAccount(id: string, input: Partial<Pick<Account, 'code' | 'name' | 'category' | 'description' | 'normalBalance' | 'group'>> & { parentId?: string | null }) {
+    return request<Account & { balance: number }>(`/accounts/${id}`, { method: 'PUT', body: input })
+  },
+  deleteAccount(id: string) {
+    return request<void>(`/accounts/${id}`, { method: 'DELETE' })
+  },
+  activateAccount(id: string) {
+    return request<{ id: string; isActive: boolean }>(`/accounts/${id}/activate`, { method: 'PATCH' })
+  },
 
   // 5. Jurnal
   getJournals() {

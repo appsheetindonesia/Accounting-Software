@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  BookMarked,
   BookOpen,
   Building2,
   CalendarDays,
@@ -8,6 +9,7 @@ import {
   FolderDown,
   Landmark,
   LayoutDashboard,
+  ListOrdered,
   NotebookPen,
   Plus,
   Scale,
@@ -28,6 +30,8 @@ const NAV: { key: PageKey; label: string; icon: typeof LayoutDashboard }[] = [
   { key: 'neraca', label: 'Neraca', icon: Landmark },
   { key: 'arus-kas', label: 'Arus Kas', icon: Waves },
   { key: 'laporan-lain', label: 'Laporan Lain', icon: FolderDown },
+  { key: 'akun', label: 'Tabel Akun', icon: ListOrdered },
+  { key: 'glossary', label: 'Kamus Istilah', icon: BookMarked },
   { key: 'pengaturan', label: 'Pengaturan', icon: Settings },
 ]
 

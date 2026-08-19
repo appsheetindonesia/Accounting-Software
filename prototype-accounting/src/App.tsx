@@ -16,6 +16,8 @@ import TrialBalancePage from './components/reports/TrialBalancePage'
 import BalanceSheetPage from './components/reports/BalanceSheetPage'
 import CashFlowPage from './components/reports/CashFlowPage'
 import SettingsPage from './components/SettingsPage'
+import AccountsPage from './components/AccountsPage'
+import GlossaryPage from './components/GlossaryPage'
 import ComingSoon from './components/ComingSoon'
 import SessionExpiredModal from './components/SessionExpiredModal'
 
@@ -74,6 +76,10 @@ function App() {
                 <BalanceSheetPage />
               ) : page === 'arus-kas' ? (
                 <CashFlowPage />
+              ) : page === 'akun' ? (
+                <AccountsPage />
+              ) : page === 'glossary' ? (
+                <GlossaryPage />
               ) : page === 'pengaturan' ? (
                 <SettingsPage />
               ) : (
