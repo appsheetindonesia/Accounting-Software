@@ -24,8 +24,7 @@ import type { PageKey } from '../types'
 import { useStore } from '../store/useStore'
 import { canWriteJournal } from '../lib/permissions'
 
-type NavItem = { key: PageKey; label: string; icon: typeof LayoutDashboard }
-type NavGroup = { title: string; icon: typeof FileText; items: NavItem[]; defaultOpen?: boolean }
+type NavItem = { key: PageKey; label: string; icon: typeof LayoutDashboard; badge?: number }
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -274,7 +273,8 @@ function NavGroupSection({
       >
         <div className="overflow-hidden">
           <div className="mt-0.5 space-y-0.5">
-            {group.items.map(({ key, label, icon: Icon }) => {
+            {group.items.map((item) => {
+              const { key, label, icon: Icon, badge } = item
               const active = page === key
               return (
                 <button
@@ -290,6 +290,11 @@ function NavGroupSection({
                 >
                   <Icon size={18} className="shrink-0" />
                   <span className="hidden lg:inline">{label}</span>
+                  {badge ? (
+                    <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold text-white">
+                      {badge > 9 ? '9+' : badge}
+                    </span>
+                  ) : null}
                 </button>
               )
             })}
@@ -300,6 +305,8 @@ function NavGroupSection({
   )
 }
 
+type NavGroup = { title: string; icon: typeof FileText; items: NavItem[]; defaultOpen?: boolean }
+
 export default function Sidebar() {
   const page = useStore((s) => s.page)
   const setPage = useStore((s) => s.setPage)
@@ -308,7 +315,22 @@ export default function Sidebar() {
   const setActiveEntity = useStore((s) => s.setActiveEntity)
   const openModal = useStore((s) => s.openModal)
   const user = useStore((s) => s.user)
+  const journals = useStore((s) => s.journals)
   const canWrite = canWriteJournal(user?.role)
+  const canApprove = user?.role === 'admin' || user?.role === 'accountant'
+
+  // Badge: jumlah jurnal menunggu approval
+  const pendingApprovalCount = canApprove
+    ? journals.filter((j) => j.status === 'pending-approval').length
+    : 0
+
+  // Inject badge ke item Jurnal
+  const groupsWithBadge = NAV_GROUPS.map((g) => ({
+    ...g,
+    items: g.items.map((it) =>
+      it.key === 'journal' ? { ...it, badge: pendingApprovalCount } : it,
+    ),
+  }))
 
   return (
     <aside className="flex w-16 shrink-0 flex-col border-r border-line bg-surface lg:w-64">
@@ -326,7 +348,7 @@ export default function Sidebar() {
       )}
 
       <nav className="mt-4 flex-1 space-y-1 overflow-y-auto px-2 lg:px-3">
-        {NAV_GROUPS.map((group) => (
+        {groupsWithBadge.map((group) => (
           <NavGroupSection key={group.title} group={group} page={page} setPage={setPage} />
         ))}
       </nav>
