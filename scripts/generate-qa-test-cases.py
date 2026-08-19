@@ -83,6 +83,34 @@ EXPECTED_RG = 15
 # Status yang memicu peringatan S1
 OPEN_STATUSES = {"Not Run", "Fail"}
 
+
+def _update_baseline(new_tc: int, new_rg: int) -> None:
+    """Perbarui EXPECTED_TC dan EXPECTED_RG di source code file ini.
+
+    Membaca file sendiri (Path(__file__)), mencari baris
+    `EXPECTED_TC = N` dan `EXPECTED_RG = N`, mengganti angkanya,
+    lalu menulis ulang. Efektif — cukup dipanggil sekali saat
+    --update-baseline dikombinasikan dengan perubahan QA Test Plan.
+    """
+    src = Path(__file__)
+    content = src.read_text(encoding="utf-8")
+    import re
+    new_content = re.sub(
+        r'EXPECTED_TC = \d+',
+        f'EXPECTED_TC = {new_tc}',
+        content,
+    )
+    new_content = re.sub(
+        r'EXPECTED_RG = \d+',
+        f'EXPECTED_RG = {new_rg}',
+        new_content,
+    )
+    if new_content != content:
+        src.write_text(new_content, encoding="utf-8")
+        print(f"[OK] EXPECTED_TC = {new_tc}, EXPECTED_RG = {new_rg} — baseline diperbarui di {src.name}")
+    else:
+        print(f"[OK] Baseline sudah sesuai (TC={new_tc}, RG={new_rg}) — tidak ada perubahan")
+
 # Epoch timestamp untuk byte-determinism XLSX — openpyxl selalu menulis
 # dcterms:modified di core.xml dengan datetime.now() saat wb.save(), jadi
 # kita perlu post-process ZIP agar timestamp-nya tetap stabil antar run.
@@ -843,6 +871,10 @@ def main() -> None:
                          f"{SAMPLE_SEED}). Beda seed → distribusi berbeda, "
                          "tapi tetap deterministik — run ulang dengan seed "
                          "sama selalu menghasilkan status sama persis.")
+    ap.add_argument("--update-baseline", action="store_true",
+                    help="perbarui EXPECTED_TC/EXPECTED_RG di source code "
+                         "ke jumlah aktual. Berguna saat QA Test Plan "
+                         "bertambah/berkurang TC/RG.")
     args = ap.parse_args()
 
     # Terapkan override CLI ke nilai default (berlaku untuk seluruh output;
@@ -857,6 +889,11 @@ def main() -> None:
     records = parse_tables()
     tc = [r for r in records if r["id"].startswith("TC-")]
     rg = [r for r in records if r["id"].startswith("RG-")]
+
+    # --update-baseline: perbarui EXPECTED_TC/EXPECTED_RG di source code
+    if args.update_baseline:
+        _update_baseline(len(tc), len(rg))
+
     # Baseline lunak — bukan kontrak keras: jumlah yang berbeda dari EXPECTED_*
     # hanya memunculkan warning (penambahan TC ke plan tidak menghentikan run).
     for label, actual, expected in (("TC", len(tc), EXPECTED_TC),
@@ -865,6 +902,8 @@ def main() -> None:
             print(f"[WARN] Jumlah {label} {actual} != baseline {expected} — "
                   f"QA Test Plan bertambah/berkurang? Perbarui EXPECTED_{label} "
                   f"di scripts/generate-qa-test-cases.py bila perubahan ini disengaja.")
+            if not args.update_baseline:
+                print(f"  → Jalankan: python scripts/generate-qa-test-cases.py --update-baseline")
 
     if args.sample:
         import json
