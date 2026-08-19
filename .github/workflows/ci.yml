@@ -282,3 +282,28 @@ jobs:
       # artefak di-regenerasi (lihat scripts/check-qa-sync.py).
       - name: Cek sinkronisasi CSV/XLSX dengan QA Test Plan
         run: python scripts/check-qa-sync.py
+
+  scripts-test:
+    name: 'Scripts Python — unit test + pre-commit hook'
+    needs: branch-guard
+    if: always() && (needs.branch-guard.result == 'success' || needs.branch-guard.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install openpyxl
+
+      # Jalankan semua unit test di scripts/:
+      #   • test_check_qa_sync — normalisasi line ending + committed_run_date
+      #   • test_generate_qa_test_cases — metadata persist + determinisme
+      #   • test_pre_commit_hook — skip/reject/allow hook pre-commit
+      - name: Jalankan unit test scripts
+        run: python -m unittest discover -s scripts -p 'test_*.py' -v
