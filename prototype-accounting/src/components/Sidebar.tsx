@@ -199,6 +199,23 @@ function PeriodListbox() {
   )
 }
 
+const SIDEBAR_GROUP_KEY = 'sidebar-collapsed-groups'
+
+function readCollapsedGroups(): Set<string> {
+  try {
+    const raw = localStorage.getItem(SIDEBAR_GROUP_KEY)
+    return raw ? new Set(JSON.parse(raw)) : new Set()
+  } catch {
+    return new Set()
+  }
+}
+
+function writeCollapsedGroups(collapsed: Set<string>) {
+  try {
+    localStorage.setItem(SIDEBAR_GROUP_KEY, JSON.stringify([...collapsed]))
+  } catch { /* noop */ }
+}
+
 function NavGroupSection({
   group,
   page,
@@ -208,7 +225,25 @@ function NavGroupSection({
   page: PageKey
   setPage: (p: PageKey) => void
 }) {
-  const [open, setOpen] = useState(group.defaultOpen ?? true)
+  // Read collapsed state from localStorage; defaultOpen=true → collapsed=false
+  const [collapsed, setCollapsed] = useState(() => {
+    const stored = readCollapsedGroups()
+    if (stored.has(group.title)) return true
+    return !(group.defaultOpen ?? true)
+  })
+  const open = !collapsed
+
+  const toggle = () => {
+    setCollapsed((prev) => {
+      const next = !prev
+      const stored = readCollapsedGroups()
+      if (next) stored.add(group.title)
+      else stored.delete(group.title)
+      writeCollapsedGroups(stored)
+      return next
+    })
+  }
+
   const isActive = group.items.some((it) => it.key === page)
   const GroupIcon = group.icon
 
@@ -217,7 +252,7 @@ function NavGroupSection({
       {/* Group header — klik untuk expand/collapse */}
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggle}
         className={`flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider transition ${
           isActive ? 'text-primary' : 'text-ink-faint hover:text-ink-soft'
         }`}
