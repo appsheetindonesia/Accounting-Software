@@ -428,8 +428,14 @@ export const useStore = create<AccountingState>()(
           database: 'accounting_db',
           password: '',
         },
-        updateDbConfig: (config) =>
-          set((s) => ({ dbConfig: { ...s.dbConfig, ...config } })),
+        updateDbConfig: (config) => {
+          const next = { ...get().dbConfig, ...config }
+          set({ dbConfig: next })
+          // Sync ke server (fire-and-forget — jangan block UI)
+          api.saveDbConfig(next).catch(() => {
+            // Gagal sync → state tetap ada di localStorage; coba lagi saat save berikutnya
+          })
+        },
 
         accounts: mockAccounts,
         journals: mockJournals,
@@ -514,7 +520,7 @@ export const useStore = create<AccountingState>()(
             // fetch data, agar header X-Entity-Id ikut terkirim sejak request
             // pertama (bukan hanya di request berikutnya).
             if (auth) setAuth(auth.accessToken, get().activeEntityId, auth.refreshToken ?? null)
-            const [accRes, jrnRes] = await Promise.all([api.getAccounts(), api.getJournals()])
+            const [accRes, jrnRes, dbCfg] = await Promise.all([api.getAccounts(), api.getJournals(), api.getDbConfig()])
             const journals = jrnRes.journals.map((j) => enrichCreatedBy(toJournalEntry(j), auth?.user ?? get().user))
             const entities = await fetchEntities()
             const periods = await fetchPeriods()
@@ -533,6 +539,7 @@ export const useStore = create<AccountingState>()(
               periods,
               activePeriod: get().activePeriod,
               lastSyncedAt: nowIso(),
+              dbConfig: dbCfg,
               entityDataCache: {
                 ...s.entityDataCache,
                 [get().activeEntityId]: { accounts: accRes.accounts, journals },
@@ -586,7 +593,7 @@ export const useStore = create<AccountingState>()(
             // membawa header X-Entity-Id, bukan hanya setelah ganti entitas
             // eksplisit (dan tanpa bergantung pada fallback entityId profil user).
             setAuth(auth.accessToken, get().activeEntityId, auth.refreshToken)
-            const [accRes, jrnRes] = await Promise.all([api.getAccounts(), api.getJournals()])
+            const [accRes, jrnRes, dbCfg] = await Promise.all([api.getAccounts(), api.getJournals(), api.getDbConfig()])
             const journals = jrnRes.journals.map((j) => enrichCreatedBy(toJournalEntry(j), auth.user))
             const entities = await fetchEntities()
             const periods = await fetchPeriods()
@@ -601,6 +608,7 @@ export const useStore = create<AccountingState>()(
               periods,
               activePeriod: auth.activePeriod?.id ?? get().activePeriod,
               lastSyncedAt: nowIso(),
+              dbConfig: dbCfg,
               authLoading: false,
               sessionExpired: false,
               toast: { message: `Selamat datang, ${auth.user.name}`, kind: 'success' },

@@ -1,6 +1,6 @@
 // Endpoint typed — implementasi `API - Accounting.md` (mock server localhost:4000).
 import { download, request, setAuth } from './client'
-import type { Account, BalanceCardData, JournalEntry, JournalStatus, TrendPoint } from '../types'
+import type { Account, BalanceCardData, DbConfig, JournalEntry, JournalStatus, TrendPoint } from '../types'
 
 export { ApiError, isNetworkError } from './client'
 export type { ApiError as ApiErrorType } from './client'
@@ -151,6 +151,14 @@ export const api = {
   // 3. Entitas (multi-tenant) — daftar entitas untuk entity switcher di sidebar
   getEntities() {
     return request<Entity[]>('/entities')
+  },
+
+  // ---- Pengaturan Database PostgreSQL ----
+  getDbConfig() {
+    return request<DbConfig>('/settings/db-config')
+  },
+  saveDbConfig(config: DbConfig) {
+    return request<DbConfig>('/settings/db-config', { method: 'POST', body: config })
   },
 
   // 4. Chart of Accounts

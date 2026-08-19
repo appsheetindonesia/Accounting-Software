@@ -570,4 +570,19 @@ export const handlers = [
     period.isOpen = true // idempotent — membuka periode yang sudah terbuka tidak error
     return ok({ id: period.id, isOpen: true })
   }),
+
+  // ---- Pengaturan Database PostgreSQL ----
+  http.get('*/settings/db-config', ({ request }) => {
+    const user = currentUser(request)
+    if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
+    return ok({ host: 'localhost', port: '5432', database: 'accounting_db', password: '' })
+  }),
+  http.post('*/settings/db-config', async ({ request }) => {
+    const user = currentUser(request)
+    if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
+    const body = (await request.json()) as { host?: string; port?: string; database?: string; password?: string }
+    if (!body.host || !body.port || !body.database)
+      return fail(422, 'VALIDATION_ERROR', 'Host, port, dan nama basis data wajib diisi')
+    return ok({ host: body.host.trim(), port: body.port.trim(), database: body.database.trim(), password: body.password ?? '' })
+  }),
 ]

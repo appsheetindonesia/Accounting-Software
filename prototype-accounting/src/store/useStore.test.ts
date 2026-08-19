@@ -38,6 +38,8 @@ vi.mock('../api', () => {
       closePeriod: vi.fn(),
       getPeriods: vi.fn(),
       health: vi.fn(),
+      getDbConfig: vi.fn(),
+      saveDbConfig: vi.fn(),
     },
   }
 })
@@ -103,7 +105,11 @@ beforeEach(() => {
   mockedApi.closePeriod.mockReset()
   mockedApi.getPeriods.mockReset()
   mockedApi.health.mockReset()
+  mockedApi.getDbConfig.mockReset()
+  mockedApi.saveDbConfig.mockReset()
   mockedApi.health.mockRejectedValue(new TypeError('fetch failed'))
+  mockedApi.getDbConfig.mockResolvedValue({ host: 'localhost', port: '5432', database: 'accounting_db', password: '' } as never)
+  mockedApi.saveDbConfig.mockResolvedValue({ host: 'localhost', port: '5432', database: 'accounting_db', password: '' } as never)
   // Default: gagal jaringan agar path lokal (fallback) yang teruji
   mockedApi.login.mockRejectedValue(new TypeError('fetch failed'))
   mockedApi.logout.mockResolvedValue(undefined)

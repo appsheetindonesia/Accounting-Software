@@ -82,6 +82,7 @@ export function saveState(file, db) {
     periods: db.periods,
     sessions: [...db.sessions.entries()],
     seq: db.seq,
+    dbConfig: db.dbConfig,
   }
   fs.writeFileSync(file, JSON.stringify(state, null, 2))
   console.log(`💾 [persist] State disimpan (${db.journals.length} jurnal) → ${file}`)

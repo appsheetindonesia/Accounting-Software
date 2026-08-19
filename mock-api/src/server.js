@@ -48,6 +48,8 @@ const createDb = ({ withExtra = false } = {}) => ({
   periods: structuredClone(periods),
   sessions: new Map(), // refreshToken -> userId
   seq: { journal: 100, line: 100, attachment: 100, user: 100, entity: 100 },
+  // Konfigurasi koneksi database PostgreSQL (Pengaturan)
+  dbConfig: { host: 'localhost', port: '5432', database: 'accounting_db', password: '' },
 })
 
 let db = createDb()
@@ -84,6 +86,7 @@ if (PERSIST) {
       periods: loaded.periods,
       sessions: new Map(loaded.sessions ?? []),
       seq: loaded.seq ?? { journal: 100, line: 100, attachment: 100, user: 100, entity: 100 },
+      dbConfig: loaded.dbConfig ?? { host: 'localhost', port: '5432', database: 'accounting_db', password: '' },
     }
     console.log(`💾 [persist] State dimuat dari ${PERSIST_FILE} (${db.journals.length} jurnal)`)
   } else {
@@ -1722,6 +1725,27 @@ app.post('/settings/test-connection', (req, res) => {
       latencyMs,
     })
   }, latencyMs)
+})
+
+// ---- Konfigurasi database (Pengaturan PostgreSQL) ----------------------------
+// GET  /settings/db-config → { data: { host, port, database, password } }
+// POST /settings/db-config → simpan ke db + file persist
+app.get('/settings/db-config', requireAuth, (req, res) => {
+  ok(res, db.dbConfig)
+})
+
+app.post('/settings/db-config', requireAuth, (req, res) => {
+  const { host, port, database, password } = req.body || {}
+  if (!host || !port || !database) {
+    return fail(res, 422, 'VALIDATION_ERROR', 'Host, port, dan nama basis data wajib diisi')
+  }
+  // Port harus angka 1-65535
+  const portNum = Number(port)
+  if (!Number.isFinite(portNum) || portNum < 1 || portNum > 65535) {
+    return fail(res, 422, 'VALIDATION_ERROR', 'Port harus berupa angka 1–65535')
+  }
+  db.dbConfig = { host: String(host).trim(), port: String(port).trim(), database: String(database).trim(), password: password ?? '' }
+  ok(res, db.dbConfig)
 })
 
 // Hook pengujian (API §13 INTERNAL_ERROR): route ini sengaja melempar error
