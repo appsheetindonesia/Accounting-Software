@@ -4,6 +4,7 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { act } from 'react'
 import DatabaseSettings from './DatabaseSettings'
 import { useStore } from '../store/useStore'
+import * as apiClient from '../api/client'
 
 // Pastikan persist middleware tidak aktif di test (localStorage tidak tersedia)
 beforeEach(() => {
@@ -119,5 +120,77 @@ describe('DatabaseSettings', () => {
 
     fireEvent.change(screen.getByLabelText('Kata Sandi'), { target: { value: 'mypassword' } })
     expect(screen.getByText('(dengan password)')).toBeDefined()
+  })
+
+  // ---- Test Koneksi ----
+  it('tombol Test Koneksi tampil di awal', () => {
+    render(<DatabaseSettings />)
+
+    const btn = screen.getByTestId('test-connection-btn')
+    expect(btn).toBeDefined()
+    expect(btn.textContent).toContain('Test Koneksi')
+    expect((btn as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('tombol Test Koneksi menunjukkan "Menguji..." saat loading', async () => {
+    const spy = vi.spyOn(apiClient, 'request').mockImplementation(() =>
+      new Promise((resolve) =>
+        setTimeout(() => resolve({ ok: true, message: 'Koneksi berhasil', latencyMs: 50 } as never), 100)
+      )
+    )
+
+    render(<DatabaseSettings />)
+
+    const btn = screen.getByTestId('test-connection-btn')
+    fireEvent.click(btn)
+
+    // Tunggu render pertama (loading state)
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50))
+    })
+    expect(btn.textContent).toContain('Menguji...')
+    expect((btn as HTMLButtonElement).disabled).toBe(true)
+
+    // Tunggu selesai
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 200))
+    })
+    expect(screen.getByTestId('test-result')).toBeDefined()
+    spy.mockRestore()
+  })
+
+  it('menampilkan hasil sukses setelah test koneksi berhasil', async () => {
+    const spy = vi.spyOn(apiClient, 'request').mockResolvedValue({
+      ok: true, message: 'Koneksi ke accounting_db@localhost:5432 berhasil', latencyMs: 50,
+    } as never)
+
+    render(<DatabaseSettings />)
+
+    fireEvent.click(screen.getByTestId('test-connection-btn'))
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 100))
+    })
+    const result = screen.getByTestId('test-result')
+    expect(result).toBeDefined()
+    expect(result.textContent).toContain('berhasil')
+    expect(result.textContent).toContain('50ms')
+    spy.mockRestore()
+  })
+
+  it('menampilkan hasil gagal saat request throw error', async () => {
+    const spy = vi.spyOn(apiClient, 'request').mockRejectedValue(new Error('Network error'))
+
+    render(<DatabaseSettings />)
+
+    fireEvent.click(screen.getByTestId('test-connection-btn'))
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 100))
+    })
+    const result = screen.getByTestId('test-result')
+    expect(result).toBeDefined()
+    expect(result.textContent).toContain('Network error')
+    spy.mockRestore()
   })
 })

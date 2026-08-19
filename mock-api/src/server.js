@@ -1702,6 +1702,28 @@ app.get('/search', requireAuth, (req, res) => {
 // ------------------------------------------------------------
 app.get('/health', (req, res) => ok(res, { status: 'ok', time: nowIso(), journals: db.journals.length, accounts: db.accounts.length }))
 
+// ---- Test koneksi database (Pengaturan PostgreSQL) --------------------------
+// Menerima { host, port, database, password } dari form Pengaturan.
+// Mock API tidak benar-benar menghubungi PostgreSQL — simulasi sukses/gagal.
+// Respons { data: { ok, message, latencyMs } }.
+app.post('/settings/test-connection', (req, res) => {
+  const { host, port, database } = req.body || {}
+  if (!host || !port || !database) {
+    return fail(res, 422, 'VALIDATION_ERROR', 'Host, port, dan nama basis data wajib diisi')
+  }
+  // Simulasi latensi jaringan (50-200ms)
+  const latencyMs = Math.floor(Math.random() * 150) + 50
+  // Mock API selalu sukses (database mock tidak bisa gagal)
+  // Di produksi, endpoint ini akan melakukan SELECT 1 ke PostgreSQL.
+  setTimeout(() => {
+    ok(res, {
+      ok: true,
+      message: `Koneksi ke ${database}@${host}:${port} berhasil`,
+      latencyMs,
+    })
+  }, latencyMs)
+})
+
 // Hook pengujian (API §13 INTERNAL_ERROR): route ini sengaja melempar error
 // agar error handler global (500 INTERNAL_ERROR) bisa divalidasi. Konsisten
 // dengan endpoint /admin/* lain yang tanpa auth (alat development).

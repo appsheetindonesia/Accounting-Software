@@ -1,6 +1,7 @@
-import { useState } from 'react'
-import { Eye, EyeOff, Save, Server } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { Eye, EyeOff, Save, Server, Plug } from 'lucide-react'
 import { useStore } from '../store/useStore'
+import { request } from '../api/client'
 
 export default function DatabaseSettings() {
   const dbConfig = useStore((s) => s.dbConfig)
@@ -10,6 +11,9 @@ export default function DatabaseSettings() {
   const [form, setForm] = useState({ ...dbConfig })
   const [showPassword, setShowPassword] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string; latencyMs?: number } | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
 
   const handleChange = (field: keyof typeof form, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -42,6 +46,42 @@ export default function DatabaseSettings() {
     })
     setSaved(true)
     showToast('Pengaturan database tersimpan', 'success')
+  }
+
+  const handleTestConnection = async () => {
+    // Validasi ringan sebelum test
+    if (!form.host.trim() || !form.port.trim() || !form.database.trim()) {
+      showToast('Lengkapi host, port, dan nama basis data terlebih dahulu', 'error')
+      return
+    }
+
+    setTesting(true)
+    setTestResult(null)
+    abortRef.current?.abort()
+    abortRef.current = new AbortController()
+
+    try {
+      const res = await request<{ ok: boolean; message: string; latencyMs: number }>(
+        '/settings/test-connection',
+        {
+          method: 'POST',
+          body: {
+            host: form.host.trim(),
+            port: form.port.trim(),
+            database: form.database.trim(),
+            password: form.password,
+          },
+        }
+      )
+      setTestResult(res)
+      showToast(res.ok ? 'Koneksi database berhasil' : 'Koneksi database gagal', res.ok ? 'success' : 'error')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Gagal menguji koneksi'
+      setTestResult({ ok: false, message: msg })
+      showToast(msg, 'error')
+    } finally {
+      setTesting(false)
+    }
   }
 
   const isDirty =
@@ -149,8 +189,8 @@ export default function DatabaseSettings() {
           )}
         </div>
 
-        {/* Tombol Simpan */}
-        <div className="flex items-center gap-3">
+        {/* Tombol Simpan + Test Koneksi */}
+        <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
             onClick={handleSave}
@@ -159,10 +199,40 @@ export default function DatabaseSettings() {
           >
             <Save size={15} /> Simpan Pengaturan
           </button>
+          <button
+            type="button"
+            onClick={handleTestConnection}
+            disabled={testing}
+            className="inline-flex items-center gap-2 rounded-lg border border-line bg-canvas px-4 py-2.5 text-sm font-semibold text-ink shadow-card transition hover:bg-surface active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50"
+            data-testid="test-connection-btn"
+          >
+            <Plug size={15} className={testing ? 'animate-pulse' : ''} />
+            {testing ? 'Menguji...' : 'Test Koneksi'}
+          </button>
           {saved && isDirty === false && (
             <span className="text-xs text-ok">✓ Tersimpan</span>
           )}
         </div>
+
+        {/* Hasil Test Koneksi */}
+        {testResult && (
+          <div
+            className={`flex items-start gap-2 rounded-lg px-3 py-2 text-sm ${
+              testResult.ok
+                ? 'border border-ok/30 bg-ok/5 text-ok'
+                : 'border border-error/30 bg-error/5 text-error'
+            }`}
+            data-testid="test-result"
+          >
+            <span className="mt-0.5 text-base">{testResult.ok ? '✓' : '✗'}</span>
+            <div>
+              <p className="font-medium">{testResult.message}</p>
+              {testResult.latencyMs !== undefined && (
+                <p className="mt-0.5 text-xs opacity-70">Latency: {testResult.latencyMs}ms</p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </section>
   )
