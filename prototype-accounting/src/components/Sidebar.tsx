@@ -231,30 +231,36 @@ function NavGroupSection({
         />
       </button>
 
-      {/* Items */}
-      {open && (
-        <div className="mt-0.5 space-y-0.5">
-          {group.items.map(({ key, label, icon: Icon }) => {
-            const active = page === key
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setPage(key)}
-                title={label}
-                className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ${
-                  active
-                    ? 'border-l-[3px] bg-primary/10 font-semibold text-primary'
-                    : 'border-l-[3px] border-transparent text-ink-soft hover:bg-surface-hover hover:text-ink'
-                }`}
-              >
-                <Icon size={18} className="shrink-0" />
-                <span className="hidden lg:inline">{label}</span>
-              </button>
-            )
-          })}
+      {/* Items — smooth expand/collapse via grid-template-rows transition */}
+      <div
+        className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
+          open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+        }`}
+      >
+        <div className="overflow-hidden">
+          <div className="mt-0.5 space-y-0.5">
+            {group.items.map(({ key, label, icon: Icon }) => {
+              const active = page === key
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setPage(key)}
+                  title={label}
+                  className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ${
+                    active
+                      ? 'border-l-[3px] bg-primary/10 font-semibold text-primary'
+                      : 'border-l-[3px] border-transparent text-ink-soft hover:bg-surface-hover hover:text-ink'
+                  }`}
+                >
+                  <Icon size={18} className="shrink-0" />
+                  <span className="hidden lg:inline">{label}</span>
+                </button>
+              )
+            })}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   )
 }
