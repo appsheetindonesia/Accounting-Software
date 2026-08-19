@@ -12,6 +12,7 @@ import { randomUUID } from 'crypto'
 import { entities, users, rolePermissions, accounts, coaTemplate, journals, periods, mockTrend, extraJournals, ent2Accounts, ent2Journals } from './data.js'
 import { isEnabled as persistEnabled, getFilePath as persistFilePath, loadState as loadPersisted, saveState as savePersisted } from './persistence.js'
 import { deflateSync } from 'zlib'
+import { buildConnectionString, getPool, destroyPool, testQuery, getPoolStatus } from './db.js'
 
 const app = express()
 // exposedHeaders: browser perlu membaca Content-Disposition (nama file export
@@ -1706,25 +1707,29 @@ app.get('/search', requireAuth, (req, res) => {
 app.get('/health', (req, res) => ok(res, { status: 'ok', time: nowIso(), journals: db.journals.length, accounts: db.accounts.length }))
 
 // ---- Test koneksi database (Pengaturan PostgreSQL) --------------------------
-// Menerima { host, port, database, password } dari form Pengaturan.
-// Mock API tidak benar-benar menghubungi PostgreSQL — simulasi sukses/gagal.
+// Menerima { host, port, database, schema, username, password } dari form Pengaturan.
+// Melakukan SELECT 1 nyata ke PostgreSQL untuk memverifikasi koneksi.
 // Respons { data: { ok, message, latencyMs } }.
-app.post('/settings/test-connection', (req, res) => {
-  const { host, port, database } = req.body || {}
+app.post('/settings/test-connection', async (req, res) => {
+  const { host, port, database, schema, username, password } = req.body || {}
   if (!host || !port || !database) {
     return fail(res, 422, 'VALIDATION_ERROR', 'Host, port, dan nama basis data wajib diisi')
   }
-  // Simulasi latensi jaringan (50-200ms)
-  const latencyMs = Math.floor(Math.random() * 150) + 50
-  // Mock API: selalu sukses (ini bukan koneksi PostgreSQL nyata).
-  // Di produksi, endpoint ini akan melakukan SELECT 1 ke PostgreSQL.
-  setTimeout(() => {
-    ok(res, {
-      ok: true,
-      message: `Koneksi ke ${database}@${host}:${port} berhasil`,
-      latencyMs,
-    })
-  }, latencyMs)
+  const cfg = {
+    storageMode: 'postgresql',
+    host: String(host).trim(),
+    port: String(port).trim(),
+    database: String(database).trim(),
+    schema: String(schema || 'public').trim() || 'public',
+    username: String(username || 'postgres').trim() || 'postgres',
+    password: password ?? '',
+  }
+  try {
+    const result = await testQuery(cfg)
+    ok(res, result)
+  } catch (err) {
+    fail(res, 500, 'INTERNAL_ERROR', `Test koneksi gagal: ${err.message}`)
+  }
 })
 
 // ---- Konfigurasi database (Pengaturan PostgreSQL) ----------------------------
@@ -1746,6 +1751,12 @@ app.post('/settings/db-config', requireAuth, (req, res) => {
   }
   const defaultTables = { accounts: 'accounts', journals: 'journals', journalLines: 'journal_lines', periods: 'periods', users: 'users', entities: 'entities', sessions: 'sessions', attachments: 'attachments' }
   db.dbConfig = { storageMode: storageMode ?? 'local', host: String(host).trim(), port: String(port).trim(), database: String(database).trim(), schema: String(schema ?? 'public').trim() || 'public', username: String(username ?? 'postgres').trim() || 'postgres', password: password ?? '', tables: { ...defaultTables, ...(req.body?.tables || {}) } }
+  // Manage connection pool: buat jika mode PostgreSQL, destroy jika mode local
+  if (db.dbConfig.storageMode === 'postgresql') {
+    getPool(db.dbConfig)
+  } else {
+    destroyPool()
+  }
   ok(res, db.dbConfig)
 })
 
