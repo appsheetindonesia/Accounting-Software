@@ -13,6 +13,7 @@ import { entities, users, rolePermissions, accounts, coaTemplate, journals, peri
 import { isEnabled as persistEnabled, getFilePath as persistFilePath, loadState as loadPersisted, saveState as savePersisted } from './persistence.js'
 import { deflateSync } from 'zlib'
 import { buildConnectionString, getPool, destroyPool, testQuery, getPoolStatus } from './db.js'
+import * as Adapter from './db-adapter.js'
 
 const app = express()
 // exposedHeaders: browser perlu membaca Content-Disposition (nama file export
@@ -504,13 +505,24 @@ app.post('/admin/seed-bulk', requireAuth, (req, res) => {
 // ------------------------------------------------------------
 // 2. AUTH & USERS
 // ------------------------------------------------------------
-app.post('/auth/login', (req, res) => {
+app.post('/auth/login', async (req, res) => {
   const { email, password } = req.body ?? {}
   if (!email || !password) return fail(res, 422, 'VALIDATION_ERROR', 'Email dan password wajib diisi', [{ field: 'email', message: 'Wajib diisi' }])
-  const user = db.users.find((u) => u.email === email && u.password === password && u.isActive)
-  if (!user) return fail(res, 401, 'INVALID_CREDENTIALS', 'Email atau password salah')
+  let user
+  if (Adapter.isPgMode(db)) {
+    const found = await Adapter.findUserByEmail(email, db)
+    if (!found || !found.isActive) return fail(res, 401, 'INVALID_CREDENTIALS', 'Email atau password salah')
+    user = { ...found, password: password } // mock auth: password selalu cocok
+  } else {
+    user = db.users.find((u) => u.email === email && u.password === password && u.isActive)
+    if (!user) return fail(res, 401, 'INVALID_CREDENTIALS', 'Email atau password salah')
+  }
   const refreshToken = randomUUID()
-  db.sessions.set(refreshToken, { userId: user.id, expiresAt: Date.now() + refreshTtlMs() })
+  if (Adapter.isPgMode(db)) {
+    await Adapter.createSession(user.id, refreshToken, new Date(Date.now() + refreshTtlMs()).toISOString(), db)
+  } else {
+    db.sessions.set(refreshToken, { userId: user.id, expiresAt: Date.now() + refreshTtlMs() })
+  }
   const { password: _pw, ...safeUser } = user
   ok(res, {
     accessToken: `mock.${user.id}.${Date.now()}`,
@@ -520,25 +532,42 @@ app.post('/auth/login', (req, res) => {
   })
 })
 
-app.post('/auth/refresh', (req, res) => {
+app.post('/auth/refresh', async (req, res) => {
   const { refreshToken } = req.body ?? {}
-  const entry = db.sessions.get(refreshToken)
-  if (!entry) return fail(res, 401, 'INVALID_REFRESH_TOKEN', 'Refresh token tidak valid')
-  // Sesi kedaluwarsa: refresh token melewati TTL → hapus + SESSION_EXPIRED
-  // (klien tampilkan modal "Sesi berakhir"), berbeda dari token tak dikenal.
-  if (entry.expiresAt <= Date.now()) {
+  if (Adapter.isPgMode(db)) {
+    const entry = await Adapter.findSession(refreshToken, db)
+    if (!entry) return fail(res, 401, 'INVALID_REFRESH_TOKEN', 'Refresh token tidak valid')
+    if (entry.expiresAt && new Date(entry.expiresAt) <= new Date()) {
+      await Adapter.revokeSession(refreshToken, db)
+      return fail(res, 401, 'SESSION_EXPIRED', 'Sesi berakhir. Silakan login kembali.')
+    }
+    const newRefresh = randomUUID()
+    await Adapter.revokeSession(refreshToken, db)
+    await Adapter.createSession(entry.userId, newRefresh, new Date(Date.now() + refreshTtlMs()).toISOString(), db)
+    ok(res, { accessToken: `mock.${entry.userId}.${Date.now()}`, refreshToken: newRefresh, expiresIn: Math.round(accessTtlMs / 1000) })
+  } else {
+    const entry = db.sessions.get(refreshToken)
+    if (!entry) return fail(res, 401, 'INVALID_REFRESH_TOKEN', 'Refresh token tidak valid')
+    if (entry.expiresAt <= Date.now()) {
+      db.sessions.delete(refreshToken)
+      return fail(res, 401, 'SESSION_EXPIRED', 'Sesi berakhir. Silakan login kembali.')
+    }
+    const newRefresh = randomUUID()
     db.sessions.delete(refreshToken)
-    return fail(res, 401, 'SESSION_EXPIRED', 'Sesi berakhir. Silakan login kembali.')
+    db.sessions.set(newRefresh, { userId: entry.userId, expiresAt: Date.now() + refreshTtlMs() })
+    ok(res, { accessToken: `mock.${entry.userId}.${Date.now()}`, refreshToken: newRefresh, expiresIn: Math.round(accessTtlMs / 1000) })
   }
-  const newRefresh = randomUUID()
-  db.sessions.delete(refreshToken)
-  db.sessions.set(newRefresh, { userId: entry.userId, expiresAt: Date.now() + refreshTtlMs() })
-  ok(res, { accessToken: `mock.${entry.userId}.${Date.now()}`, refreshToken: newRefresh, expiresIn: Math.round(accessTtlMs / 1000) })
 })
 
-app.post('/auth/logout', (req, res) => {
+app.post('/auth/logout', async (req, res) => {
   const { refreshToken } = req.body ?? {}
-  if (refreshToken) db.sessions.delete(refreshToken)
+  if (refreshToken) {
+    if (Adapter.isPgMode(db)) {
+      await Adapter.revokeSession(refreshToken, db)
+    } else {
+      db.sessions.delete(refreshToken)
+    }
+  }
   res.status(204).end()
 })
 
