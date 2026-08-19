@@ -5,10 +5,14 @@ Verifikasi artefak QA selalu sinkron dengan `QA Test Plan - Accounting.md`.
 
 Alur:
   1. Backup file output yang sedang ter-commit (state saat ini).
-  2. Jalankan generator (scripts/generate-qa-test-cases.py) dengan tanggal run
-     dipin dari file yang ter-commit (env QA_RUN_DATE) — jadi pergantian hari
-     TIDAK dianggap sebagai perubahan.
-  3. Bandingkan KONTEN:
+  2. Baca 'Tanggal Run' dari baris pertama `qa-test-cases-tracker.csv`
+     yang ter-commit — ini jadi acuan tanggal.
+  3. Jalankan generator (scripts/generate-qa-test-cases.py) dengan env
+     QA_RUN_DATE di-override ke tanggal dari tracker. Ini memastikan
+     generator mereproduksi artefak dengan tanggal yang SAMA persis
+     dengan yang sudah di-commit — jadi pergantian hari TIDAK dianggap
+     sebagai perubahan.
+  4. Bandingkan KONTEN:
        - CSV        → identik SETELAH normalisasi line ending (safety net —
                       `.gitattributes` (`*.csv text eol=lf`) sudah menjamin
                       checkout selalu LF, jadi di alur normal byte mentah
@@ -57,7 +61,12 @@ def normalize_line_endings(b: bytes) -> bytes:
 
 
 def committed_run_date() -> str:
-    """Ambil 'Tanggal Run' dari tracker yang ter-commit (baris data pertama)."""
+    """Ambil 'Tanggal Run' dari tracker yang ter-commit (baris data pertama).
+
+    Dipakai sebagai acuan tanggal oleh check-qa-sync: generator dijalankan
+    dengan env QA_RUN_DATE di-override ke tanggal ini, sehingga pergantian
+    hari di runner CI TIDAK menyebabkan artefak dianggap berubah.
+    """
     tracker = ROOT / "qa-test-cases-tracker.csv"
     if tracker.exists():
         with tracker.open(encoding="utf-8-sig", newline="") as f:
@@ -101,7 +110,9 @@ def main() -> None:
             if src.exists():
                 shutil.copy2(src, backup / name)
 
-        # 2. Regenerate dengan tanggal ter-pin
+        # 2. Regenerate dengan tanggal ter-pin (override env QA_RUN_DATE
+        #    agar generator memakai tanggal dari tracker ter-commit, bukan
+        #    hari ini — ini kunci agar pergantian hari tidak false-positive)
         env = dict(os.environ, QA_RUN_DATE=run_date)
         proc = subprocess.run([sys.executable, str(GENERATOR)],
                               cwd=ROOT, env=env, capture_output=True, text=True)
