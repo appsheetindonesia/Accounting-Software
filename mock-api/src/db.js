@@ -32,9 +32,12 @@ export function buildConnectionString(cfg) {
   const schema = cfg.schema || 'public'
 
   let url = `postgresql://${user}${pass ? ':' + pass : ''}@${host}:${port}/${db}`
+  const params = []
+  params.push('sslmode=disable')
   if (schema !== 'public') {
-    url += `?search_path=${schema}`
+    params.push(`search_path=${schema}`)
   }
+  if (params.length) url += `?${params.join('&')}`
   return url
 }
 
@@ -70,7 +73,8 @@ export function getPool(cfg) {
     connectionString,
     max: 5,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 5000,
+    connectionTimeoutMillis: 10000,
+    ssl: false,
   })
   lastConfig = configKey
 
@@ -131,7 +135,8 @@ export async function testQuery(cfg) {
     connectionString,
     max: 1,
     idleTimeoutMillis: 5000,
-    connectionTimeoutMillis: 5000,
+    connectionTimeoutMillis: 10000,
+    ssl: false,
   })
 
   const start = Date.now()

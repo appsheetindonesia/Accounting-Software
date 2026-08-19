@@ -32,7 +32,7 @@ describe('buildConnectionString', () => {
       username: 'postgres',
       password: '',
     })
-    expect(url).toBe('postgresql://postgres@localhost:5432/accounting_db')
+    expect(url).toBe('postgresql://postgres@localhost:5432/accounting_db?sslmode=disable')
   })
 
   it('men-encode password khusus karakter', () => {
@@ -43,7 +43,7 @@ describe('buildConnectionString', () => {
       username: 'admin',
       password: 'p@ss:word!',
     })
-    expect(url).toBe('postgresql://admin:p%40ss%3Aword!@db.example.com:5433/my%20db')
+    expect(url).toBe('postgresql://admin:p%40ss%3Aword!@db.example.com:5433/my%20db?sslmode=disable')
   })
 
   it('menambahkan search_path jika schema bukan public', () => {
@@ -55,7 +55,8 @@ describe('buildConnectionString', () => {
       username: 'postgres',
       password: '',
     })
-    expect(url).toContain('?search_path=myschema')
+    expect(url).toContain('search_path=myschema')
+    expect(url).toContain('sslmode=disable')
   })
 
   it('tidak menambahkan search_path untuk schema public', () => {
@@ -165,7 +166,7 @@ describe('testQuery', () => {
     expect(typeof result.latencyMs).toBe('number')
   })
 
-  it('ok = false saat PostgreSQL tidak tersedia', { timeout: 10000 }, async () => {
+  it('ok = false saat PostgreSQL tidak tersedia', { timeout: 15000 }, async () => {
     const result = await testQuery({
       storageMode: 'postgresql',
       host: '192.0.2.1', // TEST-NET — tidak ada server

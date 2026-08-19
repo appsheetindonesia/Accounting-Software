@@ -36,7 +36,7 @@ function ensurePool(cfg) {
   const schema = cfg.schema || 'public'
   let connStr = `postgresql://${user}${pass ? ':' + pass : ''}@${host}:${port}/${db}`
   if (schema !== 'public') connStr += `?search_path=${schema}`
-  pool = new Pool({ connectionString: connStr, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 5000 })
+  pool = new Pool({ connectionString: connStr, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000, ssl: false })
   pool.on('error', (err) => console.error('[DB-Adapter] Pool error:', err.message))
   poolConfigKey = key
   console.log(`[DB-Adapter] Pool created: ${cfg.username}@${cfg.host}:${cfg.port}/${cfg.database}`)
