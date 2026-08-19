@@ -49,7 +49,7 @@ const createDb = ({ withExtra = false } = {}) => ({
   sessions: new Map(), // refreshToken -> userId
   seq: { journal: 100, line: 100, attachment: 100, user: 100, entity: 100 },
   // Konfigurasi koneksi database PostgreSQL (Pengaturan)
-  dbConfig: { storageMode: 'local', host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '' },
+  dbConfig: { storageMode: 'local', host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '', tables: { accounts: 'accounts', journals: 'journals', journalLines: 'journal_lines', periods: 'periods', users: 'users', entities: 'entities', sessions: 'sessions', attachments: 'attachments' } },
 })
 
 let db = createDb()
@@ -86,7 +86,7 @@ if (PERSIST) {
       periods: loaded.periods,
       sessions: new Map(loaded.sessions ?? []),
       seq: loaded.seq ?? { journal: 100, line: 100, attachment: 100, user: 100, entity: 100 },
-      dbConfig: loaded.dbConfig ?? { storageMode: 'local', host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '' },
+      dbConfig: loaded.dbConfig ?? { storageMode: 'local', host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '', tables: { accounts: 'accounts', journals: 'journals', journalLines: 'journal_lines', periods: 'periods', users: 'users', entities: 'entities', sessions: 'sessions', attachments: 'attachments' } },
     }
     console.log(`💾 [persist] State dimuat dari ${PERSIST_FILE} (${db.journals.length} jurnal)`)
   } else {

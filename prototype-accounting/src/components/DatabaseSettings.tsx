@@ -1,7 +1,9 @@
 import { useRef, useState } from 'react'
-import { Eye, EyeOff, Save, Server, Plug, HardDrive, Database } from 'lucide-react'
+import { Eye, EyeOff, Save, Server, Plug, HardDrive, Database, Table2, RotateCcw } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { request } from '../api/client'
+import type { DbTables } from '../types'
+import { DEFAULT_DB_TABLES } from '../types'
 
 export default function DatabaseSettings() {
   const dbConfig = useStore((s) => s.dbConfig)
@@ -27,6 +29,19 @@ export default function DatabaseSettings() {
     setForm((prev) => ({ ...prev, storageMode: mode }))
     setSaved(false)
     setTestResult(null)
+  }
+
+  const handleTableChange = (key: keyof DbTables, value: string) => {
+    setForm((prev) => ({
+      ...prev,
+      tables: { ...prev.tables, [key]: value },
+    }))
+    setSaved(false)
+  }
+
+  const resetTables = () => {
+    setForm((prev) => ({ ...prev, tables: { ...DEFAULT_DB_TABLES } }))
+    setSaved(false)
   }
 
   const handleSave = () => {
@@ -57,6 +72,7 @@ export default function DatabaseSettings() {
       schema: form.schema.trim() || 'public',
       username: form.username.trim() || 'postgres',
       password: form.password,
+      tables: form.tables,
     })
     setSaved(true)
     showToast(
@@ -112,7 +128,8 @@ export default function DatabaseSettings() {
     form.database !== dbConfig.database ||
     form.schema !== dbConfig.schema ||
     form.username !== dbConfig.username ||
-    form.password !== dbConfig.password
+    form.password !== dbConfig.password ||
+    JSON.stringify(form.tables) !== JSON.stringify(dbConfig.tables)
 
   return (
     <section className="overflow-hidden rounded-xl border border-line bg-surface shadow-card">
@@ -303,6 +320,56 @@ export default function DatabaseSettings() {
               {form.password && (
                 <span className="ml-1 text-ink-faint">(dengan password)</span>
               )}
+            </div>
+
+            {/* Konfigurasi Nama Tabel */}
+            <div className="space-y-3 rounded-lg border border-line bg-canvas p-4" data-testid="table-config">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Table2 size={15} className="text-primary" />
+                  <h3 className="text-xs font-bold text-ink">Nama Tabel PostgreSQL</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={resetTables}
+                  className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] text-ink-faint transition hover:bg-surface hover:text-ink"
+                  data-testid="reset-tables-btn"
+                >
+                  <RotateCcw size={11} /> Reset default
+                </button>
+              </div>
+              <p className="text-[11px] text-ink-faint">
+                Atur nama tabel yang akan dibuat di PostgreSQL. Kosongkan untuk menggunakan nama default.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {(
+                  [
+                    ['accounts', 'Tabel Akun'],
+                    ['journals', 'Tabel Jurnal'],
+                    ['journalLines', 'Tabel Baris Jurnal'],
+                    ['periods', 'Tabel Periode'],
+                    ['users', 'Tabel Pengguna'],
+                    ['entities', 'Tabel Entitas'],
+                    ['sessions', 'Tabel Sesi'],
+                    ['attachments', 'Tabel Lampiran'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <div key={key} className="space-y-1">
+                    <label htmlFor={`table-${key}`} className="block text-[11px] font-medium text-ink-soft">
+                      {label}
+                    </label>
+                    <input
+                      id={`table-${key}`}
+                      type="text"
+                      value={form.tables[key]}
+                      onChange={(e) => handleTableChange(key, e.target.value)}
+                      placeholder={DEFAULT_DB_TABLES[key]}
+                      className="w-full rounded border border-line bg-surface px-2 py-1.5 font-mono text-xs text-ink placeholder:text-ink-faint focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30"
+                      data-testid={`table-input-${key}`}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}

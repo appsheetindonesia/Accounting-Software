@@ -575,14 +575,15 @@ export const handlers = [
   http.get('*/settings/db-config', ({ request }) => {
     const user = currentUser(request)
     if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
-    return ok({ storageMode: 'local', host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '' })
+    return ok({ storageMode: 'local', host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '', tables: { accounts: 'accounts', journals: 'journals', journalLines: 'journal_lines', periods: 'periods', users: 'users', entities: 'entities', sessions: 'sessions', attachments: 'attachments' } })
   }),
   http.post('*/settings/db-config', async ({ request }) => {
     const user = currentUser(request)
     if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
-    const body = (await request.json()) as { storageMode?: string; host?: string; port?: string; database?: string; schema?: string; password?: string }
+    const body = (await request.json()) as { storageMode?: string; host?: string; port?: string; database?: string; schema?: string; username?: string; password?: string; tables?: Record<string, string> }
     if (!body.host || !body.port || !body.database)
       return fail(422, 'VALIDATION_ERROR', 'Host, port, dan nama basis data wajib diisi')
-    return ok({ storageMode: body.storageMode ?? 'local', host: body.host.trim(), port: body.port.trim(), database: body.database.trim(), schema: (body.schema ?? 'public').trim() || 'public', username: (body.username ?? 'postgres').trim() || 'postgres', password: body.password ?? '' })
+    const defaultTables = { accounts: 'accounts', journals: 'journals', journalLines: 'journal_lines', periods: 'periods', users: 'users', entities: 'entities', sessions: 'sessions', attachments: 'attachments' }
+    return ok({ storageMode: body.storageMode ?? 'local', host: body.host.trim(), port: body.port.trim(), database: body.database.trim(), schema: (body.schema ?? 'public').trim() || 'public', username: (body.username ?? 'postgres').trim() || 'postgres', password: body.password ?? '', tables: { ...defaultTables, ...(body.tables ?? {}) } })
   }),
 ]

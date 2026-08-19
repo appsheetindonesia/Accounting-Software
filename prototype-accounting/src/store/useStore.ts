@@ -430,6 +430,16 @@ export const useStore = create<AccountingState>()(
           schema: 'public',
           username: 'postgres',
           password: '',
+          tables: {
+            accounts: 'accounts',
+            journals: 'journals',
+            journalLines: 'journal_lines',
+            periods: 'periods',
+            users: 'users',
+            entities: 'entities',
+            sessions: 'sessions',
+            attachments: 'attachments',
+          },
         },
         updateDbConfig: (config) => {
           const next = { ...get().dbConfig, ...config }

@@ -99,6 +99,32 @@ export interface BalanceCardData {
 // Disimpan di localStorage (persist) — bukan di server.
 // storageMode: 'postgresql' = data tersimpan di database PostgreSQL,
 //              'local' = data tersimpan lokal di perangkat ini (localStorage).
+export interface DbTables {
+  accounts: string
+  journals: string
+  journalLines: string
+  periods: string
+  users: string
+  entities: string
+  sessions: string
+  attachments: string
+}
+
+export const DEFAULT_DB_TABLES: DbTables = {
+  accounts: 'accounts',
+  journals: 'journals',
+  journalLines: 'journal_lines',
+  periods: 'periods',
+  users: 'users',
+  entities: 'entities',
+  sessions: 'sessions',
+  attachments: 'attachments',
+}
+
+// Konfigurasi koneksi database PostgreSQL (Pengaturan).
+// Disimpan di localStorage (persist) — bukan di server.
+// storageMode: 'postgresql' = data tersimpan di database PostgreSQL,
+//              'local' = data tersimpan lokal di perangkat ini (localStorage).
 export interface DbConfig {
   storageMode: 'postgresql' | 'local'
   host: string
@@ -107,4 +133,5 @@ export interface DbConfig {
   schema: string
   username: string
   password: string
+  tables: DbTables
 }

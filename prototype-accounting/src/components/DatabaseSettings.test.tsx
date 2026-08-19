@@ -10,7 +10,7 @@ import * as apiClient from '../api/client'
 beforeEach(() => {
   // Reset store ke default
   useStore.setState({
-    dbConfig: { storageMode: 'local', host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '' },
+    dbConfig: { storageMode: 'local', host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '', tables: { accounts: 'accounts', journals: 'journals', journalLines: 'journal_lines', periods: 'periods', users: 'users', entities: 'entities', sessions: 'sessions', attachments: 'attachments' } },
     toast: null,
   })
 })
@@ -76,7 +76,7 @@ describe('DatabaseSettings', () => {
   // ---- PostgreSQL form ----
   it('render 6 field input dengan nilai default saat mode PostgreSQL', () => {
     useStore.setState({
-      dbConfig: { storageMode: 'postgresql', host: '192.168.1.1', port: '5433', database: 'prod_db', schema: 'myschema', username: 'admin', password: 'secret' },
+      dbConfig: { storageMode: 'postgresql', host: '192.168.1.1', port: '5433', database: 'prod_db', schema: 'myschema', username: 'admin', password: 'secret', tables: { accounts: 'accounts', journals: 'journals', journalLines: 'journal_lines', periods: 'periods', users: 'users', entities: 'entities', sessions: 'sessions', attachments: 'attachments' } },
     })
     render(<DatabaseSettings />)
 
@@ -84,7 +84,7 @@ describe('DatabaseSettings', () => {
     expect((screen.getByLabelText('Port Internal') as HTMLInputElement).value).toBe('5433')
     expect((screen.getByLabelText('Nama Basis Data') as HTMLInputElement).value).toBe('prod_db')
     expect((screen.getByLabelText('Schema') as HTMLInputElement).value).toBe('myschema')
-    expect((screen.getByLabelText('Pengguna') as HTMLInputElement).value).toBe('admin')
+    expect((screen.getByLabelText('Pengguna', { selector: '#db-username' }) as HTMLInputElement).value).toBe('admin')
     expect((screen.getByLabelText('Kata Sandi') as HTMLInputElement).value).toBe('secret')
   })
 
@@ -98,7 +98,7 @@ describe('DatabaseSettings', () => {
 
   it('tombol Simpan aktif setelah mengubah form', () => {
     // Mulai dari PostgreSQL agar form awal match store
-    useStore.setState({ dbConfig: { storageMode: 'postgresql', host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '' } })
+    useStore.setState({ dbConfig: { storageMode: 'postgresql', host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '', tables: { accounts: 'accounts', journals: 'journals', journalLines: 'journal_lines', periods: 'periods', users: 'users', entities: 'entities', sessions: 'sessions', attachments: 'attachments' } } })
     render(<DatabaseSettings />)
 
     const saveBtn = screen.getByRole('button', { name: /Simpan Pengaturan/ }) as HTMLButtonElement
@@ -116,7 +116,7 @@ describe('DatabaseSettings', () => {
     fireEvent.change(screen.getByLabelText('Port Internal'), { target: { value: '5433' } })
     fireEvent.change(screen.getByLabelText('Nama Basis Data'), { target: { value: 'prod_db' } })
     fireEvent.change(screen.getByLabelText('Schema'), { target: { value: 'myschema' } })
-    fireEvent.change(screen.getByLabelText('Pengguna'), { target: { value: 'admin' } })
+    fireEvent.change(screen.getByLabelText('Pengguna', { selector: '#db-username' }), { target: { value: 'admin' } })
     fireEvent.change(screen.getByLabelText('Kata Sandi'), { target: { value: 'secret123' } })
 
     fireEvent.click(screen.getByRole('button', { name: /Simpan Pengaturan/ }))
@@ -223,7 +223,7 @@ describe('DatabaseSettings', () => {
     render(<DatabaseSettings />)
     fireEvent.click(screen.getByTestId('mode-postgresql-btn'))
 
-    fireEvent.change(screen.getByLabelText('Pengguna'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Pengguna', { selector: '#db-username' }), { target: { value: '' } })
     fireEvent.click(screen.getByRole('button', { name: /Simpan Pengaturan/ }))
 
     expect(useStore.getState().dbConfig.username).toBe('postgres')
@@ -340,7 +340,7 @@ describe('DatabaseSettings', () => {
   it('bisa switch ke mode lokal via tombol saran', async () => {
     // Mulai di mode PostgreSQL
     useStore.setState({
-      dbConfig: { storageMode: 'postgresql', host: 'wrong-host', port: '5432', database: 'db', schema: 'public', username: 'pg', password: '' },
+      dbConfig: { storageMode: 'postgresql', host: 'wrong-host', port: '5432', database: 'db', schema: 'public', username: 'pg', password: '', tables: { accounts: 'accounts', journals: 'journals', journalLines: 'journal_lines', periods: 'periods', users: 'users', entities: 'entities', sessions: 'sessions', attachments: 'attachments' } },
     })
     const spy = vi.spyOn(apiClient, 'request').mockResolvedValue({
       ok: false, message: 'Gagal terhubung', latencyMs: 100,
@@ -364,5 +364,58 @@ describe('DatabaseSettings', () => {
     // Info lokal tampil
     expect(screen.getByTestId('local-mode-info')).toBeDefined()
     spy.mockRestore()
+  })
+
+  // ---- Konfigurasi Nama Tabel ----
+  it('menampilkan section konfigurasi nama tabel saat mode PostgreSQL', () => {
+    useStore.setState({ dbConfig: { storageMode: 'postgresql', host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '', tables: { accounts: 'akun', journals: 'buku_besar', journalLines: 'baris_jurnal', periods: 'periode', users: 'pengguna', entities: 'entitas', sessions: 'sesi', attachments: 'lampiran' } } })
+    render(<DatabaseSettings />)
+
+    expect(screen.getByTestId('table-config')).toBeDefined()
+    expect((screen.getByTestId('table-input-accounts') as HTMLInputElement).value).toBe('akun')
+    expect((screen.getByTestId('table-input-journals') as HTMLInputElement).value).toBe('buku_besar')
+  })
+
+  it('tidak menampilkan section nama tabel saat mode Lokal', () => {
+    render(<DatabaseSettings />)
+    expect(screen.queryByTestId('table-config')).toBeNull()
+  })
+
+  it('mengubah nama tabel dan tombol Simpan aktif', () => {
+    useStore.setState({ dbConfig: { storageMode: 'postgresql', host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '', tables: { accounts: 'accounts', journals: 'journals', journalLines: 'journal_lines', periods: 'periods', users: 'users', entities: 'entities', sessions: 'sessions', attachments: 'attachments' } } })
+    render(<DatabaseSettings />)
+
+    const saveBtn = screen.getByRole('button', { name: /Simpan Pengaturan/ }) as HTMLButtonElement
+    expect(saveBtn.disabled).toBe(true)
+
+    fireEvent.change(screen.getByTestId('table-input-accounts'), { target: { value: 'coa_master' } })
+    expect(saveBtn.disabled).toBe(false)
+  })
+
+  it('tombol Reset default mengembalikan semua nama tabel ke default', () => {
+    useStore.setState({ dbConfig: { storageMode: 'postgresql', host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '', tables: { accounts: 'custom_akun', journals: 'custom_jurnal', journalLines: 'custom_lines', periods: 'custom_periode', users: 'custom_users', entities: 'custom_entities', sessions: 'custom_sessions', attachments: 'custom_attachments' } } })
+    render(<DatabaseSettings />)
+
+    // Ubah dulu
+    fireEvent.change(screen.getByTestId('table-input-accounts'), { target: { value: 'lagi_lain' } })
+    expect((screen.getByTestId('table-input-accounts') as HTMLInputElement).value).toBe('lagi_lain')
+
+    // Klik reset
+    fireEvent.click(screen.getByTestId('reset-tables-btn'))
+    expect((screen.getByTestId('table-input-accounts') as HTMLInputElement).value).toBe('accounts')
+    expect((screen.getByTestId('table-input-journals') as HTMLInputElement).value).toBe('journals')
+  })
+
+  it('menyimpan nama tabel custom ke store saat klik Simpan', () => {
+    useStore.setState({ dbConfig: { storageMode: 'postgresql', host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '', tables: { accounts: 'accounts', journals: 'journals', journalLines: 'journal_lines', periods: 'periods', users: 'users', entities: 'entities', sessions: 'sessions', attachments: 'attachments' } } })
+    render(<DatabaseSettings />)
+
+    fireEvent.change(screen.getByTestId('table-input-accounts'), { target: { value: 'coa_master' } })
+    fireEvent.change(screen.getByTestId('table-input-journals'), { target: { value: 'buku_jurnal' } })
+    fireEvent.click(screen.getByRole('button', { name: /Simpan Pengaturan/ }))
+
+    const state = useStore.getState()
+    expect(state.dbConfig.tables.accounts).toBe('coa_master')
+    expect(state.dbConfig.tables.journals).toBe('buku_jurnal')
   })
 })
