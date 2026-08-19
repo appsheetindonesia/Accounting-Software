@@ -1716,24 +1716,14 @@ app.post('/settings/test-connection', (req, res) => {
   }
   // Simulasi latensi jaringan (50-200ms)
   const latencyMs = Math.floor(Math.random() * 150) + 50
-  // Simulasi: hanya 'localhost' atau '127.0.0.1' yang berhasil.
-  // Host lain → gagal (meniru database PostgreSQL tidak terjangkau).
+  // Mock API: selalu sukses (ini bukan koneksi PostgreSQL nyata).
   // Di produksi, endpoint ini akan melakukan SELECT 1 ke PostgreSQL.
-  const reachable = ['localhost', '127.0.0.1'].includes(host.trim().toLowerCase())
   setTimeout(() => {
-    if (reachable) {
-      ok(res, {
-        ok: true,
-        message: `Koneksi ke ${database}@${host}:${port} berhasil`,
-        latencyMs,
-      })
-    } else {
-      ok(res, {
-        ok: false,
-        message: `Gagal terhubung ke ${database}@${host}:${port} — host tidak dapat dijangkau`,
-        latencyMs,
-      })
-    }
+    ok(res, {
+      ok: true,
+      message: `Koneksi ke ${database}@${host}:${port} berhasil`,
+      latencyMs,
+    })
   }, latencyMs)
 })
 
