@@ -14,6 +14,8 @@ import {
   LayoutDashboard,
   ListOrdered,
   NotebookPen,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   Scale,
   Settings,
@@ -199,6 +201,7 @@ function PeriodListbox() {
 }
 
 const SIDEBAR_GROUP_KEY = 'sidebar-collapsed-groups'
+const SIDEBAR_COMPACT_KEY = 'sidebar-compact'
 
 function readCollapsedGroups(): Set<string> {
   try {
@@ -219,10 +222,12 @@ function NavGroupSection({
   group,
   page,
   setPage,
+  compact,
 }: {
   group: NavGroup
   page: PageKey
   setPage: (p: PageKey) => void
+  compact: boolean
 }) {
   // Read collapsed state from localStorage; defaultOpen=true → collapsed=false
   const [collapsed, setCollapsed] = useState(() => {
@@ -259,10 +264,12 @@ function NavGroupSection({
       >
         <GroupIcon size={12} className="shrink-0" />
         <span className="hidden lg:inline flex-1 text-left">{group.title}</span>
-        <ChevronDown
-          size={12}
-          className={`hidden shrink-0 transition-transform lg:block ${open ? 'rotate-0' : '-rotate-90'}`}
-        />
+        {!compact && (
+          <ChevronDown
+            size={12}
+            className={`hidden shrink-0 transition-transform lg:block ${open ? 'rotate-0' : '-rotate-90'}`}
+          />
+        )}
       </button>
 
       {/* Items — smooth expand/collapse via grid-template-rows transition */}
@@ -289,9 +296,9 @@ function NavGroupSection({
                   }`}
                 >
                   <Icon size={18} className="shrink-0" />
-                  <span className="hidden lg:inline">{label}</span>
+                  {!compact && <span className="hidden lg:inline">{label}</span>}
                   {badge ? (
-                    <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold text-white">
+                    <span className={`${compact ? 'absolute -right-1 -top-1' : 'ml-auto'} flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold text-white`}>
                       {badge > 9 ? '9+' : badge}
                     </span>
                   ) : null}
@@ -319,6 +326,18 @@ export default function Sidebar() {
   const canWrite = canWriteJournal(user?.role)
   const canApprove = user?.role === 'admin' || user?.role === 'accountant'
 
+  // Compact mode (persisted ke localStorage)
+  const [compact, setCompact] = useState(() => {
+    try { return localStorage.getItem(SIDEBAR_COMPACT_KEY) === 'true' } catch { return false }
+  })
+  const toggleCompact = () => {
+    setCompact((prev) => {
+      const next = !prev
+      try { localStorage.setItem(SIDEBAR_COMPACT_KEY, String(next)) } catch { /* noop */ }
+      return next
+    })
+  }
+
   // Badge: jumlah jurnal menunggu approval
   const pendingApprovalCount = canApprove
     ? journals.filter((j) => j.status === 'pending-approval').length
@@ -333,47 +352,73 @@ export default function Sidebar() {
   }))
 
   return (
-    <aside className="flex w-16 shrink-0 flex-col border-r border-line bg-surface lg:w-64">
+    <aside className={`flex shrink-0 flex-col border-r border-line bg-surface transition-[width] duration-200 ${compact ? 'w-16' : 'w-16 lg:w-64'}`}>
       {canWrite && (
         <div className="px-2 pt-4 lg:px-4">
           <button
             type="button"
             onClick={openModal}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-semibold text-white shadow-card transition hover:bg-primary-light active:translate-y-px lg:justify-start"
+            className={`flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-semibold text-white shadow-card transition hover:bg-primary-light active:translate-y-px ${compact ? '' : 'lg:justify-start'}`}
+            title="Buat Jurnal"
           >
             <Plus size={16} />
-            <span className="hidden lg:inline">Buat Jurnal</span>
+            {!compact && <span className="hidden lg:inline">Buat Jurnal</span>}
           </button>
         </div>
       )}
 
       <nav className="mt-4 flex-1 space-y-1 overflow-y-auto px-2 lg:px-3">
         {groupsWithBadge.map((group) => (
-          <NavGroupSection key={group.title} group={group} page={page} setPage={setPage} />
+          <NavGroupSection key={group.title} group={group} page={page} setPage={setPage} compact={compact} />
         ))}
       </nav>
 
       <div className="space-y-2 border-t border-line p-3 lg:p-4">
+        {/* Toggle compact/expanded */}
+        <button
+          type="button"
+          onClick={toggleCompact}
+          className="hidden lg:flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-ink-soft transition hover:bg-surface-hover hover:text-ink"
+          title={compact ? 'Perluas sidebar' : 'Kecilkan sidebar'}
+        >
+          {compact ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+          {!compact && <span>Perluas sidebar</span>}
+        </button>
+
         <div className="hidden lg:block">
           <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-ink-faint">Periode</p>
-          <PeriodListbox />
+          {compact ? (
+            <button
+              type="button"
+              className="flex w-full items-center justify-center rounded-lg border border-line bg-canvas px-2.5 py-2 text-sm text-ink focus:outline-none"
+              title={`Periode: ${PERIODS.find((p) => p.id === useStore.getState().activePeriod)?.label}`}
+            >
+              <CalendarDays size={14} className="text-ink-soft" />
+            </button>
+          ) : (
+            <PeriodListbox />
+          )}
         </div>
         <div className="hidden lg:block">
-          <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-ink-faint">Entitas</p>
-          <label className="flex items-center gap-2 rounded-lg border border-line bg-canvas px-2.5 py-2">
+          {!compact && <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-ink-faint">Entitas</p>}
+          <label className={`flex items-center gap-2 rounded-lg border border-line bg-canvas px-2.5 py-2 ${compact ? 'justify-center' : ''}`}>
             <Building2 size={14} className="shrink-0 text-primary" />
-            <select
-              value={activeEntityId}
-              onChange={(e) => setActiveEntity(e.target.value)}
-              className="w-full bg-transparent text-sm text-ink focus:outline-none"
-              aria-label="Pilih entitas"
-            >
-              {entities.map((en) => (
-                <option key={en.id} value={en.id}>
-                  {en.name}
-                </option>
-              ))}
-            </select>
+            {!compact ? (
+              <select
+                value={activeEntityId}
+                onChange={(e) => setActiveEntity(e.target.value)}
+                className="w-full bg-transparent text-sm text-ink focus:outline-none"
+                aria-label="Pilih entitas"
+              >
+                {entities.map((en) => (
+                  <option key={en.id} value={en.id}>
+                    {en.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="sr-only">Entitas aktif</span>
+            )}
           </label>
         </div>
 
