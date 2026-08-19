@@ -94,3 +94,12 @@ export interface BalanceCardData {
   deltaDirection: 'up' | 'down' | 'flat'
   compareLabel: string
 }
+
+// Konfigurasi koneksi database PostgreSQL (Pengaturan).
+// Disimpan di localStorage (persist) — bukan di server.
+export interface DbConfig {
+  host: string
+  port: string
+  database: string
+  password: string
+}

@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist, type PersistOptions } from 'zustand/middleware'
 import { useMemo } from 'react'
-import type { Account, JournalEntry, JournalStatus, NewJournalInput, OfflineJournalOp, OfflineOpInput, PageKey } from '../types'
+import type { Account, DbConfig, JournalEntry, JournalStatus, NewJournalInput, OfflineJournalOp, OfflineOpInput, PageKey } from '../types'
 import { DEMO_DATA_BY_ENTITY, mockAccounts, mockJournals, SEED_JOURNAL_IDS, SEED_VERSION } from '../data/mock'
 import { api, ApiError, isNetworkError, toJournalEntry, type Entity, type PeriodInfo } from '../api'
 import { setAuth, setRefreshToken, setSessionExpiredHandler, setTokensRefreshedHandler } from '../api/client'
@@ -127,6 +127,10 @@ interface AccountingState {
 
   toast: Toast | null
   showToast: (message: string, kind?: Toast['kind']) => void
+
+  // Konfigurasi koneksi database PostgreSQL
+  dbConfig: DbConfig
+  updateDbConfig: (config: Partial<DbConfig>) => void
 }
 
 const nowIso = () => new Date().toISOString()
@@ -183,6 +187,7 @@ const persistOptions: PersistOptions<AccountingState, PersistedShape> = {
     offlineQueue: s.offlineQueue,
     lastSyncedAt: s.lastSyncedAt,
     entityDataCache: s.entityDataCache,
+    dbConfig: s.dbConfig,
   }),
   migrate: (persisted, version) => migratePersistedState(persisted, version),
   // Merge berjalan pada SETIAP rehidrasi (beda dengan migrate yang hanya
@@ -415,6 +420,16 @@ export const useStore = create<AccountingState>()(
         focusAccountId: null,
         journalFilter: null,
         closePeriod,
+
+        // Konfigurasi koneksi database PostgreSQL (Pengaturan)
+        dbConfig: {
+          host: 'localhost',
+          port: '5432',
+          database: 'accounting_db',
+          password: '',
+        },
+        updateDbConfig: (config) =>
+          set((s) => ({ dbConfig: { ...s.dbConfig, ...config } })),
 
         accounts: mockAccounts,
         journals: mockJournals,
