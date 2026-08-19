@@ -6,7 +6,10 @@ import {
   CalendarDays,
   Check,
   ChevronDown,
+  Database,
+  FileText,
   FolderDown,
+  HelpCircle,
   Landmark,
   LayoutDashboard,
   ListOrdered,
@@ -21,18 +24,47 @@ import type { PageKey } from '../types'
 import { useStore } from '../store/useStore'
 import { canWriteJournal } from '../lib/permissions'
 
-const NAV: { key: PageKey; label: string; icon: typeof LayoutDashboard }[] = [
-  { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { key: 'journal', label: 'Jurnal', icon: BookOpen },
-  { key: 'buku-besar', label: 'Buku Besar', icon: NotebookPen },
-  { key: 'neraca-lajur', label: 'Neraca Lajur', icon: Scale },
-  { key: 'laba-rugi', label: 'Laba Rugi', icon: TrendingUp },
-  { key: 'neraca', label: 'Neraca', icon: Landmark },
-  { key: 'arus-kas', label: 'Arus Kas', icon: Waves },
-  { key: 'laporan-lain', label: 'Laporan Lain', icon: FolderDown },
-  { key: 'akun', label: 'Tabel Akun', icon: ListOrdered },
-  { key: 'glossary', label: 'Kamus Istilah', icon: BookMarked },
-  { key: 'pengaturan', label: 'Pengaturan', icon: Settings },
+type NavItem = { key: PageKey; label: string; icon: typeof LayoutDashboard }
+type NavGroup = { title: string; icon: typeof FileText; items: NavItem[]; defaultOpen?: boolean }
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    title: 'Menu Utama',
+    icon: FileText,
+    defaultOpen: true,
+    items: [
+      { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { key: 'journal', label: 'Jurnal', icon: BookOpen },
+    ],
+  },
+  {
+    title: 'Laporan Keuangan',
+    icon: TrendingUp,
+    defaultOpen: true,
+    items: [
+      { key: 'buku-besar', label: 'Buku Besar', icon: NotebookPen },
+      { key: 'neraca-lajur', label: 'Neraca Lajur', icon: Scale },
+      { key: 'laba-rugi', label: 'Laba Rugi', icon: TrendingUp },
+      { key: 'neraca', label: 'Neraca', icon: Landmark },
+      { key: 'arus-kas', label: 'Arus Kas', icon: Waves },
+      { key: 'laporan-lain', label: 'Laporan Lain', icon: FolderDown },
+    ],
+  },
+  {
+    title: 'Referensi',
+    icon: Database,
+    defaultOpen: true,
+    items: [
+      { key: 'akun', label: 'Tabel Akun', icon: ListOrdered },
+      { key: 'glossary', label: 'Kamus Istilah', icon: HelpCircle },
+    ],
+  },
+  {
+    title: 'Pengaturan',
+    icon: Settings,
+    defaultOpen: true,
+    items: [{ key: 'pengaturan', label: 'Pengaturan', icon: Settings }],
+  },
 ]
 
 const PERIODS = [
@@ -167,6 +199,66 @@ function PeriodListbox() {
   )
 }
 
+function NavGroupSection({
+  group,
+  page,
+  setPage,
+}: {
+  group: NavGroup
+  page: PageKey
+  setPage: (p: PageKey) => void
+}) {
+  const [open, setOpen] = useState(group.defaultOpen ?? true)
+  const isActive = group.items.some((it) => it.key === page)
+  const GroupIcon = group.icon
+
+  return (
+    <div>
+      {/* Group header — klik untuk expand/collapse */}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={`flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider transition ${
+          isActive ? 'text-primary' : 'text-ink-faint hover:text-ink-soft'
+        }`}
+        aria-expanded={open}
+      >
+        <GroupIcon size={12} className="shrink-0" />
+        <span className="hidden lg:inline flex-1 text-left">{group.title}</span>
+        <ChevronDown
+          size={12}
+          className={`hidden shrink-0 transition-transform lg:block ${open ? 'rotate-0' : '-rotate-90'}`}
+        />
+      </button>
+
+      {/* Items */}
+      {open && (
+        <div className="mt-0.5 space-y-0.5">
+          {group.items.map(({ key, label, icon: Icon }) => {
+            const active = page === key
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setPage(key)}
+                title={label}
+                className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ${
+                  active
+                    ? 'border-l-[3px] bg-primary/10 font-semibold text-primary'
+                    : 'border-l-[3px] border-transparent text-ink-soft hover:bg-surface-hover hover:text-ink'
+                }`}
+              >
+                <Icon size={18} className="shrink-0" />
+                <span className="hidden lg:inline">{label}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Sidebar() {
   const page = useStore((s) => s.page)
   const setPage = useStore((s) => s.setPage)
@@ -193,26 +285,10 @@ export default function Sidebar() {
         </div>
       )}
 
-      <nav className="mt-4 flex-1 space-y-0.5 overflow-y-auto px-2 lg:px-3">
-        {NAV.map(({ key, label, icon: Icon }) => {
-          const active = page === key
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setPage(key)}
-              title={label}
-              className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ${
-                active
-                  ? 'border-l-[3px] bg-primary/10 font-semibold text-primary'
-                  : 'border-l-[3px] border-transparent text-ink-soft hover:bg-surface-hover hover:text-ink'
-              }`}
-            >
-              <Icon size={18} className="shrink-0" />
-              <span className="hidden lg:inline">{label}</span>
-            </button>
-          )
-        })}
+      <nav className="mt-4 flex-1 space-y-1 overflow-y-auto px-2 lg:px-3">
+        {NAV_GROUPS.map((group) => (
+          <NavGroupSection key={group.title} group={group} page={page} setPage={setPage} />
+        ))}
       </nav>
 
       <div className="space-y-2 border-t border-line p-3 lg:p-4">
