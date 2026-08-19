@@ -575,14 +575,14 @@ export const handlers = [
   http.get('*/settings/db-config', ({ request }) => {
     const user = currentUser(request)
     if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
-    return ok({ host: 'localhost', port: '5432', database: 'accounting_db', password: '' })
+    return ok({ host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', password: '' })
   }),
   http.post('*/settings/db-config', async ({ request }) => {
     const user = currentUser(request)
     if (!user) return fail(401, 'UNAUTHORIZED', 'Sesi berakhir. Silakan login kembali.')
-    const body = (await request.json()) as { host?: string; port?: string; database?: string; password?: string }
+    const body = (await request.json()) as { host?: string; port?: string; database?: string; schema?: string; password?: string }
     if (!body.host || !body.port || !body.database)
       return fail(422, 'VALIDATION_ERROR', 'Host, port, dan nama basis data wajib diisi')
-    return ok({ host: body.host.trim(), port: body.port.trim(), database: body.database.trim(), password: body.password ?? '' })
+    return ok({ host: body.host.trim(), port: body.port.trim(), database: body.database.trim(), schema: (body.schema ?? 'public').trim() || 'public', password: body.password ?? '' })
   }),
 ]

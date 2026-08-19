@@ -89,8 +89,8 @@ beforeEach(() => {
   mockedApi.deleteJournal.mockReset()
   mockedApi.getDbConfig.mockReset()
   mockedApi.saveDbConfig.mockReset()
-  mockedApi.getDbConfig.mockResolvedValue({ host: 'localhost', port: '5432', database: 'accounting_db', password: '' } as never)
-  mockedApi.saveDbConfig.mockResolvedValue({ host: 'localhost', port: '5432', database: 'accounting_db', password: '' } as never)
+  mockedApi.getDbConfig.mockResolvedValue({ host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', password: '' } as never)
+  mockedApi.saveDbConfig.mockResolvedValue({ host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', password: '' } as never)
   // Default offline (network error) agar path antrian yang teruji
   mockedApi.login.mockRejectedValue(new TypeError('fetch failed'))
   mockedApi.logout.mockResolvedValue(undefined)

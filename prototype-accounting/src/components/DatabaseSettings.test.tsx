@@ -10,18 +10,19 @@ import * as apiClient from '../api/client'
 beforeEach(() => {
   // Reset store ke default
   useStore.setState({
-    dbConfig: { host: 'localhost', port: '5432', database: 'accounting_db', password: '' },
+    dbConfig: { host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', password: '' },
     toast: null,
   })
 })
 
 describe('DatabaseSettings', () => {
-  it('render 4 field input dengan nilai default', () => {
+  it('render 5 field input dengan nilai default', () => {
     render(<DatabaseSettings />)
 
     expect((screen.getByLabelText('Host Internal') as HTMLInputElement).value).toBe('localhost')
     expect((screen.getByLabelText('Port Internal') as HTMLInputElement).value).toBe('5432')
     expect((screen.getByLabelText('Nama Basis Data') as HTMLInputElement).value).toBe('accounting_db')
+    expect((screen.getByLabelText('Schema') as HTMLInputElement).value).toBe('public')
     expect((screen.getByLabelText('Kata Sandi') as HTMLInputElement).value).toBe('')
   })
 
@@ -50,6 +51,7 @@ describe('DatabaseSettings', () => {
     fireEvent.change(screen.getByLabelText('Host Internal'), { target: { value: '10.0.0.1' } })
     fireEvent.change(screen.getByLabelText('Port Internal'), { target: { value: '5433' } })
     fireEvent.change(screen.getByLabelText('Nama Basis Data'), { target: { value: 'prod_db' } })
+    fireEvent.change(screen.getByLabelText('Schema'), { target: { value: 'myschema' } })
     fireEvent.change(screen.getByLabelText('Kata Sandi'), { target: { value: 'secret123' } })
 
     fireEvent.click(screen.getByRole('button', { name: /Simpan Pengaturan/ }))
@@ -58,6 +60,7 @@ describe('DatabaseSettings', () => {
     expect(state.dbConfig.host).toBe('10.0.0.1')
     expect(state.dbConfig.port).toBe('5433')
     expect(state.dbConfig.database).toBe('prod_db')
+    expect(state.dbConfig.schema).toBe('myschema')
     expect(state.dbConfig.password).toBe('secret123')
   })
 
@@ -123,6 +126,15 @@ describe('DatabaseSettings', () => {
   })
 
   // ---- Test Koneksi ----
+  it('schema kosong otomatis jadi "public" saat simpan', () => {
+    render(<DatabaseSettings />)
+
+    fireEvent.change(screen.getByLabelText('Schema'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: /Simpan Pengaturan/ }))
+
+    expect(useStore.getState().dbConfig.schema).toBe('public')
+  })
+
   it('tombol Test Koneksi tampil di awal', () => {
     render(<DatabaseSettings />)
 

@@ -101,5 +101,6 @@ export interface DbConfig {
   host: string
   port: string
   database: string
+  schema: string
   password: string
 }

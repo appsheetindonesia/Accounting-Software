@@ -426,6 +426,7 @@ export const useStore = create<AccountingState>()(
           host: 'localhost',
           port: '5432',
           database: 'accounting_db',
+          schema: 'public',
           password: '',
         },
         updateDbConfig: (config) => {

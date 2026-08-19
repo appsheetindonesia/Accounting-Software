@@ -42,6 +42,7 @@ export default function DatabaseSettings() {
       host: form.host.trim(),
       port: form.port.trim(),
       database: form.database.trim(),
+      schema: form.schema.trim() || 'public',
       password: form.password,
     })
     setSaved(true)
@@ -69,6 +70,7 @@ export default function DatabaseSettings() {
             host: form.host.trim(),
             port: form.port.trim(),
             database: form.database.trim(),
+            schema: form.schema.trim() || 'public',
             password: form.password,
           },
         }
@@ -88,6 +90,7 @@ export default function DatabaseSettings() {
     form.host !== dbConfig.host ||
     form.port !== dbConfig.port ||
     form.database !== dbConfig.database ||
+    form.schema !== dbConfig.schema ||
     form.password !== dbConfig.password
 
   return (
@@ -151,6 +154,22 @@ export default function DatabaseSettings() {
             <p className="text-[11px] text-ink-faint">Nama database yang akan digunakan</p>
           </div>
 
+          {/* Schema */}
+          <div className="space-y-1.5">
+            <label htmlFor="db-schema" className="block text-xs font-semibold text-ink">
+              Schema
+            </label>
+            <input
+              id="db-schema"
+              type="text"
+              value={form.schema}
+              onChange={(e) => handleChange('schema', e.target.value)}
+              placeholder="public"
+              className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30"
+            />
+            <p className="text-[11px] text-ink-faint">Schema PostgreSQL (default: public)</p>
+          </div>
+
           {/* Kata Sandi */}
           <div className="space-y-1.5">
             <label htmlFor="db-password" className="block text-xs font-semibold text-ink">
@@ -182,7 +201,7 @@ export default function DatabaseSettings() {
         <div className="rounded-lg bg-canvas px-3 py-2 text-xs text-ink-soft">
           <span className="font-medium text-ink">Koneksi:</span>{' '}
           <code className="rounded bg-surface px-1 py-0.5 font-mono text-primary">
-            postgresql://{form.database || '???'}@{form.host || '???'}:{form.port || '???'}
+            postgresql://{form.database || '???'}@{form.host || '???'}:{form.port || '???'}{form.schema && form.schema !== 'public' ? `/${form.schema}` : ''}
           </code>
           {form.password && (
             <span className="ml-1 text-ink-faint">(dengan password)</span>
