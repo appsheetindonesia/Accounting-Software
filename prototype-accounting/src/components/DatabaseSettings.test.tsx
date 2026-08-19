@@ -10,44 +10,107 @@ import * as apiClient from '../api/client'
 beforeEach(() => {
   // Reset store ke default
   useStore.setState({
-    dbConfig: { host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '' },
+    dbConfig: { storageMode: 'local', host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '' },
     toast: null,
   })
 })
 
 describe('DatabaseSettings', () => {
-  it('render 6 field input dengan nilai default', () => {
+  // ---- Mode selector ----
+  it('menampilkan dua tombol mode (Lokal dan PostgreSQL)', () => {
     render(<DatabaseSettings />)
 
-    expect((screen.getByLabelText('Host Internal') as HTMLInputElement).value).toBe('localhost')
-    expect((screen.getByLabelText('Port Internal') as HTMLInputElement).value).toBe('5432')
-    expect((screen.getByLabelText('Nama Basis Data') as HTMLInputElement).value).toBe('accounting_db')
-    expect((screen.getByLabelText('Schema') as HTMLInputElement).value).toBe('public')
-    expect((screen.getByLabelText('Pengguna') as HTMLInputElement).value).toBe('postgres')
-    expect((screen.getByLabelText('Kata Sandi') as HTMLInputElement).value).toBe('')
+    expect(screen.getByTestId('mode-local-btn')).toBeDefined()
+    expect(screen.getByTestId('mode-postgresql-btn')).toBeDefined()
+    expect(screen.getByTestId('storage-mode-badge')).toBeDefined()
   })
 
-  it('menampilkan ringkasan koneksi', () => {
+  it('default mode adalah Lokal', () => {
     render(<DatabaseSettings />)
+
+    const badge = screen.getByTestId('storage-mode-badge')
+    expect(badge.textContent).toContain('Lokal')
+    // Form PostgreSQL tidak tampil
+    expect(screen.queryByTestId('postgresql-form')).toBeNull()
+    // Info mode lokal tampil
+    expect(screen.getByTestId('local-mode-info')).toBeDefined()
+  })
+
+  it('mengklik PostgreSQL menampilkan form database', () => {
+    render(<DatabaseSettings />)
+
+    fireEvent.click(screen.getByTestId('mode-postgresql-btn'))
+
+    expect(screen.getByTestId('postgresql-form')).toBeDefined()
+    expect(screen.queryByTestId('local-mode-info')).toBeNull()
+    const badge = screen.getByTestId('storage-mode-badge')
+    expect(badge.textContent).toContain('PostgreSQL')
+  })
+
+  it('mengklik Lokal kembali menampilkan info lokal', () => {
+    render(<DatabaseSettings />)
+
+    // Switch to PostgreSQL first
+    fireEvent.click(screen.getByTestId('mode-postgresql-btn'))
+    expect(screen.getByTestId('postgresql-form')).toBeDefined()
+
+    // Switch back to Local
+    fireEvent.click(screen.getByTestId('mode-local-btn'))
+    expect(screen.queryByTestId('postgresql-form')).toBeNull()
+    expect(screen.getByTestId('local-mode-info')).toBeDefined()
+  })
+
+  it('tombol Test Koneksi tidak tampil di mode Lokal', () => {
+    render(<DatabaseSettings />)
+
+    expect(screen.queryByTestId('test-connection-btn')).toBeNull()
+  })
+
+  it('tombol Test Koneksi tampil di mode PostgreSQL', () => {
+    render(<DatabaseSettings />)
+
+    fireEvent.click(screen.getByTestId('mode-postgresql-btn'))
+    expect(screen.getByTestId('test-connection-btn')).toBeDefined()
+  })
+
+  // ---- PostgreSQL form ----
+  it('render 6 field input dengan nilai default saat mode PostgreSQL', () => {
+    useStore.setState({
+      dbConfig: { storageMode: 'postgresql', host: '192.168.1.1', port: '5433', database: 'prod_db', schema: 'myschema', username: 'admin', password: 'secret' },
+    })
+    render(<DatabaseSettings />)
+
+    expect((screen.getByLabelText('Host Internal') as HTMLInputElement).value).toBe('192.168.1.1')
+    expect((screen.getByLabelText('Port Internal') as HTMLInputElement).value).toBe('5433')
+    expect((screen.getByLabelText('Nama Basis Data') as HTMLInputElement).value).toBe('prod_db')
+    expect((screen.getByLabelText('Schema') as HTMLInputElement).value).toBe('myschema')
+    expect((screen.getByLabelText('Pengguna') as HTMLInputElement).value).toBe('admin')
+    expect((screen.getByLabelText('Kata Sandi') as HTMLInputElement).value).toBe('secret')
+  })
+
+  it('menampilkan ringkasan koneksi di mode PostgreSQL', () => {
+    render(<DatabaseSettings />)
+    fireEvent.click(screen.getByTestId('mode-postgresql-btn'))
 
     expect(screen.getByText(/Koneksi:/)).toBeDefined()
     expect(screen.getByText(/postgres@localhost:5432\/accounting_db/)).toBeDefined()
   })
 
   it('tombol Simpan aktif setelah mengubah form', () => {
+    // Mulai dari PostgreSQL agar form awal match store
+    useStore.setState({ dbConfig: { storageMode: 'postgresql', host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '' } })
     render(<DatabaseSettings />)
 
     const saveBtn = screen.getByRole('button', { name: /Simpan Pengaturan/ }) as HTMLButtonElement
-    // Initially disabled (no changes)
     expect(saveBtn.disabled).toBe(true)
 
-    // Change host
     fireEvent.change(screen.getByLabelText('Host Internal'), { target: { value: '192.168.1.100' } })
     expect(saveBtn.disabled).toBe(false)
   })
 
-  it('menyimpan perubahan ke store saat klik Simpan', () => {
+  it('menyimpan perubahan ke store saat klik Simpan (PostgreSQL)', () => {
     render(<DatabaseSettings />)
+    fireEvent.click(screen.getByTestId('mode-postgresql-btn'))
 
     fireEvent.change(screen.getByLabelText('Host Internal'), { target: { value: '10.0.0.1' } })
     fireEvent.change(screen.getByLabelText('Port Internal'), { target: { value: '5433' } })
@@ -59,6 +122,7 @@ describe('DatabaseSettings', () => {
     fireEvent.click(screen.getByRole('button', { name: /Simpan Pengaturan/ }))
 
     const state = useStore.getState()
+    expect(state.dbConfig.storageMode).toBe('postgresql')
     expect(state.dbConfig.host).toBe('10.0.0.1')
     expect(state.dbConfig.port).toBe('5433')
     expect(state.dbConfig.database).toBe('prod_db')
@@ -67,8 +131,19 @@ describe('DatabaseSettings', () => {
     expect(state.dbConfig.password).toBe('secret123')
   })
 
+  it('menyimpan mode lokal saat klik Simpan', () => {
+    render(<DatabaseSettings />)
+
+    // Default sudah lokal, klik Simpan langsung
+    fireEvent.click(screen.getByRole('button', { name: /Simpan Pengaturan/ }))
+
+    const state = useStore.getState()
+    expect(state.dbConfig.storageMode).toBe('local')
+  })
+
   it('menolak port非 angka', () => {
     render(<DatabaseSettings />)
+    fireEvent.click(screen.getByTestId('mode-postgresql-btn'))
 
     fireEvent.change(screen.getByLabelText('Port Internal'), { target: { value: 'abc' } })
     fireEvent.click(screen.getByRole('button', { name: /Simpan Pengaturan/ }))
@@ -80,6 +155,7 @@ describe('DatabaseSettings', () => {
 
   it('menolak port di luar rentang', () => {
     render(<DatabaseSettings />)
+    fireEvent.click(screen.getByTestId('mode-postgresql-btn'))
 
     fireEvent.change(screen.getByLabelText('Port Internal'), { target: { value: '99999' } })
     fireEvent.click(screen.getByRole('button', { name: /Simpan Pengaturan/ }))
@@ -90,6 +166,7 @@ describe('DatabaseSettings', () => {
 
   it('menolak host kosong', () => {
     render(<DatabaseSettings />)
+    fireEvent.click(screen.getByTestId('mode-postgresql-btn'))
 
     fireEvent.change(screen.getByLabelText('Host Internal'), { target: { value: '' } })
     fireEvent.click(screen.getByRole('button', { name: /Simpan Pengaturan/ }))
@@ -99,6 +176,7 @@ describe('DatabaseSettings', () => {
 
   it('menolak nama basis data kosong', () => {
     render(<DatabaseSettings />)
+    fireEvent.click(screen.getByTestId('mode-postgresql-btn'))
 
     fireEvent.change(screen.getByLabelText('Nama Basis Data'), { target: { value: '' } })
     fireEvent.click(screen.getByRole('button', { name: /Simpan Pengaturan/ }))
@@ -108,6 +186,7 @@ describe('DatabaseSettings', () => {
 
   it('toggle visibility password', () => {
     render(<DatabaseSettings />)
+    fireEvent.click(screen.getByTestId('mode-postgresql-btn'))
 
     const pwdInput = screen.getByLabelText('Kata Sandi')
     expect(pwdInput.getAttribute('type')).toBe('password')
@@ -123,6 +202,7 @@ describe('DatabaseSettings', () => {
 
   it('menampilkan tanda "dengan password" di ringkasan bila password terisi', () => {
     render(<DatabaseSettings />)
+    fireEvent.click(screen.getByTestId('mode-postgresql-btn'))
 
     fireEvent.change(screen.getByLabelText('Kata Sandi'), { target: { value: 'mypassword' } })
     expect(screen.getByText('(dengan password)')).toBeDefined()
@@ -131,6 +211,7 @@ describe('DatabaseSettings', () => {
   // ---- Test Koneksi ----
   it('schema kosong otomatis jadi "public" saat simpan', () => {
     render(<DatabaseSettings />)
+    fireEvent.click(screen.getByTestId('mode-postgresql-btn'))
 
     fireEvent.change(screen.getByLabelText('Schema'), { target: { value: '' } })
     fireEvent.click(screen.getByRole('button', { name: /Simpan Pengaturan/ }))
@@ -140,6 +221,7 @@ describe('DatabaseSettings', () => {
 
   it('username kosong otomatis jadi "postgres" saat simpan', () => {
     render(<DatabaseSettings />)
+    fireEvent.click(screen.getByTestId('mode-postgresql-btn'))
 
     fireEvent.change(screen.getByLabelText('Pengguna'), { target: { value: '' } })
     fireEvent.click(screen.getByRole('button', { name: /Simpan Pengaturan/ }))
@@ -147,8 +229,9 @@ describe('DatabaseSettings', () => {
     expect(useStore.getState().dbConfig.username).toBe('postgres')
   })
 
-  it('tombol Test Koneksi tampil di awal', () => {
+  it('tombol Test Koneksi tampil di awal (mode PostgreSQL)', () => {
     render(<DatabaseSettings />)
+    fireEvent.click(screen.getByTestId('mode-postgresql-btn'))
 
     const btn = screen.getByTestId('test-connection-btn')
     expect(btn).toBeDefined()
@@ -164,6 +247,7 @@ describe('DatabaseSettings', () => {
     )
 
     render(<DatabaseSettings />)
+    fireEvent.click(screen.getByTestId('mode-postgresql-btn'))
 
     const btn = screen.getByTestId('test-connection-btn')
     fireEvent.click(btn)
@@ -189,6 +273,7 @@ describe('DatabaseSettings', () => {
     } as never)
 
     render(<DatabaseSettings />)
+    fireEvent.click(screen.getByTestId('mode-postgresql-btn'))
 
     fireEvent.click(screen.getByTestId('test-connection-btn'))
 
@@ -199,13 +284,16 @@ describe('DatabaseSettings', () => {
     expect(result).toBeDefined()
     expect(result.textContent).toContain('berhasil')
     expect(result.textContent).toContain('50ms')
+    // Tidak ada saran mode lokal
+    expect(screen.queryByTestId('local-mode-suggestion')).toBeNull()
     spy.mockRestore()
   })
 
-  it('menampilkan hasil gagal saat request throw error', async () => {
+  it('menampilkan hasil gagal + saran mode lokal saat request throw error', async () => {
     const spy = vi.spyOn(apiClient, 'request').mockRejectedValue(new Error('Network error'))
 
     render(<DatabaseSettings />)
+    fireEvent.click(screen.getByTestId('mode-postgresql-btn'))
 
     fireEvent.click(screen.getByTestId('test-connection-btn'))
 
@@ -215,6 +303,66 @@ describe('DatabaseSettings', () => {
     const result = screen.getByTestId('test-result')
     expect(result).toBeDefined()
     expect(result.textContent).toContain('Network error')
+    // Saran mode lokal muncul
+    const suggestion = screen.getByTestId('local-mode-suggestion')
+    expect(suggestion).toBeDefined()
+    expect(suggestion.textContent).toContain('Gunakan mode Lokal')
+    spy.mockRestore()
+  })
+
+  it('menampilkan saran mode lokal saat server merespons gagal', async () => {
+    const spy = vi.spyOn(apiClient, 'request').mockResolvedValue({
+      ok: false, message: 'Gagal terhubung ke db@wrong-host:5432 — host tidak dapat dijangkau', latencyMs: 100,
+    } as never)
+
+    render(<DatabaseSettings />)
+    fireEvent.click(screen.getByTestId('mode-postgresql-btn'))
+
+    fireEvent.click(screen.getByTestId('test-connection-btn'))
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 100))
+    })
+    const result = screen.getByTestId('test-result')
+    expect(result).toBeDefined()
+    expect(result.textContent?.toLowerCase()).toContain('gagal')
+    // Saran mode lokal muncul
+    const suggestion = screen.getByTestId('local-mode-suggestion')
+    expect(suggestion).toBeDefined()
+    // Klik tombol "Gunakan mode Lokal"
+    fireEvent.click(screen.getByTestId('switch-to-local-btn'))
+    // Sekarang mode berubah ke lokal
+    const badge = screen.getByTestId('storage-mode-badge')
+    expect(badge.textContent).toContain('Lokal')
+    spy.mockRestore()
+  })
+
+  it('bisa switch ke mode lokal via tombol saran', async () => {
+    // Mulai di mode PostgreSQL
+    useStore.setState({
+      dbConfig: { storageMode: 'postgresql', host: 'wrong-host', port: '5432', database: 'db', schema: 'public', username: 'pg', password: '' },
+    })
+    const spy = vi.spyOn(apiClient, 'request').mockResolvedValue({
+      ok: false, message: 'Gagal terhubung', latencyMs: 100,
+    } as never)
+
+    render(<DatabaseSettings />)
+
+    fireEvent.click(screen.getByTestId('test-connection-btn'))
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 100))
+    })
+
+    // Klik "Gunakan mode Lokal"
+    fireEvent.click(screen.getByTestId('switch-to-local-btn'))
+
+    // Verifikasi mode berubah
+    expect(useStore.getState().dbConfig.storageMode).toBe('local')
+    // Form PostgreSQL hilang
+    expect(screen.queryByTestId('postgresql-form')).toBeNull()
+    // Info lokal tampil
+    expect(screen.getByTestId('local-mode-info')).toBeDefined()
     spy.mockRestore()
   })
 })

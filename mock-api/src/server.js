@@ -49,7 +49,7 @@ const createDb = ({ withExtra = false } = {}) => ({
   sessions: new Map(), // refreshToken -> userId
   seq: { journal: 100, line: 100, attachment: 100, user: 100, entity: 100 },
   // Konfigurasi koneksi database PostgreSQL (Pengaturan)
-  dbConfig: { host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '' },
+  dbConfig: { storageMode: 'local', host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '' },
 })
 
 let db = createDb()
@@ -86,7 +86,7 @@ if (PERSIST) {
       periods: loaded.periods,
       sessions: new Map(loaded.sessions ?? []),
       seq: loaded.seq ?? { journal: 100, line: 100, attachment: 100, user: 100, entity: 100 },
-      dbConfig: loaded.dbConfig ?? { host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '' },
+      dbConfig: loaded.dbConfig ?? { storageMode: 'local', host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '' },
     }
     console.log(`💾 [persist] State dimuat dari ${PERSIST_FILE} (${db.journals.length} jurnal)`)
   } else {
@@ -1716,14 +1716,24 @@ app.post('/settings/test-connection', (req, res) => {
   }
   // Simulasi latensi jaringan (50-200ms)
   const latencyMs = Math.floor(Math.random() * 150) + 50
-  // Mock API selalu sukses (database mock tidak bisa gagal)
+  // Simulasi: hanya 'localhost' atau '127.0.0.1' yang berhasil.
+  // Host lain → gagal (meniru database PostgreSQL tidak terjangkau).
   // Di produksi, endpoint ini akan melakukan SELECT 1 ke PostgreSQL.
+  const reachable = ['localhost', '127.0.0.1'].includes(host.trim().toLowerCase())
   setTimeout(() => {
-    ok(res, {
-      ok: true,
-      message: `Koneksi ke ${database}@${host}:${port} berhasil`,
-      latencyMs,
-    })
+    if (reachable) {
+      ok(res, {
+        ok: true,
+        message: `Koneksi ke ${database}@${host}:${port} berhasil`,
+        latencyMs,
+      })
+    } else {
+      ok(res, {
+        ok: false,
+        message: `Gagal terhubung ke ${database}@${host}:${port} — host tidak dapat dijangkau`,
+        latencyMs,
+      })
+    }
   }, latencyMs)
 })
 
@@ -1735,7 +1745,7 @@ app.get('/settings/db-config', requireAuth, (req, res) => {
 })
 
 app.post('/settings/db-config', requireAuth, (req, res) => {
-  const { host, port, database, schema, username, password } = req.body || {}
+  const { storageMode, host, port, database, schema, username, password } = req.body || {}
   if (!host || !port || !database) {
     return fail(res, 422, 'VALIDATION_ERROR', 'Host, port, dan nama basis data wajib diisi')
   }
@@ -1744,7 +1754,7 @@ app.post('/settings/db-config', requireAuth, (req, res) => {
   if (!Number.isFinite(portNum) || portNum < 1 || portNum > 65535) {
     return fail(res, 422, 'VALIDATION_ERROR', 'Port harus berupa angka 1–65535')
   }
-  db.dbConfig = { host: String(host).trim(), port: String(port).trim(), database: String(database).trim(), schema: String(schema ?? 'public').trim() || 'public', username: String(username ?? 'postgres').trim() || 'postgres', password: password ?? '' }
+  db.dbConfig = { storageMode: storageMode ?? 'local', host: String(host).trim(), port: String(port).trim(), database: String(database).trim(), schema: String(schema ?? 'public').trim() || 'public', username: String(username ?? 'postgres').trim() || 'postgres', password: password ?? '' }
   ok(res, db.dbConfig)
 })
 

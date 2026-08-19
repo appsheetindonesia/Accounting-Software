@@ -423,6 +423,7 @@ export const useStore = create<AccountingState>()(
 
         // Konfigurasi koneksi database PostgreSQL (Pengaturan)
         dbConfig: {
+          storageMode: 'local',
           host: 'localhost',
           port: '5432',
           database: 'accounting_db',

@@ -97,7 +97,10 @@ export interface BalanceCardData {
 
 // Konfigurasi koneksi database PostgreSQL (Pengaturan).
 // Disimpan di localStorage (persist) — bukan di server.
+// storageMode: 'postgresql' = data tersimpan di database PostgreSQL,
+//              'local' = data tersimpan lokal di perangkat ini (localStorage).
 export interface DbConfig {
+  storageMode: 'postgresql' | 'local'
   host: string
   port: string
   database: string
