@@ -11,6 +11,7 @@ import cors from 'cors'
 import { randomUUID } from 'crypto'
 import { entities, users, rolePermissions, accounts, coaTemplate, journals, periods, mockTrend, extraJournals, ent2Accounts, ent2Journals } from './data.js'
 import { isEnabled as persistEnabled, getFilePath as persistFilePath, loadState as loadPersisted, saveState as savePersisted } from './persistence.js'
+import { deflateSync } from 'zlib'
 
 const app = express()
 // exposedHeaders: browser perlu membaca Content-Disposition (nama file export
@@ -1368,7 +1369,183 @@ app.get('/dashboard/alerts', requireAuth, (req, res) => {
 })
 
 // ------------------------------------------------------------
-// 11. EXPORT
+// 11. EXPORT — pembuatan file PDF & XLSX yang valid
+// ------------------------------------------------------------
+
+// --- Minimal valid PDF (PDF 1.4) ---------------------------------
+// Membuat PDF satu halaman berisi teks (kop, data, footer).
+const generatePDF = (lines) => {
+  const text = lines.join('\n')
+  // Escape backslash & parentheses untuk teks PDF
+  const escaped = text.replaceAll(String.fromCharCode(92), String.fromCharCode(92,92)).replaceAll("(", String.fromCharCode(92,40)).replaceAll(")", String.fromCharCode(92,41))
+  const streamContent = `BT\n/F1 11 Tf\n50 750 Td\n(${escaped}) Tj\nET`
+  const streamLen = Buffer.byteLength(streamContent)
+
+  // Bangun objek PDF secara berurutan
+  const objs = []
+  let offset = 0
+  const add = (s) => { objs.push(Buffer.from(s)); offset += Buffer.byteLength(s) }
+
+  add('%PDF-1.4\n')
+  // 1: Catalog
+  const o1 = offset; add('1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n')
+  // 2: Pages
+  const o2 = offset; add('2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n')
+  // 3: Page
+  const o3 = offset; add('3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj\n')
+  // 4: Content stream
+  const o4 = offset; add(`4 0 obj<</Length ${streamLen}>>\nstream\n${streamContent}\n\nendstream\nendobj\n`)
+  // 5: Font
+  const o5 = offset; add('5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\n')
+
+  // xref
+  const xrefOffset = offset
+  add('xref\n')
+  add('0 6\n')
+  add('0000000000 65535 f \n')
+  for (const o of [o1, o2, o3, o4, o5]) add(`${String(o).padStart(10, '0')} 00000 n \n`)
+
+  add(`trailer<</Size 6/Root 1 0 R>>\nstartxref\n${xrefOffset}\n%%EOF\n`)
+  return Buffer.concat(objs)
+}
+
+// --- Minimal valid XLSX (ZIP + Office Open XML) ------------------
+// Membuat XLSX satu sheet berisi baris-baris teks.
+const generateXLSX = (headers, rows) => {
+  const escXml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+  // Shared strings
+  const allStrings = [...headers, ...rows.flat()]
+  const siEls = allStrings.map((s) => `<si><t>${escXml(s)}</t></si>`).join('')
+  const sharedStringsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${allStrings.length}" uniqueCount="${allStrings.length}">${siEls}</sst>`
+
+  // Sheet data
+  let sheetRows = ''
+  // Header row
+  const headerCells = headers.map((_, i) => `<c r="${String.fromCharCode(65 + i)}1" t="s" s="1"><v>${i}</v></c>`).join('')
+  sheetRows += `<row r="1">${headerCells}</row>\n`
+  // Data rows
+  rows.forEach((row, ri) => {
+    const cells = row.map((_, ci) => `<c r="${String.fromCharCode(65 + ci)}${ri + 2}" t="s"><v>${headers.length + ri * row.length + ci}</v></c>`).join('')
+    sheetRows += `<row r="ri + 2}">${cells}</row>\n`
+  })
+  const sheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetRows}</sheetData></worksheet>`
+
+  // Workbook
+  const workbookXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets></workbook>`
+
+  // Content types
+  const contentTypesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/></Types>`
+
+  // Rels
+  const rootRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`
+  const wbRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/></Relationships>`
+
+  // Build ZIP entries
+  const entries = [
+    ['[Content_Types].xml', contentTypesXml],
+    ['_rels/.rels', rootRels],
+    ['xl/workbook.xml', workbookXml],
+    ['xl/_rels/workbook.xml.rels', wbRels],
+    ['xl/worksheets/sheet1.xml', sheetXml],
+    ['xl/sharedStrings.xml', sharedStringsXml],
+  ]
+
+  // Construct ZIP manually (deflate each entry)
+  const parts = []
+  let localOffset = 0
+  const centralHeaders = []
+
+  for (const [name, data] of entries) {
+    const nameBuffer = Buffer.from(name, 'utf8')
+    const dataBuffer = Buffer.from(data, 'utf8')
+    const compressed = deflateSync(dataBuffer)
+    const crc = crc32(dataBuffer)
+
+    // Local file header
+    const local = Buffer.alloc(30 + nameBuffer.length)
+    local.writeUInt32LE(0x04034b50, 0) // signature
+    local.writeUInt16LE(20, 4) // version needed
+    local.writeUInt16LE(0, 6) // flags
+    local.writeUInt16LE(8, 8) // compression (deflate)
+    local.writeUInt16LE(0, 10) // mod time
+    local.writeUInt16LE(0, 12) // mod date
+    local.writeUInt32LE(crc, 14) // crc32
+    local.writeUInt32LE(compressed.length, 18) // compressed size
+    local.writeUInt32LE(dataBuffer.length, 22) // uncompressed size
+    local.writeUInt16LE(nameBuffer.length, 26) // name length
+    local.writeUInt16LE(0, 28) // extra length
+    nameBuffer.copy(local, 30)
+    parts.push(local, compressed)
+
+    // Central directory header
+    const central = Buffer.alloc(46 + nameBuffer.length)
+    central.writeUInt32LE(0x02014b50, 0) // signature
+    central.writeUInt16LE(20, 4) // version made by
+    central.writeUInt16LE(20, 6) // version needed
+    central.writeUInt16LE(0, 8) // flags
+    central.writeUInt16LE(8, 10) // compression
+    central.writeUInt16LE(0, 12) // mod time
+    central.writeUInt16LE(0, 14) // mod date
+    central.writeUInt32LE(crc, 16) // crc32
+    central.writeUInt32LE(compressed.length, 20) // compressed size
+    central.writeUInt32LE(dataBuffer.length, 24) // uncompressed size
+    central.writeUInt16LE(nameBuffer.length, 28) // name length
+    central.writeUInt16LE(0, 30) // extra length
+    central.writeUInt16LE(0, 32) // comment length
+    central.writeUInt16LE(0, 34) // disk number start
+    central.writeUInt16LE(0, 36) // internal attrs
+    central.writeUInt32LE(0, 38) // external attrs
+    central.writeUInt32LE(localOffset, 42) // local header offset
+    nameBuffer.copy(central, 46)
+    centralHeaders.push(central)
+
+    localOffset += local.length + compressed.length
+  }
+
+  // End of central directory
+  const centralDirSize = centralHeaders.reduce((s, b) => s + b.length, 0)
+  const eocd = Buffer.alloc(22)
+  eocd.writeUInt32LE(0x06054b50, 0) // signature
+  eocd.writeUInt16LE(0, 4) // disk number
+  eocd.writeUInt16LE(0, 6) // disk with central dir
+  eocd.writeUInt16LE(entries.length, 8) // entries on this disk
+  eocd.writeUInt16LE(entries.length, 10) // total entries
+  eocd.writeUInt32LE(centralDirSize, 12) // central dir size
+  eocd.writeUInt32LE(localOffset, 16) // central dir offset
+  eocd.writeUInt16LE(0, 20) // comment length
+
+  return Buffer.concat([...parts, ...centralHeaders, eocd])
+}
+
+// CRC32 lookup table
+let _crcTable = null
+const crc32Table = () => {
+  if (_crcTable) return _crcTable
+  _crcTable = new Uint32Array(256)
+  for (let n = 0; n < 256; n++) {
+    let c = n
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1)
+    _crcTable[n] = c
+  }
+  return _crcTable
+}
+const crc32 = (buf) => {
+  const table = crc32Table()
+  let crc = 0xFFFFFFFF
+  for (let i = 0; i < buf.length; i++) crc = table[(crc ^ buf[i]) & 0xFF] ^ (crc >>> 8)
+  return (crc ^ 0xFFFFFFFF) >>> 0
+}
+
+
+// ------------------------------------------------------------
+// 11b. EXPORT ENDPOINTS
 // ------------------------------------------------------------
 app.get('/exports/reports/:reportType', requireAuthExport, (req, res) => {
   const { reportType } = req.params
@@ -1378,11 +1555,32 @@ app.get('/exports/reports/:reportType', requireAuthExport, (req, res) => {
   const names = { 'trial-balance': 'Neraca-Lajur', 'income-statement': 'Laba-Rugi', 'balance-sheet': 'Neraca', 'cash-flow': 'Arus-Kas' }
   if (!names[reportType]) return fail(res, 404, 'NO_DATA', 'Jenis laporan tidak dikenal')
   const filename = `${names[reportType]}-${periodKey}.${format}`
-  res.setHeader('Content-Type', format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
-  // Mock: kirim payload teks sederhana sebagai placeholder binary (kop & footer dokumen)
   const entityName = db.entities.find((e) => e.id === req.entityId)?.name ?? ''
-  res.send(Buffer.from(`MOCK EXPORT ${filename}\ncompany=${entityName}\nperiod=${periodKey}\ngeneratedAt=${nowIso()}`))
+  const reportLabel = names[reportType]
+  if (format === 'pdf') {
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    res.send(generatePDF([
+      `${entityName}`,
+      `Laporan ${reportLabel}`,
+      `Periode: ${periodKey}`,
+      `Dicetak: ${nowIso()}`,
+      '',
+      '(Mock API — data placeholder)',
+    ]))
+  } else {
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    res.send(generateXLSX(
+      ['Field', 'Nilai'],
+      [
+        ['Perusahaan', entityName],
+        ['Laporan', reportLabel],
+        ['Periode', periodKey],
+        ['Dicetak', nowIso()],
+      ]
+    ))
+  }
 })
 
 app.get('/exports/accounts', requireAuthExport, (req, res) => {
@@ -1413,11 +1611,31 @@ app.get('/exports/ledger/:accountId', requireAuthExport, (req, res) => {
     return fail(res, 422, 'INVALID_PERIOD', 'Periode tidak valid')
   }
   const filename = `Buku-Besar-${account.code}-${periodKey}.${format}`
-  res.setHeader('Content-Type', format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
-  // Mock: payload teks sederhana sebagai placeholder binary (kop & footer dokumen)
   const entityName = db.entities.find((e) => e.id === req.entityId)?.name ?? ''
-  res.send(Buffer.from(`MOCK EXPORT ${filename}\ncompany=${entityName}\naccount=${account.code} ${account.name}\nperiod=${periodKey}\ngeneratedAt=${nowIso()}`))
+  if (format === 'pdf') {
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    res.send(generatePDF([
+      `${entityName}`,
+      `Buku Besar — ${account.code} ${account.name}`,
+      `Periode: ${periodKey}`,
+      `Dicetak: ${nowIso()}`,
+      '',
+      '(Mock API — data placeholder)',
+    ]))
+  } else {
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    res.send(generateXLSX(
+      ['Field', 'Nilai'],
+      [
+        ['Perusahaan', entityName],
+        ['Akun', `${account.code} ${account.name}`],
+        ['Periode', periodKey],
+        ['Dicetak', nowIso()],
+      ]
+    ))
+  }
 })
 
 // ------------------------------------------------------------

@@ -142,14 +142,17 @@ describe('Isolasi multi-tenant per X-Entity-Id — endpoint baca data', () => {
   it('export: konten placeholder memuat nama entitas masing-masing (bukan entitas lain)', async () => {
     const ent1 = await request(app).get('/exports/ledger/1-1100').query({ format: 'pdf', period: '2026-03' }).set(auth('ent-001'))
     expect(ent1.status).toBe(200)
-    expect(ent1.body.toString('utf8')).toContain('company=PT. Kreasi Inovasi Estetika')
-    expect(ent1.body.toString('utf8')).toContain('account=1-1100 Kas Besar')
+    const pdf1 = ent1.body.toString('utf8')
+    expect(pdf1).toContain('%PDF-1.4')
+    expect(pdf1).toContain('PT. Kreasi Inovasi Estetika')
+    expect(pdf1).toContain('1-1100 Kas Besar')
 
     const ent2 = await request(app).get('/exports/ledger/1-1100').query({ format: 'pdf', period: '2026-03' }).set(auth('ent-002'))
     expect(ent2.status).toBe(200)
-    expect(ent2.body.toString('utf8')).toContain('company=CV Karya Mandiri')
-    expect(ent2.body.toString('utf8')).toContain('account=1-1100 Kas CV Karya Mandiri')
-    expect(ent2.body.toString('utf8')).not.toContain('PT. Kreasi Inovasi Estetika')
+    const pdf2 = ent2.body.toString('utf8')
+    expect(pdf2).toContain('CV Karya Mandiri')
+    expect(pdf2).toContain('1-1100 Kas CV Karya Mandiri')
+    expect(pdf2).not.toContain('PT. Kreasi Inovasi Estetika')
   })
 
   it('export/accounts (COA): daftar akun per entitas (12 base vs 3 CV)', async () => {

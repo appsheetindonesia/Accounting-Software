@@ -497,8 +497,8 @@ describe('Export Buku Besar per akun — GET /exports/ledger/:accountId', () => 
     expect(res.status).toBe(200)
     expect(res.headers['content-disposition']).toContain('attachment')
     expect(res.headers['content-disposition']).toContain('Buku-Besar-1-1100-2026-03.pdf')
-    // Body binary (Buffer) — payload placeholder memuat metadata akun & periode
-    expect(res.body.toString('utf8')).toContain('account=1-1100 Kas Besar')
+    // Body PDF valid — memuat nama akun di dalam konten PDF
+    expect(res.body.toString('utf8')).toContain('1-1100 Kas Besar')
   })
 
   it('export XLSX → Content-Type spreadsheet + filename .xlsx', async () => {
@@ -537,7 +537,8 @@ describe('Export Buku Besar per akun — GET /exports/ledger/:accountId', () => 
       .query({ format: 'pdf', start: '2026-03-01', end: '2026-03-15', token: tokens.admin })
     expect(res.status).toBe(200)
     expect(res.headers['content-disposition']).toContain('Buku-Besar-1-1100-2026-03-01..2026-03-15.pdf')
-    expect(res.body.toString('utf8')).toContain('period=2026-03-01..2026-03-15')
+    // PDF memuat periode rentang custom di konten
+    expect(res.body.toString('utf8')).toContain('2026-03-01..2026-03-15')
   })
 
   it('rentang custom tanpa period → tetap 200 (start/end menggantikan period)', async () => {
