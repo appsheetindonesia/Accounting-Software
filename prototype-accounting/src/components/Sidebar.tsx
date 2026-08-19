@@ -268,7 +268,6 @@ export default function Sidebar() {
   const openModal = useStore((s) => s.openModal)
   const user = useStore((s) => s.user)
   const canWrite = canWriteJournal(user?.role)
-  const activeEntity = entities.find((e) => e.id === activeEntityId) ?? entities[0]
 
   return (
     <aside className="flex w-16 shrink-0 flex-col border-r border-line bg-surface lg:w-64">
@@ -314,11 +313,7 @@ export default function Sidebar() {
             </select>
           </label>
         </div>
-        <div className="flex items-center gap-2 rounded-lg bg-primary/5 px-2.5 py-2 text-ink-soft lg:bg-transparent lg:px-0">
-          <Building2 size={14} className="shrink-0 text-primary" />
-          <span className="hidden truncate text-sm font-medium text-ink lg:inline">{activeEntity?.name ?? '—'}</span>
-          <span className="hidden text-[11px] text-ink-faint lg:inline">· IDR</span>
-        </div>
+
       </div>
     </aside>
   )
