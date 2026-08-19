@@ -86,7 +86,7 @@ if (PERSIST) {
       periods: loaded.periods,
       sessions: new Map(loaded.sessions ?? []),
       seq: loaded.seq ?? { journal: 100, line: 100, attachment: 100, user: 100, entity: 100 },
-      dbConfig: loaded.dbConfig ?? { storageMode: 'local', host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '', tables: { accounts: 'accounts', journals: 'journals', journalLines: 'journal_lines', periods: 'periods', users: 'users', entities: 'entities', sessions: 'sessions', attachments: 'attachments' } },
+      dbConfig: { storageMode: 'local', host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '', tables: { accounts: 'accounts', journals: 'journals', journalLines: 'journal_lines', periods: 'periods', users: 'users', entities: 'entities', sessions: 'sessions', attachments: 'attachments' }, ...(loaded.dbConfig || {}) },
     }
     console.log(`💾 [persist] State dimuat dari ${PERSIST_FILE} (${db.journals.length} jurnal)`)
   } else {
@@ -1744,7 +1744,8 @@ app.post('/settings/db-config', requireAuth, (req, res) => {
   if (!Number.isFinite(portNum) || portNum < 1 || portNum > 65535) {
     return fail(res, 422, 'VALIDATION_ERROR', 'Port harus berupa angka 1–65535')
   }
-  db.dbConfig = { storageMode: storageMode ?? 'local', host: String(host).trim(), port: String(port).trim(), database: String(database).trim(), schema: String(schema ?? 'public').trim() || 'public', username: String(username ?? 'postgres').trim() || 'postgres', password: password ?? '' }
+  const defaultTables = { accounts: 'accounts', journals: 'journals', journalLines: 'journal_lines', periods: 'periods', users: 'users', entities: 'entities', sessions: 'sessions', attachments: 'attachments' }
+  db.dbConfig = { storageMode: storageMode ?? 'local', host: String(host).trim(), port: String(port).trim(), database: String(database).trim(), schema: String(schema ?? 'public').trim() || 'public', username: String(username ?? 'postgres').trim() || 'postgres', password: password ?? '', tables: { ...defaultTables, ...(req.body?.tables || {}) } }
   ok(res, db.dbConfig)
 })
 

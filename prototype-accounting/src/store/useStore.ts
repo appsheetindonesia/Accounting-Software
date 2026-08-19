@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist, type PersistOptions } from 'zustand/middleware'
 import { useMemo } from 'react'
 import type { Account, DbConfig, JournalEntry, JournalStatus, NewJournalInput, OfflineJournalOp, OfflineOpInput, PageKey } from '../types'
+import { DEFAULT_DB_TABLES } from '../types'
 import { DEMO_DATA_BY_ENTITY, mockAccounts, mockJournals, SEED_JOURNAL_IDS, SEED_VERSION } from '../data/mock'
 import { api, ApiError, isNetworkError, toJournalEntry, type Entity, type PeriodInfo } from '../api'
 import { setAuth, setRefreshToken, setSessionExpiredHandler, setTokensRefreshedHandler } from '../api/client'
@@ -552,7 +553,7 @@ export const useStore = create<AccountingState>()(
               periods,
               activePeriod: get().activePeriod,
               lastSyncedAt: nowIso(),
-              dbConfig: dbCfg,
+              dbConfig: { ...dbCfg, tables: dbCfg.tables ?? DEFAULT_DB_TABLES },
               entityDataCache: {
                 ...s.entityDataCache,
                 [get().activeEntityId]: { accounts: accRes.accounts, journals },
@@ -621,7 +622,7 @@ export const useStore = create<AccountingState>()(
               periods,
               activePeriod: auth.activePeriod?.id ?? get().activePeriod,
               lastSyncedAt: nowIso(),
-              dbConfig: dbCfg,
+              dbConfig: { ...dbCfg, tables: dbCfg.tables ?? DEFAULT_DB_TABLES },
               authLoading: false,
               sessionExpired: false,
               toast: { message: `Selamat datang, ${auth.user.name}`, kind: 'success' },

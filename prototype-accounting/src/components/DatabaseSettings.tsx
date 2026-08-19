@@ -10,7 +10,17 @@ export default function DatabaseSettings() {
   const updateDbConfig = useStore((s) => s.updateDbConfig)
   const showToast = useStore((s) => s.showToast)
 
-  const [form, setForm] = useState({ ...dbConfig })
+  const [form, setForm] = useState({
+    ...dbConfig,
+    tables: dbConfig.tables ?? DEFAULT_DB_TABLES,
+    storageMode: dbConfig.storageMode ?? 'local',
+    host: dbConfig.host ?? 'localhost',
+    port: dbConfig.port ?? '5432',
+    database: dbConfig.database ?? 'accounting_db',
+    schema: dbConfig.schema ?? 'public',
+    username: dbConfig.username ?? 'postgres',
+    password: dbConfig.password ?? '',
+  })
   const [showPassword, setShowPassword] = useState(false)
   const [saved, setSaved] = useState(false)
   const [testing, setTesting] = useState(false)
