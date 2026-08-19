@@ -49,7 +49,7 @@ const createDb = ({ withExtra = false } = {}) => ({
   sessions: new Map(), // refreshToken -> userId
   seq: { journal: 100, line: 100, attachment: 100, user: 100, entity: 100 },
   // Konfigurasi koneksi database PostgreSQL (Pengaturan)
-  dbConfig: { host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', password: '' },
+  dbConfig: { host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '' },
 })
 
 let db = createDb()
@@ -86,7 +86,7 @@ if (PERSIST) {
       periods: loaded.periods,
       sessions: new Map(loaded.sessions ?? []),
       seq: loaded.seq ?? { journal: 100, line: 100, attachment: 100, user: 100, entity: 100 },
-      dbConfig: loaded.dbConfig ?? { host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', password: '' },
+      dbConfig: loaded.dbConfig ?? { host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '' },
     }
     console.log(`💾 [persist] State dimuat dari ${PERSIST_FILE} (${db.journals.length} jurnal)`)
   } else {
@@ -1735,7 +1735,7 @@ app.get('/settings/db-config', requireAuth, (req, res) => {
 })
 
 app.post('/settings/db-config', requireAuth, (req, res) => {
-  const { host, port, database, schema, password } = req.body || {}
+  const { host, port, database, schema, username, password } = req.body || {}
   if (!host || !port || !database) {
     return fail(res, 422, 'VALIDATION_ERROR', 'Host, port, dan nama basis data wajib diisi')
   }
@@ -1744,7 +1744,7 @@ app.post('/settings/db-config', requireAuth, (req, res) => {
   if (!Number.isFinite(portNum) || portNum < 1 || portNum > 65535) {
     return fail(res, 422, 'VALIDATION_ERROR', 'Port harus berupa angka 1–65535')
   }
-  db.dbConfig = { host: String(host).trim(), port: String(port).trim(), database: String(database).trim(), schema: String(schema ?? 'public').trim() || 'public', password: password ?? '' }
+  db.dbConfig = { host: String(host).trim(), port: String(port).trim(), database: String(database).trim(), schema: String(schema ?? 'public').trim() || 'public', username: String(username ?? 'postgres').trim() || 'postgres', password: password ?? '' }
   ok(res, db.dbConfig)
 })
 

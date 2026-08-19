@@ -10,19 +10,20 @@ import * as apiClient from '../api/client'
 beforeEach(() => {
   // Reset store ke default
   useStore.setState({
-    dbConfig: { host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', password: '' },
+    dbConfig: { host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '' },
     toast: null,
   })
 })
 
 describe('DatabaseSettings', () => {
-  it('render 5 field input dengan nilai default', () => {
+  it('render 6 field input dengan nilai default', () => {
     render(<DatabaseSettings />)
 
     expect((screen.getByLabelText('Host Internal') as HTMLInputElement).value).toBe('localhost')
     expect((screen.getByLabelText('Port Internal') as HTMLInputElement).value).toBe('5432')
     expect((screen.getByLabelText('Nama Basis Data') as HTMLInputElement).value).toBe('accounting_db')
     expect((screen.getByLabelText('Schema') as HTMLInputElement).value).toBe('public')
+    expect((screen.getByLabelText('Pengguna') as HTMLInputElement).value).toBe('postgres')
     expect((screen.getByLabelText('Kata Sandi') as HTMLInputElement).value).toBe('')
   })
 
@@ -30,7 +31,7 @@ describe('DatabaseSettings', () => {
     render(<DatabaseSettings />)
 
     expect(screen.getByText(/Koneksi:/)).toBeDefined()
-    expect(screen.getByText(/accounting_db@localhost:5432/)).toBeDefined()
+    expect(screen.getByText(/postgres@localhost:5432\/accounting_db/)).toBeDefined()
   })
 
   it('tombol Simpan aktif setelah mengubah form', () => {
@@ -52,6 +53,7 @@ describe('DatabaseSettings', () => {
     fireEvent.change(screen.getByLabelText('Port Internal'), { target: { value: '5433' } })
     fireEvent.change(screen.getByLabelText('Nama Basis Data'), { target: { value: 'prod_db' } })
     fireEvent.change(screen.getByLabelText('Schema'), { target: { value: 'myschema' } })
+    fireEvent.change(screen.getByLabelText('Pengguna'), { target: { value: 'admin' } })
     fireEvent.change(screen.getByLabelText('Kata Sandi'), { target: { value: 'secret123' } })
 
     fireEvent.click(screen.getByRole('button', { name: /Simpan Pengaturan/ }))
@@ -61,6 +63,7 @@ describe('DatabaseSettings', () => {
     expect(state.dbConfig.port).toBe('5433')
     expect(state.dbConfig.database).toBe('prod_db')
     expect(state.dbConfig.schema).toBe('myschema')
+    expect(state.dbConfig.username).toBe('admin')
     expect(state.dbConfig.password).toBe('secret123')
   })
 
@@ -135,6 +138,15 @@ describe('DatabaseSettings', () => {
     expect(useStore.getState().dbConfig.schema).toBe('public')
   })
 
+  it('username kosong otomatis jadi "postgres" saat simpan', () => {
+    render(<DatabaseSettings />)
+
+    fireEvent.change(screen.getByLabelText('Pengguna'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: /Simpan Pengaturan/ }))
+
+    expect(useStore.getState().dbConfig.username).toBe('postgres')
+  })
+
   it('tombol Test Koneksi tampil di awal', () => {
     render(<DatabaseSettings />)
 
@@ -147,7 +159,7 @@ describe('DatabaseSettings', () => {
   it('tombol Test Koneksi menunjukkan "Menguji..." saat loading', async () => {
     const spy = vi.spyOn(apiClient, 'request').mockImplementation(() =>
       new Promise((resolve) =>
-        setTimeout(() => resolve({ ok: true, message: 'Koneksi berhasil', latencyMs: 50 } as never), 100)
+        setTimeout(() => resolve({ ok: true, message: 'Koneksi berhasil', latencyMs: 50 } as never), 200)
       )
     )
 
@@ -158,14 +170,14 @@ describe('DatabaseSettings', () => {
 
     // Tunggu render pertama (loading state)
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 50))
+      await new Promise((r) => setTimeout(r, 100))
     })
     expect(btn.textContent).toContain('Menguji...')
     expect((btn as HTMLButtonElement).disabled).toBe(true)
 
     // Tunggu selesai
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 200))
+      await new Promise((r) => setTimeout(r, 300))
     })
     expect(screen.getByTestId('test-result')).toBeDefined()
     spy.mockRestore()

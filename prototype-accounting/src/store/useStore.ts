@@ -427,6 +427,7 @@ export const useStore = create<AccountingState>()(
           port: '5432',
           database: 'accounting_db',
           schema: 'public',
+          username: 'postgres',
           password: '',
         },
         updateDbConfig: (config) => {

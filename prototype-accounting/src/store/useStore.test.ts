@@ -108,8 +108,8 @@ beforeEach(() => {
   mockedApi.getDbConfig.mockReset()
   mockedApi.saveDbConfig.mockReset()
   mockedApi.health.mockRejectedValue(new TypeError('fetch failed'))
-  mockedApi.getDbConfig.mockResolvedValue({ host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', password: '' } as never)
-  mockedApi.saveDbConfig.mockResolvedValue({ host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', password: '' } as never)
+  mockedApi.getDbConfig.mockResolvedValue({ host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '' } as never)
+  mockedApi.saveDbConfig.mockResolvedValue({ host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '' } as never)
   // Default: gagal jaringan agar path lokal (fallback) yang teruji
   mockedApi.login.mockRejectedValue(new TypeError('fetch failed'))
   mockedApi.logout.mockResolvedValue(undefined)

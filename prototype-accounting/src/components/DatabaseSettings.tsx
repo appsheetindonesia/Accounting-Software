@@ -43,6 +43,7 @@ export default function DatabaseSettings() {
       port: form.port.trim(),
       database: form.database.trim(),
       schema: form.schema.trim() || 'public',
+      username: form.username.trim() || 'postgres',
       password: form.password,
     })
     setSaved(true)
@@ -51,8 +52,8 @@ export default function DatabaseSettings() {
 
   const handleTestConnection = async () => {
     // Validasi ringan sebelum test
-    if (!form.host.trim() || !form.port.trim() || !form.database.trim()) {
-      showToast('Lengkapi host, port, dan nama basis data terlebih dahulu', 'error')
+    if (!form.host.trim() || !form.port.trim() || !form.database.trim() || !form.username.trim()) {
+      showToast('Lengkapi host, port, nama basis data, dan pengguna terlebih dahulu', 'error')
       return
     }
 
@@ -71,6 +72,7 @@ export default function DatabaseSettings() {
             port: form.port.trim(),
             database: form.database.trim(),
             schema: form.schema.trim() || 'public',
+            username: form.username.trim() || 'postgres',
             password: form.password,
           },
         }
@@ -91,6 +93,7 @@ export default function DatabaseSettings() {
     form.port !== dbConfig.port ||
     form.database !== dbConfig.database ||
     form.schema !== dbConfig.schema ||
+    form.username !== dbConfig.username ||
     form.password !== dbConfig.password
 
   return (
@@ -170,6 +173,22 @@ export default function DatabaseSettings() {
             <p className="text-[11px] text-ink-faint">Schema PostgreSQL (default: public)</p>
           </div>
 
+          {/* Pengguna */}
+          <div className="space-y-1.5">
+            <label htmlFor="db-username" className="block text-xs font-semibold text-ink">
+              Pengguna
+            </label>
+            <input
+              id="db-username"
+              type="text"
+              value={form.username}
+              onChange={(e) => handleChange('username', e.target.value)}
+              placeholder="postgres"
+              className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30"
+            />
+            <p className="text-[11px] text-ink-faint">Username akun database (default: postgres)</p>
+          </div>
+
           {/* Kata Sandi */}
           <div className="space-y-1.5">
             <label htmlFor="db-password" className="block text-xs font-semibold text-ink">
@@ -201,7 +220,7 @@ export default function DatabaseSettings() {
         <div className="rounded-lg bg-canvas px-3 py-2 text-xs text-ink-soft">
           <span className="font-medium text-ink">Koneksi:</span>{' '}
           <code className="rounded bg-surface px-1 py-0.5 font-mono text-primary">
-            postgresql://{form.database || '???'}@{form.host || '???'}:{form.port || '???'}{form.schema && form.schema !== 'public' ? `/${form.schema}` : ''}
+            postgresql://{form.username || '???'}@{form.host || '???'}:{form.port || '???'}/{form.database || '???'}{form.schema && form.schema !== 'public' ? `/${form.schema}` : ''}
           </code>
           {form.password && (
             <span className="ml-1 text-ink-faint">(dengan password)</span>
