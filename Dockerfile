@@ -2,16 +2,18 @@
 FROM node:22-alpine AS frontend-build
 WORKDIR /app
 
-# Copy package files
-COPY prototype-accounting/package.json prototype-accounting/package-lock.json ./
+# Copy package files (root = frontend)
+COPY package.json package-lock.json ./
 
 # Install dependencies
 RUN npm ci
 
-# Copy source
-COPY prototype-accounting/ ./
+# Copy source (src/, public/, index.html, vite.config.ts, tsconfig*.json)
+COPY src/ ./src/
+COPY public/ ./public/
+COPY index.html vite.config.ts vitest.config.ts tsconfig.json tsconfig.app.json tsconfig.node.json ./
 
-# Build (tsc + vite build) — tanpa base path agar aset langsung di root
+# Build (tsc + vite build)
 RUN npm run build
 
 # ── Stage 2: Production image ─────────────────────────────────────

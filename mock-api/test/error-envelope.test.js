@@ -40,7 +40,7 @@ const TRIGGERED = new Set()
 //
 // UI (prototype): klien TIDAK menampilkan pesan server mentah — ia memetakan
 // KODE NO_APPROVAL_RIGHTS ke pesan khususnya sendiri (NO_APPROVAL_RIGHTS_MESSAGE
-// di prototype-accounting/src/lib/permissions.ts): "Hanya Admin yang dapat
+// di src/lib/permissions.ts): "Hanya Admin yang dapat
 // menyetujui atau menolak jurnal. Hubungi admin Anda untuk persetujuan."
 // Kedua pesan sengaja BEDA: server = kontrak API, UI = pesan peran yang
 // membantu. Konsistensi end-to-end (kode yang sama → toast UI) diverifikasi
@@ -52,7 +52,7 @@ const TRIGGERED = new Set()
 // ------------------------------------------------------------
 const NO_APPROVAL_RIGHTS_SERVER_MSG = 'Role Anda tidak memiliki izin approve'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const UI_PERMS_PATH = path.resolve(__dirname, '../../prototype-accounting/src/lib/permissions.ts')
+const UI_PERMS_PATH = path.resolve(__dirname, '../../src/lib/permissions.ts')
 const uiPermsSrc = fs.readFileSync(UI_PERMS_PATH, 'utf8')
 const NO_APPROVAL_RIGHTS_UI_MSG = uiPermsSrc.match(/NO_APPROVAL_RIGHTS_MESSAGE\s*=\s*'([^']+)'/)?.[1]
 if (!NO_APPROVAL_RIGHTS_UI_MSG) {
@@ -204,7 +204,7 @@ describe('403 — Forbidden (role tanpa izin, API §13)', () => {
     expectError(res, 403, 'NO_APPROVAL_RIGHTS')
     expect(res.body.error.message).toBe(NO_APPROVAL_RIGHTS_SERVER_MSG)
     // UI: pesan KHUSUS yang ditampilkan toast (dibaca langsung dari
-    // prototype-accounting/src/lib/permissions.ts) — sengaja lebih kaya
+    // src/lib/permissions.ts) — sengaja lebih kaya
     // daripada pesan server; keduanya terikat oleh KODE yang sama.
     expect(NO_APPROVAL_RIGHTS_UI_MSG).toContain('Hanya Admin yang dapat menyetujui')
     expect(NO_APPROVAL_RIGHTS_UI_MSG).toContain('Hubungi admin Anda')

@@ -59,7 +59,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: prototype-accounting/package-lock.json
+          cache-dependency-path: package-lock.json
 
       # Pre-flight: pastikan situs Pages benar-benar AKTIF sebelum langkah
       # Configure. Bila belum (mis. repo private — GITHUB_TOKEN tidak
@@ -108,11 +108,9 @@ jobs:
           echo "Build prototipe TETAP dijalankan & artifact tetap tersimpan — tidak ada yang gagal."
 
       - name: Install dependencies
-        working-directory: prototype-accounting
         run: npm ci
 
       - name: Build (tsc -b && vite build, base = nama repo)
-        working-directory: prototype-accounting
         run: npm run build -- --base=$PAGES_BASE
 
       # Guard: pastikan hasil build memakai base Pages yang benar sebelum
@@ -120,7 +118,6 @@ jobs:
       # <link href="/<repo>/assets/..."> di dist/index.html — jika base salah
       # (mis. "/" atau nama repo berubah), aset akan 404 setelah deploy.
       - name: Guard — verifikasi base Pages di dist/index.html
-        working-directory: prototype-accounting
         run: |
           echo "Base Pages yang diharapkan: $PAGES_BASE"
           if ! grep -Eq '(src|href)="'"$PAGES_BASE"'assets/' dist/index.html; then
@@ -132,7 +129,7 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
         with:
-          path: prototype-accounting/dist
+          path: dist
 
   deploy:
     name: Deploy ke GitHub Pages

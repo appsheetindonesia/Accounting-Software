@@ -4,7 +4,7 @@
 //
 //   1. mock-api               — integration test Vitest + Supertest
 //                               (143 test, tanpa server — app Express langsung)
-//   2. prototype-accounting   — unit + integration MSW (Vitest, 340 test)
+//   2. root (prototipe)       — unit + integration MSW (Vitest, 340 test)
 //   3. e2e                    — Playwright RG-01..RG-22 (63 test =
 //                               32 skenario × chromium + firefox;
 //                               webServer menyalakan mock API :4000 + Vite :5173)
@@ -35,7 +35,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 const allSuites = [
   { name: 'mock-api', cwd: path.join(root, 'mock-api'), env: {} },
-  { name: 'prototype', cwd: path.join(root, 'prototype-accounting'), env: {} },
+  { name: 'prototype', cwd: root, env: {} },
   // E2E: Playwright menyalakan mock API (port 4000) + Vite (5173) sendiri
   // lewat webServer. Persistence nonaktif agar run hermetis (sama dengan CI).
   { name: 'e2e', cwd: path.join(root, 'e2e'), env: { MOCK_API_PERSIST: '0' } },

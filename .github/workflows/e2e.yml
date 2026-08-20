@@ -57,13 +57,13 @@ jobs:
           cache: npm
           cache-dependency-path: |
             mock-api/package-lock.json
-            prototype-accounting/package-lock.json
+            package-lock.json
             e2e/package-lock.json
 
-      - name: Install dependencies (mock-api, prototipe, e2e)
+      - name: Install dependencies (root/prototipe, mock-api, e2e)
         run: |
+          npm ci
           cd mock-api && npm ci
-          cd ../prototype-accounting && npm ci
           cd ../e2e && npm ci
 
       # Retry install Playwright — CDN kadang stall di runner baru;

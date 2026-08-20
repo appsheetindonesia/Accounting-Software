@@ -62,20 +62,17 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: prototype-accounting/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        working-directory: prototype-accounting
         run: npm ci
 
       - name: Build (tsc -b && vite build, base = / root domain)
-        working-directory: prototype-accounting
         run: npm run build -- --base=/
 
       # Guard: root domain harus mereferensikan aset di /assets/ —
       # base salah (mis. subpath GitHub Pages) → aset 404 setelah deploy.
       - name: Guard — verifikasi base "/" di dist/index.html
-        working-directory: prototype-accounting
         run: |
           if ! grep -Eq '(src|href)="/assets/' dist/index.html; then
             echo "::error::dist/index.html tidak mereferensikan /assets/ — base bukan root. Periksa argumen --base=/"
@@ -88,7 +85,6 @@ jobs:
           echo "OK — aset direferensikan di /assets/ (root domain)"
 
       - name: Deploy ke Netlify (production)
-        working-directory: prototype-accounting
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
@@ -109,18 +105,15 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: prototype-accounting/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        working-directory: prototype-accounting
         run: npm ci
 
       - name: Build (tsc -b && vite build, base = / root domain)
-        working-directory: prototype-accounting
         run: npm run build -- --base=/
 
       - name: Guard — verifikasi base "/" di dist/index.html
-        working-directory: prototype-accounting
         run: |
           if ! grep -Eq '(src|href)="/assets/' dist/index.html; then
             echo "::error::dist/index.html tidak mereferensikan /assets/ — base bukan root. Periksa argumen --base=/"
@@ -133,7 +126,6 @@ jobs:
           echo "OK — aset direferensikan di /assets/ (root domain)"
 
       - name: Deploy ke Vercel (production)
-        working-directory: prototype-accounting
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -157,18 +149,15 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: prototype-accounting/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        working-directory: prototype-accounting
         run: npm ci
 
       - name: Build (tsc -b && vite build, base = / root domain)
-        working-directory: prototype-accounting
         run: npm run build -- --base=/
 
       - name: Guard — verifikasi base "/" di dist/index.html
-        working-directory: prototype-accounting
         run: |
           if ! grep -Eq '(src|href)="/assets/' dist/index.html; then
             echo "::error::dist/index.html tidak mereferensikan /assets/ — base bukan root. Periksa argumen --base=/"
@@ -181,7 +170,6 @@ jobs:
           echo "OK — aset direferensikan di /assets/ (root domain)"
 
       - name: Deploy ke Cloudflare Pages
-        working-directory: prototype-accounting
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

@@ -39,7 +39,7 @@ import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const MOCK_API_DIR = path.join(root, 'mock-api')
-const PROTOTYPE_DIR = path.join(root, 'prototype-accounting')
+const PROTOTYPE_DIR = root
 
 const API_PORT = Number(process.env.MOCK_API_PORT) || 4000
 const API_HEALTH_URL = `http://localhost:${API_PORT}/health`

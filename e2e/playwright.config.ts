@@ -43,7 +43,7 @@ export default defineConfig({
     },
     {
       command: 'npm run dev',
-      cwd: '../prototype-accounting',
+      cwd: '..',
       url: 'http://localhost:5173',
       reuseExistingServer: !CI,
       timeout: 60_000,

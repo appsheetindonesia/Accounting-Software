@@ -6,9 +6,7 @@
 node_modules/
 dist/
 
-# package-lock.json di ROOT — repo ini bukan package terpisah (sub-proyek punya
-# lockfile masing-masing); file kosong yang ter-generate npm tidak boleh masuk.
-/package-lock.json
+
 
 # Artefak & file lokal
 *.log

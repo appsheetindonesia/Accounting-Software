@@ -4,14 +4,14 @@ Suite **Playwright** untuk skenario regresi **RG-01 s/d RG-22** dari
 `QA Test Plan - Accounting.md` §4 (RG-13..22 = alur login, refresh token,
 reconnect offline, auto-reconnect polling, kedaluwarsa TTL terjadwal,
 SESSION_EXPIRED & rate limit 429), dijalankan terhadap **mock API**
-(`mock-api/`, port 4000) dan **prototipe** (`prototype-accounting/`, Vite :5173).
+(`mock-api/`, port 4000) dan **prototipe** (root repo, Vite :5173).
 
 [![CI (Unit + Integration + E2E)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/ci.yml/badge.svg)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/ci.yml)
 
 ## Prasyarat
 
 - Node.js ≥ 18
-- Dependensi terpasang di `mock-api/` dan `prototype-accounting/` (`npm install` di masing-masing)
+- Dependensi terpasang di root (prototipe) dan `mock-api/` (`npm ci` di masing-masing)
 
 ## Install
 
@@ -79,7 +79,7 @@ Workflow terpadu `.github/workflows/ci.yml` menjalankan **2 job paralel**
 di **setiap push / pull request** (ubuntu-latest, Node 22):
 
 1. **`test`** — job **matrix per-tahap**:
-   - tahap **prototipe** (unit + integration, Vitest + MSW, `prototype-accounting`)
+   - tahap **prototipe** (unit + integration, Vitest + MSW, root repo)
      — 170 test
    - tahap **mock API** (integration, Vitest + Supertest, `mock-api`) — 105 test
      (baseline angka §2.3, error envelope vs katalog §13, seed:extra,
