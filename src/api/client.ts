@@ -22,7 +22,7 @@ export class ApiError extends Error {
 // Gagal jaringan (server mati / offline) — bedakan dari penolakan server (ApiError).
 export const isNetworkError = (e: unknown): boolean => e instanceof TypeError
 
-const BASE_URL: string = import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
+const BASE_URL: string = import.meta.env.VITE_API_URL ?? ''
 
 let accessToken: string | null = null
 let refreshToken: string | null = null
