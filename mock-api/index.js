@@ -2,8 +2,9 @@ import app from './src/server.js'
 import { isEnabled as persistEnabled, getFilePath as persistFilePath } from './src/persistence.js'
 import { destroyPool } from './src/db.js'
 
-// Jangan ikuti env PORT global agar port mock API stabil di 4000
-const PORT = Number(process.env.MOCK_API_PORT) || 4000
+// Prioritas: MOCK_API_PORT > PORT > default 4000
+// Nixpacks/Easypanel set PORT, jadi harus dihormati.
+const PORT = Number(process.env.MOCK_API_PORT) || Number(process.env.PORT) || 4000
 const PERSIST = persistEnabled()
 
 const server = app.listen(PORT, () => {
