@@ -756,11 +756,13 @@ app.post('/entities/:id/activate', requireAuth, requirePermission('entity.manage
 // ------------------------------------------------------------
 // 4. CHART OF ACCOUNTS
 // ------------------------------------------------------------
-app.get('/accounts', requireAuth, (req, res) => {
+app.get('/accounts', requireAuth, async (req, res) => {
+  try {
   const entityId = req.entityId
   const balances = computeBalances(entityId)
   // HANYA akun entitas aktif (X-Entity-Id)
-  let list = entityAccounts(entityId).filter((a) => a.isActive || !req.query.activeOnly)
+  let list = Adapter.isPgMode(db) ? await Adapter.getAccounts(entityId, db) : entityAccounts(entityId)
+  list = list.filter((a) => a.isActive || !req.query.activeOnly)
   if (req.query.type) list = list.filter((a) => a.type === req.query.type)
   if (req.query.keyword) {
     const kw = req.query.keyword.toLowerCase()
@@ -783,20 +785,33 @@ app.get('/accounts', requireAuth, (req, res) => {
     req.query.pageSize,
   )
   ok(res, { accounts: items }, meta)
+  } catch (err) { fail(res, 500, 'INTERNAL_ERROR', err.message) }
 })
 
-app.post('/accounts', requireAuth, requirePermission('account.write'), (req, res) => {
+app.post('/accounts', requireAuth, requirePermission('account.write'), async (req, res) => {
+  try {
   const { code, name, type, group, category, normalBalance, parentId, description, isActive } = req.body ?? {}
   if (!/^\d+-\d+$/.test(code ?? '')) return fail(res, 422, 'INVALID_CODE_FORMAT', 'Format kode {{GOL}}-{{NOMOR}}')
-  // Kode unik PER ENTITAS — dua entitas boleh punya COA sendiri
-  if (db.accounts.some((a) => a.entityId === req.entityId && a.code === code)) return fail(res, 409, 'ACCOUNT_CODE_EXISTS', 'Kode akun sudah digunakan')
-  if (parentId) {
-    const parent = db.accounts.find((a) => a.entityId === req.entityId && a.id === parentId)
-    if (!parent || !parent.isActive) return fail(res, 422, 'INVALID_PARENT', 'Akun induk tidak ditemukan atau non-aktif')
+  if (Adapter.isPgMode(db)) {
+    const existing = await Adapter.getAccounts(req.entityId, db)
+    if (existing.some((a) => a.code === code)) return fail(res, 409, 'ACCOUNT_CODE_EXISTS', 'Kode akun sudah digunakan')
+    if (parentId) {
+      const parent = await Adapter.getAccountById(parentId, req.entityId, db)
+      if (!parent || !parent.isActive) return fail(res, 422, 'INVALID_PARENT', 'Akun induk tidak ditemukan atau non-aktif')
+    }
+    const created = await Adapter.createAccount({ code, name, type, group: group ?? type, category: category ?? 'Umum', normalBalance: normalBalance ?? (type === 'asset' || type === 'expense' ? 'debit' : 'credit'), parentId: parentId ?? null, description: description || '', entityId: req.entityId }, db)
+    ok(res, { ...created, balance: 0 }, null, 201)
+  } else {
+    if (db.accounts.some((a) => a.entityId === req.entityId && a.code === code)) return fail(res, 409, 'ACCOUNT_CODE_EXISTS', 'Kode akun sudah digunakan')
+    if (parentId) {
+      const parent = db.accounts.find((a) => a.entityId === req.entityId && a.id === parentId)
+      if (!parent || !parent.isActive) return fail(res, 422, 'INVALID_PARENT', 'Akun induk tidak ditemukan atau non-aktif')
+    }
+    const account = { id: code, code, name, type, group: group ?? type, category: category ?? 'Umum', normalBalance: normalBalance ?? (type === 'asset' || type === 'expense' ? 'debit' : 'credit'), baseBalance: 0, parentId: parentId ?? null, isHeader: false, isActive: isActive ?? true, description, entityId: req.entityId }
+    db.accounts.push(account)
+    ok(res, { ...account, balance: 0 }, null, 201)
   }
-  const account = { id: code, code, name, type, group: group ?? type, category: category ?? 'Umum', normalBalance: normalBalance ?? (type === 'asset' || type === 'expense' ? 'debit' : 'credit'), baseBalance: 0, parentId: parentId ?? null, isHeader: false, isActive: isActive ?? true, description, entityId: req.entityId }
-  db.accounts.push(account)
-  ok(res, { ...account, balance: 0 }, null, 201)
+  } catch (err) { fail(res, 500, 'INTERNAL_ERROR', err.message) }
 })
 
 app.put('/accounts/:id', requireAuth, requirePermission('account.write'), (req, res) => {
