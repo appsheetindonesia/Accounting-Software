@@ -6,8 +6,10 @@
 # agar native binding (rolldown) terinstall dengan benar.
 # ============================================================
 
-# TANPA nixPkgs custom — biarkan Nixpacks pakai default Node.js
-# nixPkgs custom menyebabkan rolldown native binding conflict
+# Force Node.js 22 — Vite 8 + rolldown butuh Node >= 20
+# Tanpa ini, Nixpacks pakai Node 18 (default) yang terlalu tua
+[phases.setup]
+nixPkgs = ["nodejs_22"]
 
 # Install dependencies (termasuk devDeps untuk build)
 [phases.install]
