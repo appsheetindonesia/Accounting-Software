@@ -1,0 +1,38 @@
+# ============================================================
+# Nixpacks — Accounting Software
+#
+# Easypanel Nixpacks builder akan auto-detect file ini.
+# Nixpacks membangun image berdasarkan package.json + config ini.
+# ============================================================
+
+# Provider: node
+[phases.setup]
+nixPkgs = ["nodejs_22", "postgresql-client"]
+
+# Install dependencies
+[phases.install]
+cmds = ["npm ci --omit=dev"]
+
+# Build frontend + copy ke mock-api/static/
+[phases.build]
+cmds = [
+  "npm run build",
+  "cp -r dist/ mock-api/static/"
+]
+
+# Start server
+[phases.start]
+cmd = "node mock-api/index.js"
+
+# Environment variables
+[env]
+NODE_ENV = "production"
+PORT = "3000"
+MOCK_API_PORT = "3000"
+
+# Health check
+[healthcheck]
+path = "/health"
+interval = 30
+timeout = 10
+retries = 3

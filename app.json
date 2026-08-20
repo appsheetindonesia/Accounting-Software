@@ -1,0 +1,34 @@
+{
+  "name": "Accounting Software",
+  "description": "Prototipe aplikasi akuntansi dengan mock API dan PostgreSQL support",
+  "repository": "https://github.com/appsheetindonesia/Accounting-Software",
+  "env": {
+    "NODE_ENV": {
+      "description": "Environment mode",
+      "value": "production"
+    },
+    "PORT": {
+      "description": "Port server",
+      "value": "3000"
+    },
+    "MOCK_API_PERSIST": {
+      "description": "Simpan data ke file",
+      "value": "1"
+    },
+    "DATABASE_URL": {
+      "description": "PostgreSQL connection URL (opsional)",
+      "required": false
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  },
+  "buildpacks": [
+    {
+      "url": "heroku/nodejs"
+    }
+  ]
+}

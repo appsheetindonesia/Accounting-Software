@@ -7,17 +7,26 @@
 # Opsi 2: Pull dari GHCR (GitHub Container Registry)
 #   docker-compose -f docker-compose.yml -f docker-compose.ghcr.yml up
 #
-# Opsi 3: Easypanel
-#   Easypanel auto-detect file ini.
+# Opsi 3: Easypanel — Auto-detect file ini
+#   Easypanel akan mendeteksi docker-compose.yml ini.
 #   Set build context ke repo root.
+#
+# Opsi 4: Easypanel Nixpacks
+#   Easypanel akan mendeteksi nixpacks.toml ini.
+#   Pilih builder: Nixpacks di Easypanel dashboard.
+#
+# Opsi 5: Easypanel Railpack
+#   Easypanel akan mendeteksi railpack.toml ini.
+#   Pilih builder: Railpack di Easypanel dashboard.
+#
+# Opsi 6: Easypanel Buildpack
+#   Easypanel akan mendeteksi Procfile ini.
+#   Pilih builder: Buildpack di Easypanel dashboard.
 # ============================================================
-version: "3.8"
 
 services:
   app:
     build: .
-    # Atau pull dari GHCR (ganti baris di atas dengan):
-    # image: ghcr.io/appsheetindonesia/accounting-software:main
     ports:
       - "3000:3000"
     environment:
