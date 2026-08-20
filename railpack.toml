@@ -12,7 +12,7 @@ provider = "node"
 node_version = "22"
 
 # Install dependencies
-install = "npm ci && npm install @rolldown/binding-linux-x64-gnu --no-save"
+install = "npm ci && npm install @rolldown/binding-linux-x64-gnu --no-save && cd mock-api && npm ci --omit=dev"
 
 # Build command (frontend)
 build = "npm run build && cp -r dist/ mock-api/static/"
