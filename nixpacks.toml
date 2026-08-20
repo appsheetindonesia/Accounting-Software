@@ -13,7 +13,7 @@ nixPkgs = ["nodejs_22", "postgresql"]
 [phases.install]
 cmds = [
   "npm ci",
-  "npm rebuild rolldown"
+  "npm install @rolldown/binding-linux-x64-gnu --no-save"
 ]
 
 # Build frontend + copy ke mock-api/static/
