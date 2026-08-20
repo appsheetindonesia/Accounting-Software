@@ -15,7 +15,7 @@ import { deflateSync } from 'zlib'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { existsSync } from 'fs'
-import { buildConnectionString, getPool, destroyPool, testQuery, getPoolStatus, getConfigFromEnv } from './db.js'
+import { buildConnectionString, getPool, destroyPool, testQuery, getPoolStatus, getConfigFromEnv, runMigration } from './db.js'
 import * as Adapter from './db-adapter.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -1823,7 +1823,17 @@ app.post('/settings/test-connection', async (req, res) => {
   }
   try {
     const result = await testQuery(cfg)
-    ok(res, result)
+    // Jika koneksi berhasil, jalankan migration otomatis
+    let migration = null
+    if (result.ok) {
+      try {
+        await runMigration(cfg)
+        migration = { ok: true, message: 'Migration berhasil — semua tabel sudah dibuat' }
+      } catch (migErr) {
+        migration = { ok: false, message: `Migration gagal: ${migErr.message}` }
+      }
+    }
+    ok(res, { ...result, migration })
   } catch (err) {
     const msg = err.code === 'ENOTFOUND'
       ? `Hostname '${cfg.host}' tidak ditemukan. Jika PostgreSQL berjalan di Docker, gunakan IP address server atau 'localhost' (jika port di-mapping), bukan nama service Docker.`

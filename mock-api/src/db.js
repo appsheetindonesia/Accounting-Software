@@ -232,7 +232,16 @@ export function getPoolStatus() {
  * Jalankan migration SQL jika tabel belum ada.
  * Dipanggil otomatis saat pool pertama kali dibuat.
  */
-async function runMigration(poolInstance) {
+export async function runMigration(poolOrConfig) {
+  // Bisa menerima pool instance atau config object
+  let poolInstance = poolOrConfig
+  let tempPool = null
+  if (poolOrConfig && poolOrConfig.storageMode) {
+    // Config object — buat temp pool
+    const connStr = buildConnectionString(poolOrConfig)
+    tempPool = new Pool({ connectionString: connStr, max: 1, connectionTimeoutMillis: 10000, ssl: false })
+    poolInstance = tempPool
+  }
   try {
     // Cek apakah schema 'app' sudah ada dengan tabel entities
     const { rows } = await poolInstance.query(
@@ -250,5 +259,8 @@ async function runMigration(poolInstance) {
   } catch (err) {
     // Jangan crash server — migration bisa dijalankan manual
     console.error('[DB] Migration error:', err.message)
+    throw err
+  } finally {
+    if (tempPool) await tempPool.end().catch(() => {})
   }
 }
