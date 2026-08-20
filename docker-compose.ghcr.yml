@@ -1,0 +1,35 @@
+# ============================================================
+# Docker Compose — Pull dari GHCR (GitHub Container Registry)
+#
+# Cara pakai:
+#   docker-compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d
+#
+# Atau di Easypanel, edit service config dan set:
+#   Image: ghcr.io/appsheetindonesia/accounting-software:main
+#   Port: 3000
+#
+# File ini untuk deployment yang sudah punya image di registry.
+# ============================================================
+version: "3.8"
+
+services:
+  app:
+    image: ghcr.io/appsheetindonesia/accounting-software:main
+    # Hapus 'build:' — pull dari registry, bukan build lokal
+    build: !reset null
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - MOCK_API_PERSIST=1
+    volumes:
+      - app-data:/app/mock-api/.data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  app-data:
