@@ -34,8 +34,8 @@ function ensurePool(cfg) {
   const port = cfg.port || '5432'
   const db = encodeURIComponent(cfg.database || 'accounting_db')
   const schema = cfg.schema || 'public'
-  let connStr = `postgresql://${user}${pass ? ':' + pass : ''}@${host}:${port}/${db}`
-  if (schema !== 'public') connStr += `?search_path=${schema}`
+  let connStr = `postgresql://${user}${pass ? ':' + pass : ''}@${host}:${port}/${db}?sslmode=disable`
+  if (schema !== 'public') connStr += `&search_path=${schema}`
   pool = new Pool({ connectionString: connStr, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000, ssl: false })
   pool.on('error', (err) => console.error('[DB-Adapter] Pool error:', err.message))
   poolConfigKey = key

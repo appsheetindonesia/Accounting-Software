@@ -1785,7 +1785,14 @@ app.post('/settings/test-connection', async (req, res) => {
     const result = await testQuery(cfg)
     ok(res, result)
   } catch (err) {
-    fail(res, 500, 'INTERNAL_ERROR', `Test koneksi gagal: ${err.message}`)
+    const msg = err.code === 'ENOTFOUND'
+      ? `Hostname '${cfg.host}' tidak ditemukan. Jika PostgreSQL berjalan di Docker, gunakan IP address server atau 'localhost' (jika port di-mapping), bukan nama service Docker.`
+      : err.code === 'ECONNREFUSED'
+      ? `Koneksi ditolak di ${cfg.host}:${cfg.port}. Pastikan PostgreSQL berjalan dan port ${cfg.port} terbuka dari komputer Anda.`
+      : err.code === 'ETIMEDOUT'
+      ? `Koneksi timeout ke ${cfg.host}:${cfg.port}. Pastikan firewall mengizinkan koneksi ke port PostgreSQL.`
+      : `Test koneksi gagal: ${err.message}`
+    fail(res, 500, 'INTERNAL_ERROR', msg)
   }
 })
 

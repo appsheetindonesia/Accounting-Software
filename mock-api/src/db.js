@@ -151,7 +151,15 @@ export async function testQuery(cfg) {
   } catch (err) {
     const latencyMs = Date.now() - start
     await tempPool.end().catch(() => {})
-    return { ok: false, message: `Gagal: ${err.message}`, latencyMs }
+    let hint = err.message
+    if (err.code === 'ENOTFOUND') {
+      hint = `Hostname '${cfg.host}' tidak ditemukan. Jika PostgreSQL berjalan di Docker di server remote, gunakan IP address server atau 'localhost' (jika port di-mapping), bukan nama service Docker '${cfg.host}'`
+    } else if (err.code === 'ECONNREFUSED') {
+      hint = `Koneksi ditolak di ${cfg.host}:${cfg.port}. Pastikan PostgreSQL berjalan dan port ${cfg.port} terbuka dari komputer Anda`
+    } else if (err.code === 'ETIMEDOUT') {
+      hint = `Koneksi timeout ke ${cfg.host}:${cfg.port}. Pastikan firewall mengizinkan koneksi ke port PostgreSQL`
+    }
+    return { ok: false, message: `Gagal: ${hint}`, latencyMs }
   }
 }
 
