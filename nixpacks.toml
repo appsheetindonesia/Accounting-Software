@@ -16,7 +16,8 @@ cmds = ["npm ci --omit=dev"]
 # Build frontend + copy ke mock-api/static/
 [phases.build]
 cmds = [
-  "npm run build",
+  "npx tsc -b",
+  "npx vite build",
   "cp -r dist/ mock-api/static/"
 ]
 

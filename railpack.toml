@@ -15,7 +15,7 @@ node_version = "22"
 install = "npm ci --omit=dev"
 
 # Build command (frontend)
-build = "npm run build && cp -r dist/ mock-api/static/"
+build = "npx tsc -b && npx vite build && cp -r dist/ mock-api/static/"
 
 # Start command
 start = "node mock-api/index.js"
