@@ -10,8 +10,16 @@
  */
 
 import pg from 'pg'
+import { readFileSync } from 'fs'
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
 
 const { Pool } = pg
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+
+/** Flag: sudah jalankan migration di sesi ini? */
+let migrationRan = false
 
 /** @type {import('pg').Pool | null} */
 let pool = null
@@ -116,6 +124,15 @@ export function getPool(cfg) {
   })
 
   console.log(`[DB] Pool created: ${cfg.username}@${cfg.host}:${cfg.port}/${cfg.database}`)
+
+  // Auto-migration: jalankan 001_init.sql jika tabel belum ada
+  if (!migrationRan) {
+    migrationRan = true
+    runMigration(pool).catch((err) => {
+      console.error('[DB] Migration error (non-fatal):', err.message)
+    })
+  }
+
   return pool
 }
 
@@ -204,5 +221,34 @@ export function getPoolStatus() {
     totalCount: pool?.totalCount ?? 0,
     idleCount: pool?.idleCount ?? 0,
     waitingCount: pool?.waitingCount ?? 0,
+  }
+}
+
+// ================================================================
+// AUTO-MIGRATION
+// ================================================================
+
+/**
+ * Jalankan migration SQL jika tabel belum ada.
+ * Dipanggil otomatis saat pool pertama kali dibuat.
+ */
+async function runMigration(poolInstance) {
+  try {
+    // Cek apakah schema 'app' sudah ada dengan tabel entities
+    const { rows } = await poolInstance.query(
+      "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'app' AND table_name = 'entities') AS has_schema"
+    )
+    if (rows[0]?.has_schema) {
+      console.log('[DB] Schema app.entities sudah ada — skip migration')
+      return
+    }
+    console.log('[DB] Menjalankan migration 001_init.sql...')
+    const sqlPath = join(__dirname, '..', 'migrations', '001_init.sql')
+    const sql = readFileSync(sqlPath, 'utf-8')
+    await poolInstance.query(sql)
+    console.log('[DB] Migration berhasil — semua tabel sudah dibuat')
+  } catch (err) {
+    // Jangan crash server — migration bisa dijalankan manual
+    console.error('[DB] Migration error:', err.message)
   }
 }
