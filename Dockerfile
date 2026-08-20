@@ -18,7 +18,7 @@ RUN npm ci
 # Copy source (src/, public/, index.html, vite.config.ts, tsconfig*.json)
 COPY src/ ./src/
 COPY public/ ./public/
-COPY index.html vite.config.ts vitest.config.ts tsconfig.json tsconfig.app.json tsconfig.node.json ./
+COPY index.html vite.config.ts vitest.config.ts postcss.config.js tsconfig.json tsconfig.app.json tsconfig.node.json ./
 
 # Build (tsc + vite build)
 RUN npm run build

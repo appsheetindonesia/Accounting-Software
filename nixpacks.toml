@@ -2,20 +2,14 @@
 # Nixpacks — Accounting Software
 #
 # Easypanel Nixpacks builder akan auto-detect file ini.
-# Hindari nixPkgs custom — biarkan Nixpacks pakai Node.js default
-# agar native binding (rolldown) terinstall dengan benar.
+# Vite 5 (esbuild) kompatibel dengan Node 18 — tidak perlu
+# nixPkgs custom atau rolldown native binding.
 # ============================================================
-
-# Force Node.js 22 — Vite 8 + rolldown butuh Node >= 20
-# Tanpa ini, Nixpacks pakai Node 18 (default) yang terlalu tua
-[phases.setup]
-nixPkgs = ["nodejs_22"]
 
 # Install dependencies (termasuk devDeps untuk build)
 [phases.install]
 cmds = [
   "npm ci",
-  "npm install @rolldown/binding-linux-x64-gnu --no-save",
   "cd mock-api && npm ci --omit=dev"
 ]
 

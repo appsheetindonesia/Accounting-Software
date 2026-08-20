@@ -7,11 +7,11 @@
 # Provider
 provider = "node"
 
-# Node.js version
-node_version = "22"
+# Node.js version (Vite 5 kompatibel dengan Node 18)
+node_version = "18"
 
 # Install dependencies (termasuk devDeps untuk build)
-install = "npm ci && npm install @rolldown/binding-linux-x64-gnu --no-save && cd mock-api && npm ci --omit=dev"
+install = "npm ci && cd mock-api && npm ci --omit=dev"
 
 # Build command (frontend)
 build = "npm run build && cp -r dist/ mock-api/static/"
