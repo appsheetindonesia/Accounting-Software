@@ -11,7 +11,10 @@ nixPkgs = ["nodejs_22", "postgresql"]
 
 # Install dependencies (termasuk devDeps untuk build)
 [phases.install]
-cmds = ["npm ci"]
+cmds = [
+  "npm ci",
+  "npm rebuild rolldown"
+]
 
 # Build frontend + copy ke mock-api/static/
 [phases.build]
@@ -29,6 +32,8 @@ cmd = "node mock-api/index.js"
 NODE_ENV = "production"
 PORT = "3000"
 MOCK_API_PORT = "3000"
+npm_config_platform = "linux"
+npm_config_arch = "x64"
 
 # Health check
 [healthcheck]
