@@ -9,15 +9,14 @@
 [phases.setup]
 nixPkgs = ["nodejs_22", "postgresql"]
 
-# Install dependencies
+# Install dependencies (termasuk devDeps untuk build)
 [phases.install]
-cmds = ["npm ci --omit=dev"]
+cmds = ["npm ci"]
 
 # Build frontend + copy ke mock-api/static/
 [phases.build]
 cmds = [
-  "npx tsc -b",
-  "npx vite build",
+  "npm run build",
   "cp -r dist/ mock-api/static/"
 ]
 
