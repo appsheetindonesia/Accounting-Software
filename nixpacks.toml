@@ -2,14 +2,13 @@
 # Nixpacks — Accounting Software
 #
 # Easypanel Nixpacks builder akan auto-detect file ini.
-# Vite 5 (esbuild) kompatibel dengan Node 18 — tidak perlu
-# nixPkgs custom atau rolldown native binding.
 # ============================================================
 
 # Install dependencies (termasuk devDeps untuk build)
 [phases.install]
 cmds = [
   "npm ci",
+  "npm install @tailwindcss/oxide-linux-x64-gnu --no-save",
   "cd mock-api && npm ci --omit=dev"
 ]
 
