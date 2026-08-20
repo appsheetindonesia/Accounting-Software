@@ -20,10 +20,15 @@ export interface Account {
   code: string
   name: string
   type: AccountType
+  group?: string
   category: string
   normalBalance: 'debit' | 'credit'
   baseBalance: number
+  description?: string
+  parentId?: string | null
+  isHeader?: boolean
   isActive: boolean
+  entityId?: string
 }
 
 export interface JournalLine {

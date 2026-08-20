@@ -373,12 +373,12 @@ export const handlers = [
     if (!/^-\d+$/.test(code.slice(code.indexOf('-')))) return fail(422, 'INVALID_CODE_FORMAT', 'Format kode {{GOL}}-{{NOMOR}}')
     if (db.accounts.some((a) => a.entityId === entityId && a.code === code)) return fail(409, 'ACCOUNT_CODE_EXISTS', 'Kode akun sudah digunakan')
     const account = {
-      id: code, code, name, type: body.type ?? 'asset', group: body.group ?? body.type ?? 'asset',
-      category: body.category ?? 'Umum', normalBalance: body.normalBalance ?? (body.type === 'asset' || body.type === 'expense' ? 'debit' : 'credit'),
-      baseBalance: 0, parentId: body.parentId ?? null, isHeader: false, isActive: true, entityId,
+      id: code, code, name, type: (body.type ?? 'asset') as Account['type'], group: (body.group ?? body.type ?? 'asset') as string,
+      category: (body.category ?? 'Umum') as string, normalBalance: (body.normalBalance ?? (body.type === 'asset' || body.type === 'expense' ? 'debit' : 'credit')) as 'debit' | 'credit',
+      baseBalance: 0, parentId: (body.parentId ?? null) as string | null, isHeader: false, isActive: true, entityId,
     }
     db.accounts.push(account as DbAccount)
-    return ok({ ...account, balance: 0 }, null, 201)
+    return ok({ ...account, balance: 0 }, 201)
   }),
 
   http.put('*/accounts/:id', async ({ params, request }) => {

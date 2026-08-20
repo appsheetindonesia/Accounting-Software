@@ -177,7 +177,7 @@ export const api = {
   }) {
     return request<Account & { balance: number }>('/accounts', { method: 'POST', body: input })
   },
-  updateAccount(id: string, input: Partial<Pick<Account, 'code' | 'name' | 'category' | 'description' | 'normalBalance' | 'group'>> & { parentId?: string | null }) {
+  updateAccount(id: string, input: Partial<Pick<Account, 'code' | 'name' | 'type' | 'category' | 'description' | 'normalBalance' | 'group'>> & { parentId?: string | null }) {
     return request<Account & { balance: number }>(`/accounts/${id}`, { method: 'PUT', body: input })
   },
   deleteAccount(id: string) {

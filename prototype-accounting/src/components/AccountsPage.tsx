@@ -6,7 +6,6 @@ import {
   EyeOff,
   Filter,
   Plus,
-  RotateCcw,
   Search,
   Trash2,
 } from 'lucide-react'
