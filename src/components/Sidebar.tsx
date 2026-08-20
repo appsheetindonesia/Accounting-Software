@@ -252,24 +252,24 @@ function NavGroupSection({
 
   return (
     <div>
-      {/* Group header — klik untuk expand/collapse */}
-      <button
-        type="button"
-        onClick={toggle}
-        className={`flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider transition ${
-          isActive ? 'text-primary' : 'text-ink-faint hover:text-ink-soft'
-        }`}
-        aria-expanded={open}
-      >
-        <GroupIcon size={12} className="shrink-0" />
-        <span className="hidden lg:inline flex-1 text-left">{group.title}</span>
-        {!compact && (
+      {/* Group header — hide in compact mode, otherwise click to expand/collapse */}
+      {!compact && (
+        <button
+          type="button"
+          onClick={toggle}
+          className={`flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider transition ${
+            isActive ? 'text-primary' : 'text-ink-faint hover:text-ink-soft'
+          }`}
+          aria-expanded={open}
+        >
+          <GroupIcon size={12} className="shrink-0" />
+          <span className="flex-1 whitespace-nowrap text-left">{group.title}</span>
           <ChevronDown
             size={12}
-            className={`hidden shrink-0 transition-transform lg:block ${open ? 'rotate-0' : '-rotate-90'}`}
+            className={`shrink-0 transition-transform duration-200 ${open ? 'rotate-0' : '-rotate-90'}`}
           />
-        )}
-      </button>
+        </button>
+      )}
 
       {/* Items — smooth expand/collapse via grid-template-rows transition */}
       <div
@@ -292,10 +292,10 @@ function NavGroupSection({
                     active
                       ? 'border-l-[3px] bg-primary/10 font-semibold text-primary'
                       : 'border-l-[3px] border-transparent text-ink-soft hover:bg-surface-hover hover:text-ink'
-                  }`}
+                  } ${compact ? 'justify-center px-0 border-l-0' : ''}`}
                 >
                   <Icon size={18} className="shrink-0" />
-                  {!compact && <span className="hidden lg:inline">{label}</span>}
+                  <span className="overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-200" style={{ maxWidth: compact ? 0 : '10rem', opacity: compact ? 0 : 1 }}>{label}</span>
                   {badge ? (
                     <span className={`${compact ? 'absolute -right-1 -top-1' : 'ml-auto'} flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold text-white`}>
                       {badge > 9 ? '9+' : badge}
@@ -325,7 +325,7 @@ export default function Sidebar() {
   const canWrite = canWriteJournal(user?.role)
   const canApprove = user?.role === 'admin' || user?.role === 'accountant'
 
-  // Compact mode (persisted ke localStorage)
+  // Compact mode (persisted ke localStorage) — berlaku di semua ukuran layar
   const [compact, setCompact] = useState(() => {
     try { return localStorage.getItem(SIDEBAR_COMPACT_KEY) === 'true' } catch { return false }
   })
@@ -336,6 +336,11 @@ export default function Sidebar() {
       return next
     })
   }
+  // Sidebar fully hidden (mobile only) — persist
+  const [hidden, setHidden] = useState(() => {
+    try { return window.innerWidth < 768 && localStorage.getItem(SIDEBAR_COMPACT_KEY) !== 'true' } catch { return false }
+  })
+  const toggleHidden = () => setHidden((h) => !h)
 
   // Badge: jumlah jurnal menunggu approval
   const pendingApprovalCount = canApprove
@@ -351,17 +356,42 @@ export default function Sidebar() {
   }))
 
   return (
-    <aside className={`flex shrink-0 flex-col border-r border-line bg-surface transition-[width] duration-200 ${compact ? 'w-16' : 'w-16 lg:w-64'}`}>
+    <>
+    {/* Mobile hamburger button — only visible when sidebar is hidden on mobile */}
+    {hidden && (
+      <button
+        type="button"
+        onClick={toggleHidden}
+        className="fixed left-3 top-3 z-50 flex h-10 w-10 items-center justify-center rounded-lg bg-surface shadow-card transition hover:bg-surface-hover lg:hidden"
+        title="Buka sidebar"
+        aria-label="Buka sidebar"
+      >
+        <PanelLeftOpen size={18} className="text-ink-soft" />
+      </button>
+    )}
+    {/* Mobile overlay backdrop — only when sidebar is visible on mobile */}
+    {!hidden && (
+      <div
+        className="fixed inset-0 z-30 bg-black/30 lg:hidden"
+        onClick={toggleHidden}
+        aria-hidden="true"
+      />
+    )}
+    <aside
+      className={`flex shrink-0 flex-col border-r border-line bg-surface transition-[width,transform] duration-300 ease-in-out ${
+        compact ? 'w-[4.5rem]' : hidden ? 'w-0 overflow-hidden border-r-0 max-lg:-translate-x-full' : 'w-64'
+      } ${!hidden ? 'fixed lg:static z-40' : 'fixed lg:static z-40'} h-full`}
+    >
       {canWrite && (
         <div className="px-2 pt-4 lg:px-4">
           <button
             type="button"
             onClick={openModal}
-            className={`flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-semibold text-white shadow-card transition hover:bg-primary-light active:translate-y-px ${compact ? '' : 'lg:justify-start'}`}
+            className={`flex w-full items-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-semibold text-white shadow-card transition hover:bg-primary-light active:translate-y-px justify-center`}
             title="Buat Jurnal"
           >
             <Plus size={16} />
-            {!compact && <span className="hidden lg:inline">Buat Jurnal</span>}
+            {!compact && <span className="whitespace-nowrap">Buat Jurnal</span>}
           </button>
         </div>
       )}
@@ -373,19 +403,19 @@ export default function Sidebar() {
       </nav>
 
       <div className="space-y-2 border-t border-line p-3 lg:p-4">
-        {/* Toggle compact/expanded */}
+        {/* Toggle compact/expanded — visible on all screen sizes */}
         <button
           type="button"
           onClick={toggleCompact}
-          className="hidden lg:flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-ink-soft transition hover:bg-surface-hover hover:text-ink"
+          className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-ink-soft transition hover:bg-surface-hover hover:text-ink ${compact ? 'justify-center' : ''}`}
           title={compact ? 'Perluas sidebar' : 'Kecilkan sidebar'}
         >
           {compact ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
-          {!compact && <span>Perluas sidebar</span>}
+          {!compact && <span className="whitespace-nowrap">Perluas sidebar</span>}
         </button>
 
-        <div className="hidden lg:block">
-          <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-ink-faint">Periode</p>
+        <div>
+          {!compact && <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-ink-faint">Periode</p>}
           {compact ? (
             <button
               type="button"
@@ -398,7 +428,7 @@ export default function Sidebar() {
             <PeriodListbox />
           )}
         </div>
-        <div className="hidden lg:block">
+        <div>
           {!compact && <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-ink-faint">Entitas</p>}
           <label className={`flex items-center gap-2 rounded-lg border border-line bg-canvas px-2.5 py-2 ${compact ? 'justify-center' : ''}`}>
             <Building2 size={14} className="shrink-0 text-primary" />
@@ -423,5 +453,6 @@ export default function Sidebar() {
 
       </div>
     </aside>
+    </>
   )
 }

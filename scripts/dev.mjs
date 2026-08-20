@@ -113,8 +113,8 @@ function removePidFile() {
 // ------------------------------------------------------------
 // Spawn dengan prefix output + pelacakan untuk shutdown
 // ------------------------------------------------------------
-function start(name, cwd, args) {
-  const child = spawn('npm', ['run', ...args], {
+function start(name, cwd, args, { cmd = 'npm', cmdArgs } = {}) {
+  const child = spawn(cmd, cmdArgs ?? ['run', ...args], {
     cwd,
     shell: true,
     detached: process.platform !== 'win32', // POSIX: process group agar bisa di-kill sekaligus
@@ -297,7 +297,7 @@ async function main() {
   }
 
   const api = start('mock-api', MOCK_API_DIR, ['dev'])
-  const vite = start('vite', PROTOTYPE_DIR, ['dev'])
+  const vite = start('vite', PROTOTYPE_DIR, ['dev'], { cmd: 'npx', cmdArgs: ['vite'] })
   writePidFile() // tulis segera setelah kedua child lahir
 
   // Seed ulang otomatis SETIAP kali node --watch me-restart mock API,
