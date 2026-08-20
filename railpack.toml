@@ -2,7 +2,6 @@
 # Railpack — Accounting Software
 #
 # Easypanel Railpack builder akan auto-detect file ini.
-# Railpack membangun image berdasarkan package.json + config ini.
 # ============================================================
 
 # Provider
@@ -11,7 +10,7 @@ provider = "node"
 # Node.js version
 node_version = "22"
 
-# Install dependencies
+# Install dependencies (termasuk devDeps untuk build)
 install = "npm ci && npm install @rolldown/binding-linux-x64-gnu --no-save && cd mock-api && npm ci --omit=dev"
 
 # Build command (frontend)

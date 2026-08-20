@@ -2,12 +2,12 @@
 # Nixpacks — Accounting Software
 #
 # Easypanel Nixpacks builder akan auto-detect file ini.
-# Nixpacks membangun image berdasarkan package.json + config ini.
+# Hindari nixPkgs custom — biarkan Nixpacks pakai Node.js default
+# agar native binding (rolldown) terinstall dengan benar.
 # ============================================================
 
-# Provider: node
-[phases.setup]
-nixPkgs = ["nodejs_22", "postgresql"]
+# TANPA nixPkgs custom — biarkan Nixpacks pakai default Node.js
+# nixPkgs custom menyebabkan rolldown native binding conflict
 
 # Install dependencies (termasuk devDeps untuk build)
 [phases.install]
@@ -33,8 +33,6 @@ cmd = "node mock-api/index.js"
 NODE_ENV = "production"
 PORT = "3000"
 MOCK_API_PORT = "3000"
-npm_config_platform = "linux"
-npm_config_arch = "x64"
 
 # Health check
 [healthcheck]
