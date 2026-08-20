@@ -273,12 +273,15 @@ function NavGroupSection({
 
       {/* Items — smooth expand/collapse via grid-template-rows transition */}
       <div
-        className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
-          open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-        }`}
+        className="grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
+        style={{ gridTemplateRows: open ? '1fr' : '0fr' }}
       >
         <div className="overflow-hidden">
-          <div className="mt-0.5 space-y-0.5">
+          <div
+            className={`mt-0.5 space-y-0.5 transition-[opacity] duration-200 ease-in-out ${
+              open ? 'opacity-100 delay-100' : 'opacity-0 delay-0'
+            }`}
+          >
             {group.items.map((item) => {
               const { key, label, icon: Icon, badge } = item
               const active = page === key
