@@ -1868,7 +1868,7 @@ app.post('/admin/debug/error', (req, res) => {
 // SPA fallback — serve index.html untuk request browser (Accept: text/html)
 // yang tidak match route API. React Router handle routing di client-side.
 if (existsSync(staticDir)) {
-  app.get('*', (req, res, next) => {
+  app.get('{*path}', (req, res, next) => {
     // Skip jika request ini untuk API (Accept header mengandung application/json)
     const accept = req.get('Accept') || ''
     if (accept.includes('application/json')) return next()
