@@ -7,7 +7,7 @@
 
 # Provider: node
 [phases.setup]
-nixPkgs = ["nodejs_22", "postgresql-client"]
+nixPkgs = ["nodejs_22", "postgresql"]
 
 # Install dependencies
 [phases.install]
