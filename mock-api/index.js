@@ -7,10 +7,9 @@ import { destroyPool, getPool, getConfigFromEnv } from './src/db.js'
 const PORT = Number(process.env.MOCK_API_PORT) || Number(process.env.PORT) || 4000
 const PERSIST = persistEnabled()
 
-// Auto-connect PostgreSQL jika DATABASE_URL diset di environment
+// Auto-connect PostgreSQL pool dari DATABASE_URL (server.js sudah auto-detect storageMode)
 const envConfig = getConfigFromEnv()
 if (envConfig) {
-  console.log(`[DB] DATABASE_URL terdeteksi — menghubungkan ke ${envConfig.host}:${envConfig.port}/${envConfig.database}`)
   getPool(envConfig)
 }
 

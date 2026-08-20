@@ -125,6 +125,12 @@ if (PERSIST) {
       dbConfig: { storageMode: 'local', host: 'localhost', port: '5432', database: 'accounting_db', schema: 'public', username: 'postgres', password: '', tables: { accounts: 'accounts', journals: 'journals', journalLines: 'journal_lines', periods: 'periods', users: 'users', entities: 'entities', sessions: 'sessions', attachments: 'attachments' }, ...(loaded.dbConfig || {}) },
     }
     console.log(`💾 [persist] State dimuat dari ${PERSIST_FILE} (${db.journals.length} jurnal)`)
+    // Re-apply PostgreSQL config dari DATABASE_URL jika ada
+    // (persist load bisa overwrite storageMode ke 'local')
+    if (envDbConfig) {
+      db.dbConfig = { ...db.dbConfig, ...envDbConfig, tables: db.dbConfig.tables }
+      console.log('[DB] Re-applied PostgreSQL config from DATABASE_URL after persist load')
+    }
   } else {
     // File belum ada / rusak → seed awal, sekaligus tulis file agar
     // state berikutnya punya baseline yang konsisten.
