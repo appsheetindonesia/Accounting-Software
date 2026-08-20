@@ -7,6 +7,7 @@ Sistem akuntansi **PT. Kreasi Inovasi Estetika** — prototipe web (React + Vite
 [![CI (Unit + Integration + E2E)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/ci.yml/badge.svg)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/ci.yml)
 [![Build & Deploy prototipe ke GitHub Pages](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/pages.yml/badge.svg)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/pages.yml)
 [![E2E Playwright (chromium + firefox)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/e2e.yml/badge.svg)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/e2e.yml)
+[![Docker Build](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/docker.yml/badge.svg)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/docker.yml)
 
 > **Status badge Pages:** Workflow `pages.yml` dilengkapi pre-flight guard —
 > jika GitHub Pages belum diaktifkan (mis. repo privat di plan Free), step
@@ -124,6 +125,127 @@ berguna untuk rilis manual tanpa push tag baru atau untuk mem-publish draft
 (atau membuat release untuk tag yang lama).
 
 Detail lebih lanjut ada di README masing-masing sub-proyek (`mock-api/`, `prototype-accounting/`, `e2e/`).
+
+## Deployment
+
+### Opsi 1: Easypanel (Recommended)
+
+[![Docker Build](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/docker.yml/badge.svg)](https://github.com/appsheetindonesia/Accounting-Software/actions/workflows/docker.yml)
+
+Docker image otomatis di-build dan di-push ke **GitHub Container Registry (GHCR)**
+setiap push ke `main`. Easypanel bisa pull image langsung tanpa build lokal.
+
+#### Langkah 1 — Buat Service di Easypanel
+
+1. Login ke **Easypanel** (panel.easypanel.io)
+2. Klik **New Service** → pilih **Docker** (bukan Docker Compose)
+3. Isi konfigurasi:
+
+| Field | Nilai |
+|-------|-------|
+| Name | `accounting-app` |
+| Image | `ghcr.io/appsheetindonesia/accounting-software:main` |
+| Port | `3000` |
+| Restart | `unless-stopped` |
+
+#### Langkah 2 — Environment Variables (opsional)
+
+| Variable | Default | Deskripsi |
+|----------|---------|----------|
+| `NODE_ENV` | `production` | Mode produksi |
+| `MOCK_API_PERSIST` | `1` | Simpan data ke file (survive restart) |
+| `PORT` | `3000` | Port internal container |
+
+#### Langkah 3 — Deploy & Login
+
+1. Klik **Deploy** → tunggu container start (~30 detik)
+2. Buka URL yang diberikan Easypanel
+3. Login:
+
+| Field | Nilai |
+|-------|-------|
+| Email | `rina@estetikakreasi.co.id` |
+| Password | `password123` |
+
+#### Opsi Pull dari GHCR
+
+Image tersedia di:
+```
+ghcr.io/appsheetindonesia/accounting-software:main
+ghcr.io/appsheetindonesia/accounting-software:<sha>
+ghcr.io/appsheetindonesia/accounting-software:<tag>
+```
+
+#### Opsi Build Lokal
+
+Jika ingin build sendiri (tanpa GHCR):
+
+```bash
+docker-compose up --build
+# Buka http://localhost:3000
+```
+
+### Opsi 2: Docker Compose (Self-Hosted)
+
+```bash
+# Clone repo
+git clone https://github.com/appsheetindonesia/Accounting-Software.git
+cd Accounting-Software
+
+# Build & jalankan
+docker-compose up --build -d
+
+# Cek status
+docker-compose ps
+
+# Lihat logs
+docker-compose logs -f app
+
+# Stop
+docker-compose down
+```
+
+### Opsi 3: GitHub Pages (Static)
+
+Prototipe React bisa di-deploy statis ke GitHub Pages (tanpa mock API):
+
+```bash
+cd prototype-accounting
+npm ci
+npm run build  # output di dist/
+```
+
+Upload `dist/` ke GitHub Pages via workflow `pages.yml` (otomatis saat push ke `main`).
+
+> **Catatan:** GitHub Pages hanya menyajikan frontend statis — mock API tidak berjalan.
+> Untuk fitur lengkap (auth, CRUD, PostgreSQL), gunakan Opsi 1 atau 2.
+
+### Koneksi PostgreSQL
+
+Untuk menghubungkan ke database PostgreSQL nyata:
+
+1. **Pastikan PostgreSQL accessible** dari container (host = IP public, port terbuka)
+2. **Jalankan migration** di PostgreSQL:
+   ```bash
+   psql -h <HOST> -p <PORT> -U postgres -d <DATABASE> -f mock-api/migrations/001_init.sql
+   ```
+3. **Buka Pengaturan** di aplikasi → pilih mode **PostgreSQL**
+4. **Isi koneksi:**
+
+| Field | Nilai |
+|-------|-------|
+| Host Internal | IP address server PostgreSQL |
+| Port Internal | Port PostgreSQL (default: 5432) |
+| Nama Basis Data | Nama database |
+| Schema | `public` (default) |
+| Pengguna | `postgres` (atau user yang sesuai) |
+| Kata Sandi | Password database |
+
+5. **Test Koneksi** → harus sukses
+6. **Simpan Pengaturan** → mode PostgreSQL aktif
+
+> **Fallback:** Jika query PostgreSQL gagal (mis. tabel belum ada), aplikasi otomatis
+> fallback ke in-memory data. Jalankan migration dulu untuk data persisten.
 
 ## Berkontribusi (konvensi branch & CI)
 
