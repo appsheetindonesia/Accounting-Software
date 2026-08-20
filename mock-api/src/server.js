@@ -12,8 +12,14 @@ import { randomUUID } from 'crypto'
 import { entities, users, rolePermissions, accounts, coaTemplate, journals, periods, mockTrend, extraJournals, ent2Accounts, ent2Journals } from './data.js'
 import { isEnabled as persistEnabled, getFilePath as persistFilePath, loadState as loadPersisted, saveState as savePersisted } from './persistence.js'
 import { deflateSync } from 'zlib'
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
+import { existsSync } from 'fs'
 import { buildConnectionString, getPool, destroyPool, testQuery, getPoolStatus } from './db.js'
 import * as Adapter from './db-adapter.js'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 const app = express()
 // exposedHeaders: browser perlu membaca Content-Disposition (nama file export
@@ -22,6 +28,16 @@ const app = express()
 // CORS-safelisted, jadi wajib di-expose agar terbaca JavaScript).
 app.use(cors({ exposedHeaders: ['Content-Disposition', 'Retry-After'] }))
 app.use(express.json())
+
+// ------------------------------------------------------------
+// Serve static frontend (production build) — path relatif dari src/ ke static/
+// Saat dev (tanpa build), direktori static/ tidak ada → skip.
+// ------------------------------------------------------------
+const staticDir = join(__dirname, '..', 'static')
+if (existsSync(staticDir)) {
+  app.use(express.static(staticDir))
+  console.log('[Server] Serving static frontend from', staticDir)
+}
 
 // ------------------------------------------------------------
 // State in-memory — dibuat dari seed; bisa di-reset kapan saja
@@ -1830,6 +1846,22 @@ app.post('/settings/db-config', requireAuth, (req, res) => {
 app.post('/admin/debug/error', (req, res) => {
   throw new Error('pemicu INTERNAL_ERROR untuk test')
 })
+
+// SPA fallback — serve index.html untuk request browser (Accept: text/html)
+// yang tidak match route API. React Router handle routing di client-side.
+if (existsSync(staticDir)) {
+  app.get('*', (req, res, next) => {
+    // Skip jika request ini untuk API (Accept header mengandung application/json)
+    const accept = req.get('Accept') || ''
+    if (accept.includes('application/json')) return next()
+    // Skip semua route API known
+    const apiPrefixes = ['/auth', '/admin', '/accounts', '/journals', '/ledger',
+      '/reports', '/search', '/exports', '/users', '/entities', '/periods',
+      '/dashboard', '/settings', '/health']
+    if (apiPrefixes.some(p => req.path.startsWith(p))) return next()
+    res.sendFile(join(staticDir, 'index.html'))
+  })
+}
 
 app.use((req, res) => fail(res, 404, 'NOT_FOUND', `Endpoint ${req.method} ${req.path} tidak ditemukan`))
 
