@@ -22,6 +22,9 @@ services:
     environment:
       - NODE_ENV=production
       - MOCK_API_PERSIST=1
+      # PostgreSQL koneksi nyata — isi DATABASE_URL untuk mode production
+      # Format: postgresql://user:password@host:port/database?sslmode=disable
+      # - DATABASE_URL=postgresql://postgres:password@host:5432/dbname?sslmode=disable
     volumes:
       - app-data:/app/mock-api/.data
     restart: unless-stopped

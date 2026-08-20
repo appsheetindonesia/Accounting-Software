@@ -15,7 +15,7 @@ import { deflateSync } from 'zlib'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { existsSync } from 'fs'
-import { buildConnectionString, getPool, destroyPool, testQuery, getPoolStatus } from './db.js'
+import { buildConnectionString, getPool, destroyPool, testQuery, getPoolStatus, getConfigFromEnv } from './db.js'
 import * as Adapter from './db-adapter.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -71,6 +71,24 @@ const createDb = ({ withExtra = false } = {}) => ({
 })
 
 let db = createDb()
+
+// ------------------------------------------------------------
+// Auto-configure PostgreSQL dari DATABASE_URL env variable.
+// Jika DATABASE_URL di-set, mode PostgreSQL aktif otomatis saat startup.
+// ------------------------------------------------------------
+const envDbConfig = getConfigFromEnv()
+if (envDbConfig) {
+  db.dbConfig = { ...db.dbConfig, ...envDbConfig, tables: db.dbConfig.tables }
+  console.log(`[DB] DATABASE_URL detected → PostgreSQL mode: ${envDbConfig.host}:${envDbConfig.port}/${envDbConfig.database}`)
+  // Try to create pool on startup
+  try {
+    getPool(db.dbConfig)
+    console.log('[DB] PostgreSQL pool created successfully')
+  } catch (err) {
+    console.warn(`[DB] WARNING: Could not create PostgreSQL pool: ${err.message}`)
+    console.warn('[DB] Falling back to in-memory mode. Fix DATABASE_URL and restart.')
+  }
+}
 
 // ------------------------------------------------------------
 // Persistence opsional (MOCK_API_PERSIST / MOCK_API_PERSIST_FILE)

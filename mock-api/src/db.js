@@ -20,6 +20,38 @@ let pool = null
 let lastConfig = null
 
 /**
+ * Parse DATABASE_URL (PostgreSQL connection string) ke config object.
+ * Format: postgresql://user:password@host:port/database?sslmode=disable&search_path=schema
+ * Return null jika url kosong/invalid.
+ */
+export function parseDatabaseUrl(url) {
+  if (!url || typeof url !== 'string') return null
+  try {
+    const parsed = new URL(url)
+    const params = Object.fromEntries(parsed.searchParams)
+    return {
+      storageMode: 'postgresql',
+      host: parsed.hostname || 'localhost',
+      port: parsed.port || '5432',
+      database: (parsed.pathname || '/accounting_db').replace(/^\//, ''),
+      username: decodeURIComponent(parsed.username) || 'postgres',
+      password: decodeURIComponent(parsed.password) || '',
+      schema: params.search_path || params.schema || 'public',
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Ambil config dari env DATABASE_URL. Dipanggil saat startup.
+ */
+export function getConfigFromEnv() {
+  const url = process.env.DATABASE_URL
+  return parseDatabaseUrl(url)
+}
+
+/**
  * Buat connection string PostgreSQL dari config object.
  * Format: postgresql://username:password@host:port/database?schema=xxx
  */
