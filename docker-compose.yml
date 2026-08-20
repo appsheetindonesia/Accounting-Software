@@ -1,13 +1,27 @@
+# ============================================================
+# Docker Compose — Accounting Software
+#
+# Opsi 1: Build lokal
+#   docker-compose up --build
+#
+# Opsi 2: Pull dari GHCR (GitHub Container Registry)
+#   docker-compose -f docker-compose.yml -f docker-compose.ghcr.yml up
+#
+# Opsi 3: Easypanel
+#   Easypanel auto-detect file ini.
+#   Set build context ke repo root.
+# ============================================================
 version: "3.8"
 
 services:
   app:
     build: .
+    # Atau pull dari GHCR (ganti baris di atas dengan):
+    # image: ghcr.io/appsheetindonesia/accounting-software:main
     ports:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - PORT=3000
       - MOCK_API_PERSIST=1
     volumes:
       - app-data:/app/mock-api/.data
