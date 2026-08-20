@@ -13,9 +13,12 @@ const STATUS: Record<string, { dot: string; label: string }> = {
 export default function BottomBar() {
   const activePeriod = useStore((s) => s.activePeriod)
   const apiStatus = useStore((s) => s.apiStatus)
+  const storageMode = useStore((s) => s.dbConfig?.storageMode)
   const lastSyncedAt = useStore((s) => s.lastSyncedAt)
   const lastRefreshedAt = useStore((s) => s.lastRefreshedAt)
-  const s = STATUS[apiStatus] ?? STATUS.idle
+  const s = apiStatus === 'online'
+    ? { dot: 'bg-ok', label: storageMode === 'postgresql' ? 'Online · PostgreSQL' : 'Online · Mock API' }
+    : (STATUS[apiStatus] ?? STATUS.idle)
 
   // Ticker 30 detik agar teks waktu relatif (tooltip) selalu akurat.
   const [, setTick] = useState(0)
