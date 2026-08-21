@@ -526,6 +526,7 @@ CREATE OR REPLACE FUNCTION app.close_period(p_period_id UUID, p_draft_action TEX
 DECLARE
     v_period   app.fiscal_periods;
     v_drafts   INT;
+    r          RECORD;
 BEGIN
     SELECT * INTO v_period FROM app.fiscal_periods WHERE id = p_period_id FOR UPDATE;
     IF NOT FOUND THEN RAISE EXCEPTION 'PERIOD_NOT_FOUND'; END IF;

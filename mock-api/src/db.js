@@ -280,7 +280,7 @@ export async function runMigration(poolOrConfig) {
       console.log('[DB] Migration berhasil — semua tabel, views, functions, triggers, dan seed data sudah dibuat')
     } else if (!hasSettings) {
       // Partial migration — entities ada tapi settings belum
-      console.log('[DB] Tabel entities sudah ada, membuat app.settings + seed...')
+      console.log('[DB] Tabel entities sudah ada, membuat app.settings + seed + fix close_period...')
       await poolInstance.query(`
         CREATE TABLE IF NOT EXISTS app.settings (
             key         TEXT PRIMARY KEY,
@@ -291,9 +291,70 @@ export async function runMigration(poolOrConfig) {
         VALUES ('dbConfig', '{"storageMode":"postgresql","tables":{"accounts":"accounts","journals":"journals","journalLines":"journal_lines","periods":"periods","users":"users","entities":"entities","sessions":"sessions","attachments":"attachments"}}'::jsonb)
         ON CONFLICT (key) DO NOTHING;
       `)
-      console.log('[DB] app.settings berhasil dibuat + default dbConfig di-seed')
+      // Fix close_period function yang mungkin punya bug 'undeclared variable r'
+      await poolInstance.query(`
+        CREATE OR REPLACE FUNCTION app.close_period(p_period_id UUID, p_draft_action TEXT, p_user_id UUID)
+            RETURNS app.fiscal_periods LANGUAGE plpgsql SECURITY DEFINER SET search_path = app AS $$
+        DECLARE
+            v_period   app.fiscal_periods;
+            v_drafts   INT;
+            r          RECORD;
+        BEGIN
+            SELECT * INTO v_period FROM app.fiscal_periods WHERE id = p_period_id FOR UPDATE;
+            IF NOT FOUND THEN RAISE EXCEPTION 'PERIOD_NOT_FOUND'; END IF;
+            SELECT count(*) INTO v_drafts FROM app.journals
+             WHERE period_id = p_period_id AND status = 'draft';
+            IF v_drafts > 0 AND p_draft_action IS NULL THEN
+                RAISE EXCEPTION 'DRAFT_ACTION_REQUIRED: masih ada % jurnal draft', v_drafts;
+            END IF;
+            IF p_draft_action = 'post-all' THEN
+                FOR r IN SELECT id FROM app.journals WHERE period_id = p_period_id AND status = 'draft'
+                LOOP
+                    PERFORM app.post_journal(r.id, p_user_id);
+                END LOOP;
+            ELSIF p_draft_action = 'delete-all' THEN
+                DELETE FROM app.journals WHERE period_id = p_period_id AND status = 'draft';
+            END IF;
+            UPDATE app.fiscal_periods SET is_open = false, updated_at = now()
+             WHERE id = p_period_id RETURNING * INTO v_period;
+            RETURN v_period;
+        END;
+        $$;
+      `)
+      console.log('[DB] app.settings + fix close_period berhasil')
     } else {
-      console.log('[DB] Semua tabel sudah ada — skip migration')
+      // Semua tabel sudah ada — tapi fix close_period jika belum punya variabel r
+      console.log('[DB] Semua tabel sudah ada — fix close_period jika perlu...')
+      await poolInstance.query(`
+        CREATE OR REPLACE FUNCTION app.close_period(p_period_id UUID, p_draft_action TEXT, p_user_id UUID)
+            RETURNS app.fiscal_periods LANGUAGE plpgsql SECURITY DEFINER SET search_path = app AS $$
+        DECLARE
+            v_period   app.fiscal_periods;
+            v_drafts   INT;
+            r          RECORD;
+        BEGIN
+            SELECT * INTO v_period FROM app.fiscal_periods WHERE id = p_period_id FOR UPDATE;
+            IF NOT FOUND THEN RAISE EXCEPTION 'PERIOD_NOT_FOUND'; END IF;
+            SELECT count(*) INTO v_drafts FROM app.journals
+             WHERE period_id = p_period_id AND status = 'draft';
+            IF v_drafts > 0 AND p_draft_action IS NULL THEN
+                RAISE EXCEPTION 'DRAFT_ACTION_REQUIRED: masih ada % jurnal draft', v_drafts;
+            END IF;
+            IF p_draft_action = 'post-all' THEN
+                FOR r IN SELECT id FROM app.journals WHERE period_id = p_period_id AND status = 'draft'
+                LOOP
+                    PERFORM app.post_journal(r.id, p_user_id);
+                END LOOP;
+            ELSIF p_draft_action = 'delete-all' THEN
+                DELETE FROM app.journals WHERE period_id = p_period_id AND status = 'draft';
+            END IF;
+            UPDATE app.fiscal_periods SET is_open = false, updated_at = now()
+             WHERE id = p_period_id RETURNING * INTO v_period;
+            RETURN v_period;
+        END;
+        $$;
+      `)
+      console.log('[DB] close_period function updated')
     }
   } catch (err) {
     // Jangan crash server — migration bisa dijalankan manual
