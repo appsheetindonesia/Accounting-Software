@@ -1872,6 +1872,20 @@ app.post('/settings/test-connection', async (req, res) => {
   }
 })
 
+// ---- Admin: jalankan migration manual ke PostgreSQL -------------------------
+app.post('/admin/run-migration', requireAuth, async (req, res) => {
+  const cfg = db.dbConfig
+  if (!cfg || cfg.storageMode !== 'postgresql') {
+    return fail(res, 400, 'NOT_POSTGRESQL', 'Storage mode bukan PostgreSQL. Silakan koneksi ke PostgreSQL terlebih dahulu.')
+  }
+  try {
+    await runMigration(cfg)
+    ok(res, { ok: true, message: 'Migration berhasil dijalankan ke PostgreSQL' })
+  } catch (err) {
+    fail(res, 500, 'MIGRATION_FAILED', `Migration gagal: ${err.message}`)
+  }
+})
+
 // ---- Konfigurasi database (Pengaturan PostgreSQL) ----------------------------
 // GET  /settings/db-config → { data: { host, port, database, password } }
 // POST /settings/db-config → simpan ke db + file persist

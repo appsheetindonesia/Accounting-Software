@@ -261,19 +261,40 @@ export async function runMigration(poolOrConfig) {
     poolInstance = tempPool
   }
   try {
-    // Cek apakah schema 'app' sudah ada dengan tabel entities
-    const { rows } = await poolInstance.query(
-      "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'app' AND table_name = 'entities') AS has_schema"
+    // Cek tabel kritis
+    const { rows: entityCheck } = await poolInstance.query(
+      "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'app' AND table_name = 'entities') AS exists"
     )
-    if (rows[0]?.has_schema) {
-      console.log('[DB] Schema app.entities sudah ada — skip migration')
-      return
+    const { rows: settingsCheck } = await poolInstance.query(
+      "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'app' AND table_name = 'settings') AS exists"
+    )
+    const hasEntities = entityCheck[0]?.exists
+    const hasSettings = settingsCheck[0]?.exists
+
+    if (!hasEntities) {
+      // Full migration — jalankan 001_init.sql
+      console.log('[DB] Menjalankan full migration 001_init.sql...')
+      const sqlPath = join(__dirname, '..', 'migrations', '001_init.sql')
+      const sql = readFileSync(sqlPath, 'utf-8')
+      await poolInstance.query(sql)
+      console.log('[DB] Migration berhasil — semua tabel, views, functions, triggers, dan seed data sudah dibuat')
+    } else if (!hasSettings) {
+      // Partial migration — entities ada tapi settings belum
+      console.log('[DB] Tabel entities sudah ada, membuat app.settings + seed...')
+      await poolInstance.query(`
+        CREATE TABLE IF NOT EXISTS app.settings (
+            key         TEXT PRIMARY KEY,
+            value       JSONB NOT NULL,
+            updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        INSERT INTO app.settings (key, value)
+        VALUES ('dbConfig', '{"storageMode":"postgresql","tables":{"accounts":"accounts","journals":"journals","journalLines":"journal_lines","periods":"periods","users":"users","entities":"entities","sessions":"sessions","attachments":"attachments"}}'::jsonb)
+        ON CONFLICT (key) DO NOTHING;
+      `)
+      console.log('[DB] app.settings berhasil dibuat + default dbConfig di-seed')
+    } else {
+      console.log('[DB] Semua tabel sudah ada — skip migration')
     }
-    console.log('[DB] Menjalankan migration 001_init.sql...')
-    const sqlPath = join(__dirname, '..', 'migrations', '001_init.sql')
-    const sql = readFileSync(sqlPath, 'utf-8')
-    await poolInstance.query(sql)
-    console.log('[DB] Migration berhasil — semua tabel sudah dibuat')
   } catch (err) {
     // Jangan crash server — migration bisa dijalankan manual
     console.error('[DB] Migration error:', err.message)
