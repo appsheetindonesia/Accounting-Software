@@ -94,12 +94,20 @@ if (envDbConfig) {
       }
       // Sync data dari PG ke in-memory agar entityAccounts/entityJournals/computeBalances jalan
       await Adapter.syncDataFromPg(db)
-      console.log('[DB] Periodic sync started — data dari PG akan di-sync ke in-memory setiap 60 detik')
-      // Periodic sync: tiap 60 detik, sync data dari PG ke in-memory
-      // agar perubahan dari luar (DBA, migration, dll) tetap terlihat
+      const initCounts = await Adapter.checkTableCounts(db)
+      Adapter.updateLastCounts(initCounts)
+      console.log(`[DB] Periodic sync started — smart mode (hanya sync saat ada perubahan). Counts: ${JSON.stringify(initCounts)}`)
+      // Smart periodic sync: tiap 60 detik, cek COUNT dulu
+      // Jika tidak ada perubahan → skip (hemat bandwidth + CPU)
       setInterval(async () => {
         try {
+          const currentCounts = await Adapter.checkTableCounts(db)
+          if (!Adapter.hasCountsChanged(currentCounts)) {
+            return // skip — tidak ada perubahan
+          }
+          console.log(`[DB] Change detected — syncing from PG. Counts: ${JSON.stringify(currentCounts)}`)
           await Adapter.syncDataFromPg(db)
+          Adapter.updateLastCounts(currentCounts)
         } catch (err) {
           console.warn(`[DB] Periodic sync error: ${err.message}`)
         }

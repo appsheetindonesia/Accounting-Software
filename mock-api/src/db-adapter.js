@@ -1189,6 +1189,59 @@ export async function persistReversalToPg(originalPgId, reversalJournal, db) {
 }
 
 /**
+ * Jalankan query langsung ke PostgreSQL dengan config tertentu.
+ * Berguna untuk endpoint admin yang butuh query ad-hoc.
+ */
+
+// ---- Smart periodic sync: track row counts ----
+let lastTableCounts = null
+
+/**
+ * Quick COUNT query pada tabel kunci — hanya 4 queries, <5ms di PG.
+ * Return: { accounts: 15, journals: 10, users: 3, periods: 3 }
+ */
+export async function checkTableCounts(db) {
+  if (!isPgMode(db)) return null
+  try {
+    const { rows } = await query(
+      `SELECT
+        (SELECT COUNT(*)::int FROM app.accounts) AS accounts,
+        (SELECT COUNT(*)::int FROM app.journals) AS journals,
+        (SELECT COUNT(*)::int FROM app.users) AS users,
+        (SELECT COUNT(*)::int FROM app.fiscal_periods) AS periods,
+        (SELECT COUNT(*)::int FROM app.journal_lines) AS lines`,
+      [], db.dbConfig
+    )
+    return rows[0]
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Compare current counts dengan last known counts.
+ * Return true jika ADA perubahan (insert/update/delete).
+ */
+export function hasCountsChanged(currentCounts) {
+  if (!currentCounts) return false
+  if (!lastTableCounts) return true // pertama kali — sync
+  const changed =
+    currentCounts.accounts !== lastTableCounts.accounts ||
+    currentCounts.journals !== lastTableCounts.journals ||
+    currentCounts.users !== lastTableCounts.users ||
+    currentCounts.periods !== lastTableCounts.periods ||
+    currentCounts.lines !== lastTableCounts.lines
+  return changed
+}
+
+/**
+ * Update last known counts setelah sync berhasil.
+ */
+export function updateLastCounts(counts) {
+  lastTableCounts = counts ? { ...counts } : null
+}
+
+/**
  * Sync semua data dari PostgreSQL ke db.accounts, db.journals, db.users,
  * db.entities, db.periods.
  * Dipanggil SETELAH migration berhasil, sehingga semua endpoint yang
