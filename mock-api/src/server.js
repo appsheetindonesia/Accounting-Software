@@ -85,15 +85,17 @@ if (envDbConfig) {
   try {
     getPool(db.dbConfig)
     console.log('[DB] PostgreSQL pool created successfully')
-    // Load saved dbConfig dari PostgreSQL (termasuk custom table names)
+    // Load saved dbConfig + sync data dari PostgreSQL ke in-memory
     // Gunakan .then() agar tidak butuh top-level await
-    loadDbConfigFromPg(db.dbConfig).then((savedConfig) => {
+    loadDbConfigFromPg(db.dbConfig).then(async (savedConfig) => {
       if (savedConfig) {
         db.dbConfig = { ...db.dbConfig, ...savedConfig, tables: savedConfig.tables || db.dbConfig.tables }
         console.log('[DB] Restored dbConfig from PostgreSQL (survives restart)')
       }
+      // Sync data dari PG ke in-memory agar entityAccounts/entityJournals/computeBalances jalan
+      await Adapter.syncDataFromPg(db)
     }).catch((err) => {
-      console.warn(`[DB] Could not load dbConfig from PG: ${err.message}`)
+      console.warn(`[DB] Could not load dbConfig/sync from PG: ${err.message}`)
     })
   } catch (err) {
     console.warn(`[DB] WARNING: Could not create PostgreSQL pool: ${err.message}`)
@@ -825,42 +827,54 @@ app.post('/accounts', requireAuth, requirePermission('account.write'), async (re
   } catch (err) { fail(res, 500, 'INTERNAL_ERROR', err.message) }
 })
 
-app.put('/accounts/:id', requireAuth, requirePermission('account.write'), (req, res) => {
+app.put('/accounts/:id', requireAuth, requirePermission('account.write'), async (req, res) => {
   const account = db.accounts.find((a) => a.entityId === req.entityId && a.id === req.params.id)
   if (!account) return fail(res, 404, 'ACCOUNT_NOT_FOUND', 'Akun tidak ditemukan')
   const { code, name, category, description, parentId, normalBalance, group } = req.body ?? {}
   if (code && code !== account.code && db.accounts.some((a) => a.entityId === req.entityId && a.code === code)) return fail(res, 409, 'ACCOUNT_CODE_EXISTS', 'Kode akun sudah digunakan')
+  if (Adapter.isPgMode(db)) {
+    await Adapter.updateAccount(req.params.id, req.entityId, { code, name, category, description, parentId, normalBalance }, db)
+  }
   Object.assign(account, { code: code ?? account.code, name: name ?? account.name, category: category ?? account.category, description: description ?? account.description, parentId: parentId ?? account.parentId, normalBalance: normalBalance ?? account.normalBalance, group: group ?? account.group })
   ok(res, { ...account, balance: computeBalances(req.entityId).get(account.id) ?? 0 })
 })
 
-app.delete('/accounts/:id', requireAuth, requirePermission('account.write'), (req, res) => {
+app.delete('/accounts/:id', requireAuth, requirePermission('account.write'), async (req, res) => {
   const account = db.accounts.find((a) => a.entityId === req.entityId && a.id === req.params.id)
   if (!account) return fail(res, 404, 'ACCOUNT_NOT_FOUND', 'Akun tidak ditemukan')
   const children = db.accounts.filter((a) => a.entityId === req.entityId && a.parentId === account.id && a.isActive)
   if (children.length) return fail(res, 409, 'ACCOUNT_HAS_CHILDREN', 'Akun induk tidak bisa dihapus jika memiliki sub-akun aktif')
   const balance = computeBalances(req.entityId).get(account.id) ?? 0
   if (balance !== 0) return fail(res, 409, 'ACCOUNT_HAS_BALANCE', 'Akun memiliki saldo; non-aktifkan saja')
+  if (Adapter.isPgMode(db)) {
+    await Adapter.updateAccount(req.params.id, req.entityId, { isActive: false }, db)
+  }
   account.isActive = false
   res.status(204).end()
 })
 
-app.patch('/accounts/:id/activate', requireAuth, requirePermission('account.write'), (req, res) => {
+app.patch('/accounts/:id/activate', requireAuth, requirePermission('account.write'), async (req, res) => {
   const account = db.accounts.find((a) => a.entityId === req.entityId && a.id === req.params.id)
   if (!account) return fail(res, 404, 'ACCOUNT_NOT_FOUND', 'Akun tidak ditemukan')
+  if (Adapter.isPgMode(db)) {
+    await Adapter.updateAccount(req.params.id, req.entityId, { isActive: true }, db)
+  }
   account.isActive = true
   ok(res, { id: account.id, isActive: true })
 })
-app.patch('/accounts/:id/deactivate', requireAuth, requirePermission('account.write'), (req, res) => {
+app.patch('/accounts/:id/deactivate', requireAuth, requirePermission('account.write'), async (req, res) => {
   const account = db.accounts.find((a) => a.entityId === req.entityId && a.id === req.params.id)
   if (!account) return fail(res, 404, 'ACCOUNT_NOT_FOUND', 'Akun tidak ditemukan')
   const balance = computeBalances(req.entityId).get(account.id) ?? 0
   if (balance !== 0) return fail(res, 409, 'ACCOUNT_HAS_BALANCE', 'Akun memiliki saldo; non-aktifkan saja')
+  if (Adapter.isPgMode(db)) {
+    await Adapter.updateAccount(req.params.id, req.entityId, { isActive: false }, db)
+  }
   account.isActive = false
   ok(res, { id: account.id, isActive: false })
 })
 
-app.post('/accounts/template', requireAuth, requirePermission('account.write'), (req, res) => {
+app.post('/accounts/template', requireAuth, requirePermission('account.write'), async (req, res) => {
   const { templateId, mode } = req.body ?? {}
   const template = coaTemplate.id === templateId ? coaTemplate : null
   if (!template) return fail(res, 404, 'NOT_FOUND', 'Template tidak ditemukan')
@@ -874,10 +888,17 @@ app.post('/accounts/template', requireAuth, requirePermission('account.write'), 
       skipped++
       continue
     }
-    const account = { ...t, id: t.code, baseBalance: 0, isActive: true, description: 'Dari template ' + template.name, entityId: req.entityId }
-    db.accounts.push(account)
-    created++
-    createdAccounts.push(account)
+    if (Adapter.isPgMode(db)) {
+      const pgAccount = await Adapter.createAccount({ code: t.code, name: t.name, type: t.type, group: t.type, category: t.category || 'Umum', normalBalance: t.normalBalance, description: 'Dari template ' + template.name, entityId: req.entityId }, db)
+      db.accounts.push(pgAccount)
+      created++
+      createdAccounts.push(pgAccount)
+    } else {
+      const account = { ...t, id: t.code, baseBalance: 0, isActive: true, description: 'Dari template ' + template.name, entityId: req.entityId }
+      db.accounts.push(account)
+      created++
+      createdAccounts.push(account)
+    }
   }
   ok(res, { created, skipped, accounts: createdAccounts }, null, 201)
 })
@@ -1855,6 +1876,8 @@ app.post('/settings/test-connection', async (req, res) => {
       try {
         await runMigration(cfg)
         migration = { ok: true, message: 'Migration berhasil — semua tabel sudah dibuat' }
+        // Sync data dari PG ke in-memory agar COA tampil
+        await Adapter.syncDataFromPg(db)
       } catch (migErr) {
         migration = { ok: false, message: `Migration gagal: ${migErr.message}` }
       }
@@ -1880,6 +1903,8 @@ app.post('/admin/run-migration', requireAuth, async (req, res) => {
   }
   try {
     await runMigration(cfg)
+    // Sync data dari PG ke in-memory agar COA tampil
+    await Adapter.syncDataFromPg(db)
     ok(res, { ok: true, message: 'Migration berhasil dijalankan ke PostgreSQL' })
   } catch (err) {
     fail(res, 500, 'MIGRATION_FAILED', `Migration gagal: ${err.message}`)

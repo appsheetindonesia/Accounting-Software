@@ -1008,3 +1008,95 @@ export async function createUser(data, db) {
 export function getInMemoryState(db) {
   return db
 }
+
+// ================================================================
+// SYNC — Load data dari PostgreSQL ke in-memory arrays
+// ================================================================
+
+/**
+ * Sync semua data dari PostgreSQL ke db.accounts, db.journals, db.users,
+ * db.entities, db.periods.
+ * Dipanggil SETELAH migration berhasil, sehingga semua endpoint yang
+ * masih baca dari in-memory (entityAccounts, entityJournals, computeBalances)
+ * tetap jalan.
+ */
+export async function syncDataFromPg(db) {
+  if (!isPgMode(db)) return null
+  try {
+    // Sync accounts
+    const { rows: acctRows } = await query(
+      `SELECT id, code, name, type, category,
+              normal_balance AS "normalBalance",
+              parent_id AS "parentId",
+              is_active AS "isActive",
+              is_header AS "isHeader",
+              description,
+              base_balance AS "baseBalance",
+              entity_id AS "entityId",
+              version
+       FROM app.accounts ORDER BY code`,
+      [], db.dbConfig
+    )
+    db.accounts = acctRows
+
+    // Sync journals + lines
+    const { rows: journalRows } = await query(
+      `SELECT id, entity_id AS "entityId",
+              transaction_number AS "transactionNumber",
+              date, description, status,
+              reversal_of AS "reversalOf",
+              reversal_of_id AS "reversalOfId",
+              period_id AS "periodId",
+              created_at AS "createdAt",
+              created_by AS "createdBy",
+              posted_at AS "postedAt",
+              posted_by AS "postedBy",
+              base_balance AS "baseBalance"
+       FROM app.journals WHERE entity_id IS NOT NULL ORDER BY date`,
+      [], db.dbConfig
+    )
+    for (const j of journalRows) {
+      const { rows: lines } = await query(
+        `SELECT id, journal_id AS "journalId",
+                account_id AS "accountId",
+                debit, credit, description,
+                sequence AS "sequence"
+         FROM app.journal_lines WHERE journal_id = $1`,
+        [j.id], db.dbConfig
+      )
+      j.lines = lines
+      j.attachments = []
+    }
+    db.journals = journalRows
+
+    // Sync users
+    const { rows: userRows } = await query(
+      'SELECT id, email, name, is_active AS "isActive" FROM app.users',
+      [], db.dbConfig
+    )
+    db.users = userRows
+
+    // Sync entities
+    const { rows: entityRows } = await query(
+      'SELECT id, name FROM app.entities',
+      [], db.dbConfig
+    )
+    db.entities = entityRows
+
+    // Sync periods
+    const { rows: periodRows } = await query(
+      `SELECT id, entity_id AS "entityId", name, month, year,
+              start_date AS "startDate", end_date AS "endDate",
+              is_open AS "isOpen", is_active AS "isActive"
+       FROM app.fiscal_periods`,
+      [], db.dbConfig
+    )
+    db.periods = periodRows
+
+    console.log(`[DB] Synced from PostgreSQL: ${db.accounts.length} akun, ${db.journals.length} jurnal, ${db.users.length} user, ${db.entities.length} entitas`)
+    return { accounts: db.accounts.length, journals: db.journals.length }
+  } catch (err) {
+    console.error('[DB] syncDataFromPg error:', err.message)
+    return null
+  }
+}
