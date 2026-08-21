@@ -94,6 +94,16 @@ if (envDbConfig) {
       }
       // Sync data dari PG ke in-memory agar entityAccounts/entityJournals/computeBalances jalan
       await Adapter.syncDataFromPg(db)
+      console.log('[DB] Periodic sync started — data dari PG akan di-sync ke in-memory setiap 60 detik')
+      // Periodic sync: tiap 60 detik, sync data dari PG ke in-memory
+      // agar perubahan dari luar (DBA, migration, dll) tetap terlihat
+      setInterval(async () => {
+        try {
+          await Adapter.syncDataFromPg(db)
+        } catch (err) {
+          console.warn(`[DB] Periodic sync error: ${err.message}`)
+        }
+      }, 60_000)
     }).catch((err) => {
       console.warn(`[DB] Could not load dbConfig/sync from PG: ${err.message}`)
     })
