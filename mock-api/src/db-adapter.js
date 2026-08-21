@@ -1013,6 +1013,173 @@ export function getInMemoryState(db) {
 // SYNC — Load data dari PostgreSQL ke in-memory arrays
 // ================================================================
 
+// ================================================================
+// JOURNAL PERSIST BRIDGE — server.js format → PostgreSQL
+// Server.js membangun journal dengan ID "JNL-YYYY-MM-NNNN" (string),
+// tapi PG pakai UUID. Fungsi di bawah menerima format server.js,
+*  lalu INSERT ke PG dengan UUID baru + return PG id agar server.js
+*  bisa update in-memory id supaya konsisten.
+// ================================================================
+
+/**
+ * Cari period_id dari tanggal jurnal.
+ * Cari fiscal_periods yang range tanggalnya mencakup journalDate.
+ */
+async function findPeriodIdForDate(entityId, journalDate, dbConfig) {
+  const { rows } = await query(
+    `SELECT id FROM app.fiscal_periods
+     WHERE entity_id = $1 AND start_date <= $2 AND end_date >= $2
+     ORDER BY start_date DESC LIMIT 1`,
+    [entityId, journalDate], dbConfig
+  )
+  return rows[0]?.id || null
+}
+
+/**
+ * Persist journal dari server.js ke PostgreSQL.
+ * Menerima journal object yang sudah dibangun server.js (dengan id JNL-xxx),
+ * lalu INSERT ke PG dengan UUID id baru + insert journal_lines.
+ * Return: { pgId } — UUID generated oleh PG, supaya server.js bisa
+ * update in-memory id agar konsisten dengan PG.
+ */
+export async function persistJournalToPg(journal, db) {
+  if (!isPgMode(db)) return null
+  // Cari period_id dari tanggal jurnal
+  const periodId = await findPeriodIdForDate(journal.entityId, journal.date, db.dbConfig)
+  if (!periodId) {
+    console.warn(`[DB-Adapter] No fiscal period found for date ${journal.date}, entity ${journal.entityId}`)
+  }
+  // Insert journal
+  const { rows: [pgJournal] } = await query(
+    `INSERT INTO app.journals (entity_id, period_id, transaction_number, journal_date, description, status, created_by, version)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     RETURNING id`,
+    [
+      journal.entityId,
+      periodId || '00000000-0000-0000-0000-000000000000', // placeholder if no period
+      journal.transactionNumber,
+      journal.date,
+      journal.description,
+      journal.status || 'draft',
+      journal.createdBy,
+      journal.version || 1,
+    ],
+    db.dbConfig
+  )
+  // Insert lines
+  if (journal.lines?.length) {
+    for (const line of journal.lines) {
+      await query(
+        'INSERT INTO app.journal_lines (journal_id, account_id, debit, credit, description) VALUES ($1, $2, $3, $4, $5)',
+        [pgJournal.id, line.accountId, line.debit || 0, line.credit || 0, line.description || ''],
+        db.dbConfig
+      )
+    }
+  }
+  return { pgId: pgJournal.id }
+}
+
+/**
+ * Update journal di PostgreSQL (edit sebelum post).
+ * Update description, date, status + replace lines.
+ */
+export async function updateJournalInPg(pgId, journalData, db) {
+  if (!isPgMode(db)) return null
+  const periodId = await findPeriodIdForDate(journalData.entityId, journalData.date, db.dbConfig)
+  await query(
+    `UPDATE app.journals SET description = $1, journal_date = $2, status = $3, period_id = $4, version = version + 1
+     WHERE id = $5`,
+    [journalData.description, journalData.date, journalData.status || 'draft', periodId, pgId],
+    db.dbConfig
+  )
+  // Replace lines
+  await query('DELETE FROM app.journal_lines WHERE journal_id = $1', [pgId], db.dbConfig)
+  if (journalData.lines?.length) {
+    for (const line of journalData.lines) {
+      await query(
+        'INSERT INTO app.journal_lines (journal_id, account_id, debit, credit, description) VALUES ($1, $2, $3, $4, $5)',
+        [pgId, line.accountId, line.debit || 0, line.credit || 0, line.description || ''],
+        db.dbConfig
+      )
+    }
+  }
+  return true
+}
+
+/**
+ * Hapus journal dari PostgreSQL (hanya draft/pending-approval).
+ */
+export async function deleteJournalFromPg(pgId, db) {
+  if (!isPgMode(db)) return false
+  const { rowCount } = await query(
+    "DELETE FROM app.journals WHERE id = $1 AND status IN ('draft', 'pending-approval')",
+    [pgId], db.dbConfig
+  )
+  return rowCount > 0
+}
+
+/**
+ * Patch status journal di PostgreSQL (post/reverse/submit/approve/reject).
+ * Ini lebih ringan dari persistJournalToPg — hanya update kolom status + audit.
+ */
+export async function patchJournalStatusInPg(pgId, updates, db) {
+  if (!isPgMode(db)) return null
+  const sets = ['version = version + 1']
+  const params = []
+  let idx = 1
+  if (updates.status) { sets.push(`status = $${idx++}`); params.push(updates.status) }
+  if (updates.postedAt) { sets.push(`posted_at = $${idx++}`); params.push(updates.postedAt) }
+  if (updates.postedBy) { sets.push(`posted_by = $${idx++}`); params.push(updates.postedBy) }
+  if (updates.approvedBy) { sets.push(`approved_by = $${idx++}`); params.push(updates.approvedBy) }
+  if (updates.approvedAt) { sets.push(`approved_at = $${idx++}`); params.push(updates.approvedAt) }
+  if (updates.rejectionReason) { sets.push(`rejection_reason = $${idx++}`); params.push(updates.rejectionReason) }
+  if (updates.reversedAt) { sets.push(`updated_at = now()`) }
+  params.push(pgId)
+  const { rowCount } = await query(
+    `UPDATE app.journals SET ${sets.join(', ')} WHERE id = $${idx}`,
+    params, db.dbConfig
+  )
+  return rowCount > 0
+}
+
+/**
+ * Persist reversal journal + reverse original ke PostgreSQL.
+ */
+export async function persistReversalToPg(originalPgId, reversalJournal, db) {
+  if (!isPgMode(db)) return null
+  const periodId = await findPeriodIdForDate(reversalJournal.entityId, reversalJournal.date, db.dbConfig)
+  // Mark original as reversed
+  await query(
+    "UPDATE app.journals SET status = 'reversed', version = version + 1 WHERE id = $1",
+    [originalPgId], db.dbConfig
+  )
+  // Insert reversal journal
+  const { rows: [pgReversal] } = await query(
+    `INSERT INTO app.journals (entity_id, period_id, transaction_number, journal_date, description, status, created_by, posted_by, posted_at, reversal_of_id, version)
+     VALUES ($1, $2, $3, $4, $5, 'posted', $6, $6, now(), $7, 1)
+     RETURNING id`,
+    [
+      reversalJournal.entityId,
+      periodId || '00000000-0000-0000-0000-000000000000',
+      reversalJournal.transactionNumber,
+      reversalJournal.date,
+      reversalJournal.description,
+      reversalJournal.createdBy,
+      originalPgId,
+    ],
+    db.dbConfig
+  )
+  // Copy lines (debit ↔ credit)
+  await query(
+    `INSERT INTO app.journal_lines (journal_id, account_id, debit, credit, description)
+     SELECT $1, account_id, credit, debit, 'Pembalikan otomatis'
+     FROM app.journal_lines WHERE journal_id = $2`,
+    [pgReversal.id, originalPgId],
+    db.dbConfig
+  )
+  return { pgId: pgReversal.id }
+}
+
 /**
  * Sync semua data dari PostgreSQL ke db.accounts, db.journals, db.users,
  * db.entities, db.periods.

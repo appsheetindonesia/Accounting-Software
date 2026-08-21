@@ -970,7 +970,7 @@ app.get('/journals/next-number', requireAuth, (req, res) => {
   ok(res, { transactionNumber: `${prefix}-${period}-${pad(next, 4)}` })
 })
 
-app.post('/journals', requireAuth, requirePermission('journal.write'), (req, res) => {
+app.post('/journals', requireAuth, requirePermission('journal.write'), async (req, res) => {
   const { date, transactionNumber, description, submitForApproval, lines } = req.body ?? {}
   const err = validateJournal(req.body, undefined, req.entityId)
   if (err) return fail(res, err.status, err.code, err.message, err.details)
@@ -1003,6 +1003,18 @@ app.post('/journals', requireAuth, requirePermission('journal.write'), (req, res
     entityId: req.entityId,
   }
   db.journals.unshift(journal)
+  // Persist ke PostgreSQL saat PG mode aktif
+  if (Adapter.isPgMode(db)) {
+    try {
+      const result = await Adapter.persistJournalToPg(journal, db)
+      if (result?.pgId) {
+        journal.id = result.pgId // Update in-memory id dengan PG UUID
+        journal.lines.forEach((ln) => { ln.journalId = result.pgId })
+      }
+    } catch (pgErr) {
+      console.error('[DB] persistJournalToPg error:', pgErr.message)
+    }
+  }
   ok(res, journal, null, 201)
 })
 
@@ -1012,7 +1024,7 @@ app.get('/journals/:id', requireAuth, (req, res) => {
   ok(res, journal)
 })
 
-app.put('/journals/:id', requireAuth, requirePermission('journal.write'), (req, res) => {
+app.put('/journals/:id', requireAuth, requirePermission('journal.write'), async (req, res) => {
   const journal = db.journals.find((j) => j.entityId === req.entityId && j.id === req.params.id)
   if (!journal) return fail(res, 404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
   if (journal.status === 'posted') return fail(res, 409, 'JOURNAL_ALREADY_POSTED', 'Jurnal sudah diposting, tidak dapat diedit')
@@ -1032,18 +1044,35 @@ app.put('/journals/:id', requireAuth, requirePermission('journal.write'), (req, 
   })
   journal.version++
   journal.auditTrail.push({ userId: req.user.id, action: 'update', timestamp: nowIso() })
+  // Persist ke PostgreSQL saat PG mode aktif
+  if (Adapter.isPgMode(db)) {
+    try {
+      await Adapter.updateJournalInPg(journal.id, { ...journal, entityId: req.entityId }, db)
+    } catch (pgErr) {
+      console.error('[DB] updateJournalInPg error:', pgErr.message)
+    }
+  }
   ok(res, journal)
 })
 
-app.delete('/journals/:id', requireAuth, requirePermission('journal.write'), (req, res) => {
+app.delete('/journals/:id', requireAuth, requirePermission('journal.write'), async (req, res) => {
   const idx = db.journals.findIndex((j) => j.entityId === req.entityId && j.id === req.params.id)
   if (idx === -1) return fail(res, 404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
   if (db.journals[idx].status !== 'draft' && db.journals[idx].status !== 'pending-approval') return fail(res, 409, 'JOURNAL_ALREADY_POSTED', 'Hanya jurnal draft yang dapat dihapus')
+  const journalId = db.journals[idx].id
   db.journals.splice(idx, 1)
+  // Hapus dari PostgreSQL saat PG mode aktif
+  if (Adapter.isPgMode(db)) {
+    try {
+      await Adapter.deleteJournalFromPg(journalId, db)
+    } catch (pgErr) {
+      console.error('[DB] deleteJournalFromPg error:', pgErr.message)
+    }
+  }
   res.status(204).end()
 })
 
-app.post('/journals/:id/post', requireAuth, requirePermission('journal.write'), (req, res) => {
+app.post('/journals/:id/post', requireAuth, requirePermission('journal.write'), async (req, res) => {
   const journal = db.journals.find((j) => j.entityId === req.entityId && j.id === req.params.id)
   if (!journal) return fail(res, 404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
   if (journal.status === 'posted') return fail(res, 409, 'ALREADY_POSTED', 'Jurnal sudah diposting')
@@ -1054,12 +1083,20 @@ app.post('/journals/:id/post', requireAuth, requirePermission('journal.write'), 
   journal.postedAt = nowIso()
   journal.version++
   journal.auditTrail.push({ userId: req.user.id, action: 'post', timestamp: nowIso() })
+  // Update status di PostgreSQL saat PG mode aktif
+  if (Adapter.isPgMode(db)) {
+    try {
+      await Adapter.patchJournalStatusInPg(journal.id, { status: 'posted', postedAt: journal.postedAt, postedBy: req.user.id }, db)
+    } catch (pgErr) {
+      console.error('[DB] patchJournalStatusInPg(post) error:', pgErr.message)
+    }
+  }
   const balances = computeBalances(req.entityId)
   const affectedAccounts = [...new Set(journal.lines.map((ln) => ln.accountId))].map((accountId) => ({ accountId, newBalance: balances.get(accountId) ?? 0 }))
   ok(res, { id: journal.id, status: 'posted', postedAt: journal.postedAt, affectedAccounts })
 })
 
-app.post('/journals/:id/reverse', requireAuth, requirePermission('journal.write'), (req, res) => {
+app.post('/journals/:id/reverse', requireAuth, requirePermission('journal.write'), async (req, res) => {
   const journal = db.journals.find((j) => j.entityId === req.entityId && j.id === req.params.id)
   if (!journal) return fail(res, 404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
   if (journal.status === 'reversed') return fail(res, 409, 'ALREADY_REVERSED', 'Jurnal sudah dibatalkan')
@@ -1092,20 +1129,31 @@ app.post('/journals/:id/reverse', requireAuth, requirePermission('journal.write'
   journal.version++
   journal.auditTrail.push({ userId: req.user.id, action: 'reverse', timestamp: nowIso() })
   db.journals.unshift(reversal)
+  // Persist reversal ke PostgreSQL saat PG mode aktif
+  if (Adapter.isPgMode(db)) {
+    try {
+      await Adapter.persistReversalToPg(journal.id, reversal, db)
+    } catch (pgErr) {
+      console.error('[DB] persistReversalToPg error:', pgErr.message)
+    }
+  }
   ok(res, { reversedJournalId: journal.id, status: 'reversed', reversalJournal: reversal })
 })
 
 // Approval workflow (P1)
-app.post('/journals/:id/submit', requireAuth, requirePermission('journal.write'), (req, res) => {
+app.post('/journals/:id/submit', requireAuth, requirePermission('journal.write'), async (req, res) => {
   const journal = db.journals.find((j) => j.entityId === req.entityId && j.id === req.params.id)
   if (!journal) return fail(res, 404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
   if (journal.status !== 'draft') return fail(res, 409, 'INVALID_STATUS_TRANSITION', 'Hanya jurnal draft yang dapat disubmit')
   journal.status = 'pending-approval'
   journal.auditTrail.push({ userId: req.user.id, action: 'submit', timestamp: nowIso() })
+  if (Adapter.isPgMode(db)) {
+    try { await Adapter.patchJournalStatusInPg(journal.id, { status: 'pending-approval' }, db) } catch (e) { console.error('[DB] patchJournalStatusInPg(submit) error:', e.message) }
+  }
   ok(res, { id: journal.id, status: 'pending-approval' })
 })
 
-app.post('/journals/:id/approve', requireAuth, requireApprovalRights, (req, res) => {
+app.post('/journals/:id/approve', requireAuth, requireApprovalRights, async (req, res) => {
   const journal = db.journals.find((j) => j.entityId === req.entityId && j.id === req.params.id)
   if (!journal) return fail(res, 404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
   if (journal.status !== 'pending-approval') return fail(res, 409, 'INVALID_STATUS_TRANSITION', 'Hanya jurnal pending-approval yang dapat di-approve')
@@ -1115,10 +1163,13 @@ app.post('/journals/:id/approve', requireAuth, requireApprovalRights, (req, res)
   journal.approvedAt = nowIso()
   journal.version++
   journal.auditTrail.push({ userId: req.user.id, action: 'approve', timestamp: nowIso() })
+  if (Adapter.isPgMode(db)) {
+    try { await Adapter.patchJournalStatusInPg(journal.id, { status: 'posted', postedAt: journal.postedAt, postedBy: req.user.id, approvedBy: req.user.id, approvedAt: journal.approvedAt }, db) } catch (e) { console.error('[DB] patchJournalStatusInPg(approve) error:', e.message) }
+  }
   ok(res, { status: 'posted', approvedBy: req.user.id, approvedAt: journal.approvedAt })
 })
 
-app.post('/journals/:id/reject', requireAuth, requireApprovalRights, (req, res) => {
+app.post('/journals/:id/reject', requireAuth, requireApprovalRights, async (req, res) => {
   const journal = db.journals.find((j) => j.entityId === req.entityId && j.id === req.params.id)
   if (!journal) return fail(res, 404, 'JOURNAL_NOT_FOUND', 'Jurnal tidak ditemukan')
   if (journal.status !== 'pending-approval') return fail(res, 409, 'INVALID_STATUS_TRANSITION', 'Hanya jurnal pending-approval yang dapat di-reject')
@@ -1127,6 +1178,9 @@ app.post('/journals/:id/reject', requireAuth, requireApprovalRights, (req, res) 
   journal.status = 'draft'
   journal.rejectionReason = reason
   journal.auditTrail.push({ userId: req.user.id, action: 'reject', timestamp: nowIso() })
+  if (Adapter.isPgMode(db)) {
+    try { await Adapter.patchJournalStatusInPg(journal.id, { status: 'draft', rejectionReason: reason }, db) } catch (e) { console.error('[DB] patchJournalStatusInPg(reject) error:', e.message) }
+  }
   ok(res, { id: journal.id, status: 'draft', rejectionReason: journal.rejectionReason })
 })
 
