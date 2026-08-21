@@ -357,3 +357,14 @@ export const toJournalEntry = (j: ApiJournal): JournalEntry => ({
   rejectionReason: j.rejectionReason,
   source: j.source,
 })
+
+// ---------- DB Status ----------
+export interface DbStatusResponse {
+  tables: Record<string, number>
+  dbSize: string | null
+  storageMode: string
+}
+
+export async function getDbStatus(): Promise<DbStatusResponse> {
+  return request<DbStatusResponse>('/admin/db-status')
+}

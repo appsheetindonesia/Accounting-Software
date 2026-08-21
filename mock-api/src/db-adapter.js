@@ -59,6 +59,14 @@ export function isPgMode(db) {
   return db?.dbConfig?.storageMode === 'postgresql'
 }
 
+/**
+ * Jalankan query langsung ke PostgreSQL dengan config tertentu.
+ * Berguna untuk endpoint admin yang butuh query ad-hoc.
+ */
+export async function queryPg(sql, params = [], cfg = null) {
+  return query(sql, params, cfg)
+}
+
 // ================================================================
 // AUTH
 // ================================================================

@@ -8,6 +8,7 @@ import {
   Database,
   FileText,
   FolderDown,
+  HardDrive,
   HelpCircle,
   Landmark,
   LayoutDashboard,
@@ -63,7 +64,10 @@ const NAV_GROUPS: NavGroup[] = [
     title: 'Pengaturan',
     icon: Settings,
     defaultOpen: true,
-    items: [{ key: 'pengaturan', label: 'Pengaturan', icon: Settings }],
+    items: [
+      { key: 'pengaturan', label: 'Pengaturan', icon: Settings },
+      { key: 'db-status', label: 'Status DB', icon: HardDrive },
+    ],
   },
 ]
 

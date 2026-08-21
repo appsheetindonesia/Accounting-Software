@@ -1975,6 +1975,44 @@ app.post('/admin/run-migration', requireAuth, async (req, res) => {
   }
 })
 
+// ---- DB Status — statistik jumlah baris per tabel PostgreSQL ---------
+app.get('/admin/db-status', requireAuth, async (req, res) => {
+  const cfg = db.dbConfig
+  if (!cfg || cfg.storageMode !== 'postgresql') {
+    return fail(res, 400, 'NOT_POSTGRESQL', 'Storage mode bukan PostgreSQL')
+  }
+  try {
+    const tables = [
+      'entities', 'users', 'entity_members', 'sessions',
+      'fiscal_periods', 'accounts', 'journals', 'journal_lines',
+      'attachments', 'audit_logs', 'journal_sequences', 'reports',
+      'cash_flow_mapping', 'settings',
+    ]
+    const counts = {}
+    for (const t of tables) {
+      try {
+        const { rows } = await Adapter.queryPg(`SELECT COUNT(*)::int AS cnt FROM app."${t}"`, [], cfg)
+        counts[t] = rows[0]?.cnt ?? 0
+      } catch {
+        counts[t] = -1 // tabel belum ada
+      }
+    }
+    // Tambah info ukuran database
+    let dbSize = null
+    try {
+      const { rows } = await Adapter.queryPg(
+        "SELECT pg_size_pretty(pg_database_size(current_database())) AS size",
+        [], cfg
+      )
+      dbSize = rows[0]?.size ?? null
+    } catch { /* ignore */ }
+
+    ok(res, { tables: counts, dbSize, storageMode: 'postgresql' })
+  } catch (err) {
+    fail(res, 500, 'DB_STATUS_ERROR', `Gagal mengambil status DB: ${err.message}`)
+  }
+})
+
 // ---- Konfigurasi database (Pengaturan PostgreSQL) ----------------------------
 // GET  /settings/db-config → { data: { host, port, database, password } }
 // POST /settings/db-config → simpan ke db + file persist
