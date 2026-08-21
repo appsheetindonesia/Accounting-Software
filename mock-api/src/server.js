@@ -1889,7 +1889,18 @@ app.post('/admin/run-migration', requireAuth, async (req, res) => {
 // ---- Konfigurasi database (Pengaturan PostgreSQL) ----------------------------
 // GET  /settings/db-config → { data: { host, port, database, password } }
 // POST /settings/db-config → simpan ke db + file persist
-app.get('/settings/db-config', requireAuth, (req, res) => {
+app.get('/settings/db-config', requireAuth, async (req, res) => {
+  // Jika PostgreSQL aktif, refresh dbConfig dari app.settings agar selalu up-to-date
+  if (db.dbConfig?.storageMode === 'postgresql') {
+    try {
+      const pgConfig = await loadDbConfigFromPg(db.dbConfig)
+      if (pgConfig) {
+        db.dbConfig = { ...db.dbConfig, ...pgConfig, tables: pgConfig.tables || db.dbConfig.tables }
+      }
+    } catch (err) {
+      console.warn(`[DB] GET /settings/db-config: could not refresh from PG: ${err.message}`)
+    }
+  }
   ok(res, db.dbConfig)
 })
 
