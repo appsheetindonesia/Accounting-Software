@@ -22,7 +22,11 @@ export class ApiError extends Error {
 // Gagal jaringan (server mati / offline) — bedakan dari penolakan server (ApiError).
 export const isNetworkError = (e: unknown): boolean => e instanceof TypeError
 
-const BASE_URL: string = import.meta.env.VITE_API_URL ?? ''
+// Production (Easypanel/Nixpacks): '' → same origin (Caddy reverse proxy)
+// Test/Dev: 'http://localhost:4000' → MSW intercepts & separate dev server
+const BASE_URL: string =
+  import.meta.env.VITE_API_URL ??
+  (import.meta.env.MODE === 'production' ? '' : 'http://localhost:4000')
 
 let accessToken: string | null = null
 let refreshToken: string | null = null
