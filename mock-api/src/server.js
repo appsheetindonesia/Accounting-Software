@@ -15,7 +15,7 @@ import { deflateSync } from 'zlib'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { existsSync } from 'fs'
-import { buildConnectionString, getPool, destroyPool, testQuery, getPoolStatus, getConfigFromEnv, runMigration } from './db.js'
+import { buildConnectionString, getPool, destroyPool, testQuery, getPoolStatus, getConfigFromEnv, runMigration, loadDbConfigFromPg, saveDbConfigToPg } from './db.js'
 import * as Adapter from './db-adapter.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -78,12 +78,23 @@ let db = createDb()
 // ------------------------------------------------------------
 const envDbConfig = getConfigFromEnv()
 if (envDbConfig) {
-  db.dbConfig = { ...db.dbConfig, ...envDbConfig, tables: db.dbConfig.tables }
+  // DATABASE_URL detected — apply env config (lengkap dengan default tables)
+  db.dbConfig = { ...db.dbConfig, ...envDbConfig, tables: envDbConfig.tables || db.dbConfig.tables }
   console.log(`[DB] DATABASE_URL detected → PostgreSQL mode: ${envDbConfig.host}:${envDbConfig.port}/${envDbConfig.database}`)
   // Try to create pool on startup
   try {
     getPool(db.dbConfig)
     console.log('[DB] PostgreSQL pool created successfully')
+    // Load saved dbConfig dari PostgreSQL (termasuk custom table names)
+    // Gunakan .then() agar tidak butuh top-level await
+    loadDbConfigFromPg(db.dbConfig).then((savedConfig) => {
+      if (savedConfig) {
+        db.dbConfig = { ...db.dbConfig, ...savedConfig, tables: savedConfig.tables || db.dbConfig.tables }
+        console.log('[DB] Restored dbConfig from PostgreSQL (survives restart)')
+      }
+    }).catch((err) => {
+      console.warn(`[DB] Could not load dbConfig from PG: ${err.message}`)
+    })
   } catch (err) {
     console.warn(`[DB] WARNING: Could not create PostgreSQL pool: ${err.message}`)
     console.warn('[DB] Falling back to in-memory mode. Fix DATABASE_URL and restart.')
@@ -128,7 +139,7 @@ if (PERSIST) {
     // Re-apply PostgreSQL config dari DATABASE_URL jika ada
     // (persist load bisa overwrite storageMode ke 'local')
     if (envDbConfig) {
-      db.dbConfig = { ...db.dbConfig, ...envDbConfig, tables: db.dbConfig.tables }
+      db.dbConfig = { ...db.dbConfig, ...envDbConfig, tables: envDbConfig.tables || db.dbConfig.tables }
       console.log('[DB] Re-applied PostgreSQL config from DATABASE_URL after persist load')
     }
   } else {
@@ -1868,7 +1879,7 @@ app.get('/settings/db-config', requireAuth, (req, res) => {
   ok(res, db.dbConfig)
 })
 
-app.post('/settings/db-config', requireAuth, (req, res) => {
+app.post('/settings/db-config', requireAuth, async (req, res) => {
   const { storageMode, host, port, database, schema, username, password } = req.body || {}
   if (!host || !port || !database) {
     return fail(res, 422, 'VALIDATION_ERROR', 'Host, port, dan nama basis data wajib diisi')
@@ -1883,6 +1894,12 @@ app.post('/settings/db-config', requireAuth, (req, res) => {
   // Manage connection pool: buat jika mode PostgreSQL, destroy jika mode local
   if (db.dbConfig.storageMode === 'postgresql') {
     getPool(db.dbConfig)
+    // Simpan dbConfig ke PostgreSQL agar survive restart
+    try {
+      await saveDbConfigToPg(db.dbConfig, db.dbConfig)
+    } catch (err) {
+      console.warn(`[DB] Could not save dbConfig to PG: ${err.message}`)
+    }
   } else {
     destroyPool()
   }

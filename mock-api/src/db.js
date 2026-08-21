@@ -52,11 +52,29 @@ export function parseDatabaseUrl(url) {
 }
 
 /**
- * Ambil config dari env DATABASE_URL. Dipanggil saat startup.
+ * Default table names — dipakai saat dbConfig di-derive dari DATABASE_URL.
+ */
+const DEFAULT_TABLES = {
+  accounts: 'accounts',
+  journals: 'journals',
+  journalLines: 'journal_lines',
+  periods: 'periods',
+  users: 'users',
+  entities: 'entities',
+  sessions: 'sessions',
+  attachments: 'attachments',
+}
+
+/**
+ * Ambil config LENGKAP dari env DATABASE_URL. Dipanggil saat startup.
+ * Mengembalikan dbConfig lengkap termasuk default tables,
+ * sehingga PostgreSQL mode aktif otomatis tanpa perlu persist file.
  */
 export function getConfigFromEnv() {
   const url = process.env.DATABASE_URL
-  return parseDatabaseUrl(url)
+  const parsed = parseDatabaseUrl(url)
+  if (!parsed) return null
+  return { ...parsed, tables: DEFAULT_TABLES }
 }
 
 /**
@@ -260,6 +278,70 @@ export async function runMigration(poolOrConfig) {
     // Jangan crash server — migration bisa dijalankan manual
     console.error('[DB] Migration error:', err.message)
     throw err
+  } finally {
+    if (tempPool) await tempPool.end().catch(() => {})
+  }
+}
+
+// ================================================================
+// SETTINGS — persist dbConfig di PostgreSQL (survive restart)
+// ================================================================
+
+/**
+ * Load dbConfig dari tabel app.settings.
+ * Dipanggil saat startup SETELAH migration.
+ * Mengembalikan null jika tabel/settings belum ada.
+ */
+export async function loadDbConfigFromPg(cfg) {
+  let tempPool = null
+  let poolInstance = pool
+  if (!poolInstance && cfg?.storageMode === 'postgresql') {
+    const connStr = buildConnectionString(cfg)
+    tempPool = new Pool({ connectionString: connStr, max: 1, connectionTimeoutMillis: 10000, ssl: false })
+    poolInstance = tempPool
+  }
+  if (!poolInstance) return null
+  try {
+    const { rows } = await poolInstance.query(
+      "SELECT value FROM app.settings WHERE key = 'dbConfig'"
+    )
+    if (rows[0]?.value) {
+      const saved = typeof rows[0].value === 'string' ? JSON.parse(rows[0].value) : rows[0].value
+      console.log('[DB] Loaded dbConfig from PostgreSQL app.settings')
+      return saved
+    }
+  } catch (err) {
+    // Tabel belum ada atau error lain — return null
+    console.warn(`[DB] Could not load dbConfig from PG: ${err.message}`)
+  } finally {
+    if (tempPool) await tempPool.end().catch(() => {})
+  }
+  return null
+}
+
+/**
+ * Simpan dbConfig ke tabel app.settings.
+ * Dipanggil saat POST /settings/db-config.
+ */
+export async function saveDbConfigToPg(dbConfig, cfg) {
+  let tempPool = null
+  let poolInstance = pool
+  if (!poolInstance && cfg?.storageMode === 'postgresql') {
+    const connStr = buildConnectionString(cfg)
+    tempPool = new Pool({ connectionString: connStr, max: 1, connectionTimeoutMillis: 10000, ssl: false })
+    poolInstance = tempPool
+  }
+  if (!poolInstance) return
+  try {
+    await poolInstance.query(
+      `INSERT INTO app.settings (key, value, updated_at)
+       VALUES ('dbConfig', $1::jsonb, now())
+       ON CONFLICT (key) DO UPDATE SET value = $1::jsonb, updated_at = now()`,
+      [JSON.stringify(dbConfig)]
+    )
+    console.log('[DB] Saved dbConfig to PostgreSQL app.settings')
+  } catch (err) {
+    console.warn(`[DB] Could not save dbConfig to PG: ${err.message}`)
   } finally {
     if (tempPool) await tempPool.end().catch(() => {})
   }

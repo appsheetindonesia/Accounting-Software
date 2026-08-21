@@ -695,5 +695,20 @@ INSERT INTO app.cash_flow_mapping (entity_id, category, activity) VALUES
   ('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'Modal', 'financing');
 
 -- ============================================================
+-- SETTINGS (key-value untuk persist config di PostgreSQL)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS app.settings (
+    key         TEXT PRIMARY KEY,
+    value       JSONB NOT NULL,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Seed default dbConfig jika belum ada
+INSERT INTO app.settings (key, value)
+VALUES ('dbConfig', '{"storageMode":"postgresql","tables":{"accounts":"accounts","journals":"journals","journalLines":"journal_lines","periods":"periods","users":"users","entities":"entities","sessions":"sessions","attachments":"attachments"}}'::jsonb)
+ON CONFLICT (key) DO NOTHING;
+
+-- ============================================================
 -- SELESAI
 -- ============================================================
