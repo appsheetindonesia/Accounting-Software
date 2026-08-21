@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Eye, EyeOff, Save, Server, Plug, HardDrive, Database, Table2, RotateCcw } from 'lucide-react'
+import { Eye, EyeOff, Save, Server, Plug, HardDrive, Database, Table2, RotateCcw, Play } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { request } from '../api/client'
 import type { DbTables } from '../types'
@@ -24,7 +24,9 @@ export default function DatabaseSettings() {
   const [showPassword, setShowPassword] = useState(false)
   const [saved, setSaved] = useState(false)
   const [testing, setTesting] = useState(false)
-  const [testResult, setTestResult] = useState<{ ok: boolean; message: string; latencyMs?: number } | null>(null)
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string; latencyMs?: number; migration?: { ok: boolean; message: string } } | null>(null)
+  const [migrating, setMigrating] = useState(false)
+  const [migrationResult, setMigrationResult] = useState<{ ok: boolean; message: string; tables?: string[] } | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
   const isLocalMode = form.storageMode === 'local'
@@ -106,7 +108,7 @@ export default function DatabaseSettings() {
     abortRef.current = new AbortController()
 
     try {
-      const res = await request<{ ok: boolean; message: string; latencyMs: number }>(
+      const res = await request<{ ok: boolean; message: string; latencyMs: number; migration?: { ok: boolean; message: string } }>(
         '/settings/test-connection',
         {
           method: 'POST',
@@ -405,7 +407,7 @@ export default function DatabaseSettings() {
           </div>
         )}
 
-        {/* Tombol Simpan + Test Koneksi */}
+        {/* Tombol Simpan + Test Koneksi + Migration */}
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
@@ -427,10 +429,58 @@ export default function DatabaseSettings() {
               {testing ? 'Menguji...' : 'Test Koneksi'}
             </button>
           )}
+          {!isLocalMode && (
+            <button
+              type="button"
+              onClick={async () => {
+                setMigrating(true)
+                setMigrationResult(null)
+                try {
+                  const res = await request<{ ok: boolean; message: string; tables?: string[] }>(
+                    '/admin/run-migration',
+                    { method: 'POST' },
+                  )
+                  setMigrationResult(res)
+                  showToast(res.ok ? 'Migration berhasil' : 'Migration gagal', res.ok ? 'success' : 'error')
+                } catch (err: unknown) {
+                  const msg = err instanceof Error ? err.message : 'Gagal menjalankan migration'
+                  setMigrationResult({ ok: false, message: msg })
+                  showToast(msg, 'error')
+                } finally {
+                  setMigrating(false)
+                }
+              }}
+              disabled={migrating}
+              className="inline-flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 shadow-card transition hover:bg-emerald-100 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50"
+              data-testid="run-migration-btn"
+            >
+              <Play size={15} className={migrating ? 'animate-pulse' : ''} />
+              {migrating ? 'Menjalankan...' : 'Jalankan Migration'}
+            </button>
+          )}
           {saved && isDirty === false && (
             <span className="text-xs text-ok">✓ Tersimpan</span>
           )}
         </div>
+
+        {/* Hasil Migration */}
+        {migrationResult && (
+          <div
+            className={`rounded-lg border px-3 py-2 text-sm ${
+              migrationResult.ok
+                ? 'border-ok/30 bg-ok/5 text-ok'
+                : 'border border-error/30 bg-error/5 text-error'
+            }`}
+            data-testid="migration-result"
+          >
+            <p className="font-medium">{migrationResult.message}</p>
+            {migrationResult.tables && migrationResult.tables.length > 0 && (
+              <p className="mt-1 text-xs opacity-70">
+                Tabel yang dibuat: {migrationResult.tables.join(', ')}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Hasil Test Koneksi — dengan saran beralih ke mode lokal saat gagal */}
         {testResult && (
