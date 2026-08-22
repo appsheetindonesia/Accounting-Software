@@ -2084,7 +2084,7 @@ app.get('/admin/db-status', requireAuth, async (req, res) => {
         counts[t] = -1 // tabel belum ada
       }
     }
-    // Tambah info ukuran database
+    // Info ukuran database
     let dbSize = null
     try {
       const { rows } = await Adapter.queryPg(
@@ -2093,8 +2093,45 @@ app.get('/admin/db-status', requireAuth, async (req, res) => {
       )
       dbSize = rows[0]?.size ?? null
     } catch { /* ignore */ }
+    // Connection latency
+    let latencyMs = 0
+    try {
+      const start = Date.now()
+      await Adapter.queryPg('SELECT 1', [], cfg)
+      latencyMs = Date.now() - start
+    } catch { /* ignore */ }
+    // Server uptime + memory
+    const uptimeSec = Math.floor(process.uptime())
+    const memMB = Math.round(process.memoryUsage().rss / 1024 / 1024)
+    // Active sessions
+    let activeSessions = 0
+    try {
+      const { rows } = await Adapter.queryPg(
+        "SELECT COUNT(*)::int AS cnt FROM app.sessions WHERE revoked_at IS NULL AND expires_at > now()",
+        [], cfg
+      )
+      activeSessions = rows[0]?.cnt ?? 0
+    } catch { /* ignore */ }
+    // Recent journals (last 5)
+    let recentJournals = []
+    try {
+      const { rows } = await Adapter.queryPg(
+        "SELECT id, transaction_number AS \"transactionNumber\", description, status, created_at AS \"createdAt\" FROM app.journals ORDER BY created_at DESC LIMIT 5",
+        [], cfg
+      )
+      recentJournals = rows
+    } catch { /* ignore */ }
+    // Storage mode info
+    const storageMode = cfg.storageMode
+    const host = cfg.host
+    const database = cfg.database
+    const pgVersion = await Adapter.queryPg('SELECT version()', [], cfg).then((r) => r.rows[0]?.version ?? '').catch(() => '')
 
-    ok(res, { tables: counts, dbSize, storageMode: 'postgresql' })
+    ok(res, {
+      tables: counts, dbSize, storageMode, host, database,
+      latencyMs, uptimeSec, memMB, activeSessions,
+      recentJournals, pgVersion,
+    })
   } catch (err) {
     fail(res, 500, 'DB_STATUS_ERROR', `Gagal mengambil status DB: ${err.message}`)
   }

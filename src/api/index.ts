@@ -369,6 +369,14 @@ export interface DbStatusResponse {
   tables: Record<string, number>
   dbSize: string | null
   storageMode: string
+  host: string
+  database: string
+  latencyMs: number
+  uptimeSec: number
+  memMB: number
+  activeSessions: number
+  recentJournals: Array<{ id: string; transactionNumber: string; description: string; status: string; createdAt: string }>
+  pgVersion: string
 }
 
 export async function getDbStatus(): Promise<DbStatusResponse> {
