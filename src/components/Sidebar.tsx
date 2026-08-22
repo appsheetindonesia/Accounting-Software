@@ -6,6 +6,7 @@ import {
   Check,
   ChevronDown,
   ClipboardList,
+  Users,
   Database,
   FileText,
   FolderDown,
@@ -69,6 +70,7 @@ const NAV_GROUPS: NavGroup[] = [
       { key: 'pengaturan', label: 'Pengaturan', icon: Settings },
       { key: 'db-status', label: 'Status DB', icon: HardDrive },
       { key: 'audit-trail', label: 'Audit Trail', icon: ClipboardList },
+      { key: 'users', label: 'Pengguna', icon: Users },
     ],
   },
 ]

@@ -18,6 +18,7 @@ import CashFlowPage from './components/reports/CashFlowPage'
 import SettingsPage from './components/SettingsPage'
 import DbStatus from './components/DbStatus'
 import AuditTrail from './components/AuditTrail'
+import UserManagement from './components/UserManagement'
 import AccountsPage from './components/AccountsPage'
 import GlossaryPage from './components/GlossaryPage'
 import ComingSoon from './components/ComingSoon'
@@ -88,6 +89,8 @@ function App() {
                 <DbStatus />
               ) : page === 'audit-trail' ? (
                 <AuditTrail />
+              ) : page === 'users' ? (
+                <UserManagement />
               ) : (
                 <ComingSoon />
               )}

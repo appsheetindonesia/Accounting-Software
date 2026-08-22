@@ -316,6 +316,20 @@ export const api = {
       body: {},
     })
   },
+
+  // User Management
+  getUsers() {
+    return request<{ users: UserInfo[] }>('/users', { query: { pageSize: 200 } })
+  },
+  createUser(input: { name: string; email: string; role: string }) {
+    return request<UserInfo>('/users', { method: 'POST', body: input })
+  },
+  updateUser(id: string, input: { name?: string; role?: string }) {
+    return request<UserInfo>(`/users/${id}`, { method: 'PUT', body: input })
+  },
+  deactivateUser(id: string) {
+    return request<void>(`/users/${id}/deactivate`, { method: 'PATCH' })
+  },
 }
 
 // Periode fiskal (GET /periods?includeClosed=true) — status & data rentang.
@@ -426,4 +440,31 @@ export async function getAuditTrail(params?: {
   if (params?.action) query.action = params.action
   if (params?.page) query.page = String(params.page)
   return request<AuditTrailResponse>('/admin/audit-trail', { query })
+}
+
+// ---------- User Management ----------
+export interface UserInfo {
+  id: string
+  name: string
+  email: string
+  role: 'admin' | 'accountant' | 'viewer'
+  entityId: string
+  isActive: boolean
+  createdAt: string
+}
+
+export async function getUsers(): Promise<{ users: UserInfo[] }> {
+  return request<{ users: UserInfo[] }>('/users', { query: { pageSize: 200 } })
+}
+
+export async function createUser(input: { name: string; email: string; role: string }): Promise<UserInfo> {
+  return request<UserInfo>('/users', { method: 'POST', body: input })
+}
+
+export async function updateUser(id: string, input: { name?: string; role?: string }): Promise<UserInfo> {
+  return request<UserInfo>(`/users/${id}`, { method: 'PUT', body: input })
+}
+
+export async function deactivateUser(id: string): Promise<void> {
+  return request<void>(`/users/${id}/deactivate`, { method: 'PATCH' })
 }
