@@ -1538,7 +1538,7 @@ app.patch('/periods/:id/activate', requireAuth, requirePermission('period.manage
   ok(res, { activePeriodId: period.id })
 })
 
-app.patch('/periods/:id/close', requireAuth, requirePermission('period.manage'), (req, res) => {
+app.patch('/periods/:id/close', requireAuth, requirePermission('period.manage'), async (req, res) => {
   const period = db.periods.find((p) => p.id === req.params.id)
   if (!period) return fail(res, 404, 'PERIOD_NOT_FOUND', 'Periode tidak ditemukan')
   if (!period.isOpen) return fail(res, 409, 'PERIOD_ALREADY_CLOSED', 'Periode sudah ditutup')
@@ -1550,14 +1550,28 @@ app.patch('/periods/:id/close', requireAuth, requirePermission('period.manage'),
     if (confirmDraftAction === 'post-all') {
       d.status = 'posted'
       d.postedAt = nowIso()
+      d.version++
+      d.auditTrail.push({ userId: req.user.id, action: 'post', timestamp: nowIso() })
       handled.posted++
+      // Persist post action ke PG
+      if (Adapter.isPgMode(db)) {
+        try { await Adapter.patchJournalStatusInPg(d.id, { status: 'posted', postedAt: d.postedAt, postedBy: req.user.id }, db) } catch (e) { console.error('[DB] patchJournalStatusInPg(draft-post) error:', e.message) }
+      }
     } else if (confirmDraftAction === 'delete-all') {
       db.journals = db.journals.filter((j) => j.id !== d.id)
       handled.deleted++
+      // Persist delete action ke PG
+      if (Adapter.isPgMode(db)) {
+        try { await Adapter.deleteJournalFromPg(d.id, db) } catch (e) { console.error('[DB] deleteJournalFromPg(draft-delete) error:', e.message) }
+      }
     } else handled.kept++
   }
   period.isOpen = false
   period.closedAt = nowIso()
+  // Persist period close ke PostgreSQL
+  if (Adapter.isPgMode(db)) {
+    try { await Adapter.closePeriod(period.id, req.entityId, confirmDraftAction, req.user.id, db) } catch (e) { console.error('[DB] closePeriod PG error:', e.message) }
+  }
   ok(res, { id: period.id, isOpen: false, handledDrafts: handled })
 })
 

@@ -1326,10 +1326,20 @@ export async function syncDataFromPg(db) {
        FROM app.accounts ORDER BY code`,
       [], db.dbConfig
     )
-    // Map PG entity UUID → in-memory entity ID
+    // Map PG entity UUID → in-memory entity ID + compute isHeader + group
     const mappedAccounts = acctRows.map((a) => ({
       ...a,
       entityId: mapPgEntityToMem(a.entityId),
+      // PG schema tidak punya kolom is_header — compute dari parent_id relasi
+      isHeader: acctRows.some((c) => c.parent_id === a.id),
+      // PG schema tidak punya kolom group — derive dari type
+      group: a.type === 'asset' ? 'current_asset'
+        : a.type === 'liability' ? 'current_liability'
+        : a.type === 'equity' ? 'equity'
+        : a.type === 'revenue' ? 'revenue'
+        : 'operating_expense',
+      // baseBalance dihitung dari journal lines posted (computed)
+      baseBalance: 0,
     }))
     // Only overwrite if PG has data — don't wipe in-memory seed
     if (mappedAccounts.length > 0) {
