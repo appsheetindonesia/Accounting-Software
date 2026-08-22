@@ -1406,9 +1406,18 @@ export async function syncDataFromPg(db) {
  * Dipanggil saat PG journals = 0 tapi in-memory punya data.
  */
 export async function seedJournalsToPg(db) {
-  if (!isPgMode(db) || !pgEntityId) return
+  if (!isPgMode(db) || !pgEntityId) {
+    console.log('[DB] seedJournalsToPg: skipped (PG mode aktif atau entity tidak ditemukan)')
+    return
+  }
   const memId = memEntityId
   let seeded = 0
+  let skipped = 0
+  let failed = 0
+  const failures = []
+  const targetCount = db.journals.filter((j) => j.entityId === memId).length
+  console.log(`[DB] seedJournalsToPg: mulai — ${targetCount} journals in-memory perlu di-seed`)
+
   for (const j of db.journals) {
     if (j.entityId !== memId) continue
     // Skip jika sudah ada di PG (cek by transaction_number)
@@ -1417,11 +1426,27 @@ export async function seedJournalsToPg(db) {
         'SELECT id FROM app.journals WHERE transaction_number = $1',
         [j.transactionNumber], db.dbConfig
       )
-      if (existing.length > 0) continue
-    } catch { /* tabel mungkin belum ada */ continue }
+      if (existing.length > 0) {
+        skipped++
+        continue
+      }
+    } catch (err) {
+      /* tabel mungkin belum ada */
+      failed++
+      failures.push({ number: j.transactionNumber, reason: `Cek duplikat gagal: ${err.message}` })
+      continue
+    }
 
     // Cari period_id — use PG entity UUID, not in-memory ID
-    const periodId = await findPeriodIdForDate(pgEntityId, j.date, db.dbConfig)
+    let periodId
+    try {
+      periodId = await findPeriodIdForDate(pgEntityId, j.date, db.dbConfig)
+    } catch (err) {
+      failed++
+      failures.push({ number: j.transactionNumber, reason: `Cari period gagal: ${err.message}` })
+      continue
+    }
+
     // Cari PG user ID dari createdBy
     let pgUserId = null
     if (j.createdBy) {
@@ -1430,6 +1455,7 @@ export async function seedJournalsToPg(db) {
         pgUserId = u[0]?.id || null
       } catch { /* ignore */ }
     }
+
     try {
       const { rows: [pgJournal] } = await query(
         `INSERT INTO app.journals (entity_id, period_id, transaction_number, journal_date, description, status, created_by, posted_by, posted_at, reversal_of_id, version)
@@ -1451,26 +1477,46 @@ export async function seedJournalsToPg(db) {
         db.dbConfig
       )
       // Insert lines
+      let linesInserted = 0
+      let linesFailed = 0
       if (j.lines?.length) {
         for (const ln of j.lines) {
-          // Map accountId from in-memory format to PG account ID
-          const acct = db.accounts.find((a) => a.entityId === memId && (a.id === ln.accountId || a.code === ln.accountId))
-          const pgAcctId = acct?.id || ln.accountId
-          // Check if pgAcctId is a UUID (PG) or in-memory format
-          const isPgAcct = typeof pgAcctId === 'string' && /^[0-9a-f]{8}-/.test(pgAcctId)
-          await query(
-            'INSERT INTO app.journal_lines (journal_id, account_id, debit, credit, description) VALUES ($1, $2, $3, $4, $5)',
-            [pgJournal.id, isPgAcct ? pgAcctId : (await findPgAccountId(pgAcctId, db.dbConfig)) || pgAcctId, ln.debit || 0, ln.credit || 0, ln.description || ''],
-            db.dbConfig
-          )
+          try {
+            // Map accountId from in-memory format to PG account ID
+            const acct = db.accounts.find((a) => a.entityId === memId && (a.id === ln.accountId || a.code === ln.accountId))
+            const pgAcctId = acct?.id || ln.accountId
+            const isPgAcct = typeof pgAcctId === 'string' && /^[0-9a-f]{8}-/.test(pgAcctId)
+            await query(
+              'INSERT INTO app.journal_lines (journal_id, account_id, debit, credit, description) VALUES ($1, $2, $3, $4, $5)',
+              [pgJournal.id, isPgAcct ? pgAcctId : (await findPgAccountId(pgAcctId, db.dbConfig)) || pgAcctId, ln.debit || 0, ln.credit || 0, ln.description || ''],
+              db.dbConfig
+            )
+            linesInserted++
+          } catch (err) {
+            linesFailed++
+            console.warn(`[DB]   └─ Line gagal (acct: ${ln.accountId}): ${err.message}`)
+          }
         }
       }
       seeded++
+      if (linesFailed > 0) {
+        console.log(`[DB]   ✅ ${j.transactionNumber} seeded (${linesInserted} lines ok, ${linesFailed} lines gagal)`)
+      }
     } catch (err) {
-      console.warn(`[DB] Failed to seed journal ${j.transactionNumber}: ${err.message}`)
+      failed++
+      failures.push({ number: j.transactionNumber, reason: err.message })
+      console.warn(`[DB]   ❌ ${j.transactionNumber} gagal: ${err.message}`)
     }
   }
-  if (seeded > 0) console.log(`[DB] Seeded ${seeded} journals from in-memory to PostgreSQL`)
+
+  // Ringkasan akhir
+  console.log(`[DB] seedJournalsToPg selesai: ${seeded} berhasil, ${skipped} skip (duplikat), ${failed} gagal dari ${targetCount} total`)
+  if (failures.length > 0) {
+    console.log(`[DB] Rincian kegagalan:`)
+    for (const f of failures) {
+      console.log(`[DB]   - ${f.number}: ${f.reason}`)
+    }
+  }
 }
 
 /** Find PG account ID by in-memory ID or code. */
