@@ -523,6 +523,9 @@ export const useStore = create<AccountingState>()(
           if (token !== 'local.demo') setAuth(token, get().activeEntityId, get().refreshToken)
           const status = get().apiStatus
           if (status === 'connecting' || status === 'online') return
+          // Skip jika login sedang berjalan — hindari race condition
+          // yang menyebabkan dobel fetch + token refresh gagal.
+          if (get().authLoading) return
           set({ apiStatus: 'connecting' })
           try {
             // Sesi offline ('local.demo') TIDAK punya sesi server — request
@@ -607,7 +610,13 @@ export const useStore = create<AccountingState>()(
             // membawa header X-Entity-Id, bukan hanya setelah ganti entitas
             // eksplisit (dan tanpa bergantung pada fallback entityId profil user).
             setAuth(auth.accessToken, get().activeEntityId, auth.refreshToken)
-            const [accRes, jrnRes, dbCfg] = await Promise.all([api.getAccounts(), api.getJournals(), api.getDbConfig()])
+            const [accRes, jrnRes, dbCfg] = await Promise.all([
+              api.getAccounts(),
+              api.getJournals(),
+              // getDbConfig non-critical: jika gagal (mis. PG migration belum jalan),
+              // login TETAP berhasil dengan dbConfig default.
+              api.getDbConfig().catch(() => null),
+            ])
             const journals = jrnRes.journals.map((j) => enrichCreatedBy(toJournalEntry(j), auth.user))
             const entities = await fetchEntities()
             const periods = await fetchPeriods()
@@ -622,7 +631,7 @@ export const useStore = create<AccountingState>()(
               periods,
               activePeriod: auth.activePeriod?.id ?? get().activePeriod,
               lastSyncedAt: nowIso(),
-              dbConfig: { ...dbCfg, tables: dbCfg.tables ?? DEFAULT_DB_TABLES },
+              dbConfig: dbCfg ? { ...dbCfg, tables: dbCfg.tables ?? DEFAULT_DB_TABLES } : get().dbConfig,
               authLoading: false,
               sessionExpired: false,
               toast: { message: `Selamat datang, ${auth.user.name}`, kind: 'success' },
