@@ -541,8 +541,12 @@ export const useStore = create<AccountingState>()(
             const journals = jrnRes.journals.map((j) => enrichCreatedBy(toJournalEntry(j), auth?.user ?? get().user))
             const entities = await fetchEntities()
             const periods = await fetchPeriods()
+            // Re-set module-level tokens — handleSessionExpired() mungkin sudah
+            // memanggil setAuth(null) selama Promise.all (race condition401).
+            setAuth(get().accessToken, get().activeEntityId, get().refreshToken)
             set((s) => ({
               apiStatus: 'online',
+              authError: null,
               ...(auth
                 ? {
                     accessToken: auth.accessToken,
@@ -620,6 +624,11 @@ export const useStore = create<AccountingState>()(
             const journals = jrnRes.journals.map((j) => enrichCreatedBy(toJournalEntry(j), auth.user))
             const entities = await fetchEntities()
             const periods = await fetchPeriods()
+            // Re-set module-level tokens AFTER all API calls — handleSessionExpired()
+            // mungkin sudah memanggil setAuth(null) selama Promise.all (mis. getDbConfig
+            // dapat 401 → refresh gagal → sessionExpiredHandler fire). Tanpa ini,
+            // module-level token sudah null → semua request berikutnya gagal 401.
+            setAuth(auth.accessToken, get().activeEntityId, auth.refreshToken)
             set({
               apiStatus: 'online',
               accessToken: auth.accessToken,
@@ -633,6 +642,7 @@ export const useStore = create<AccountingState>()(
               lastSyncedAt: nowIso(),
               dbConfig: dbCfg ? { ...dbCfg, tables: dbCfg.tables ?? DEFAULT_DB_TABLES } : get().dbConfig,
               authLoading: false,
+              authError: null,
               sessionExpired: false,
               toast: { message: `Selamat datang, ${auth.user.name}`, kind: 'success' },
             })
