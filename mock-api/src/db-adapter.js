@@ -1221,6 +1221,9 @@ export function getPgEntityId() { return pgEntityId }
 /** Get the in-memory entity ID for the primary entity. */
 export function getMemEntityId() { return memEntityId }
 
+/** Set entity mapping for testing. */
+export function setEntityMapping(pgId, memId) { pgEntityId = pgId; memEntityId = memId }
+
 /** Map a PG entity UUID to in-memory entity ID. */
 export function mapPgEntityToMem(pgId) {
   if (pgId === pgEntityId) return memEntityId
@@ -1546,7 +1549,9 @@ export async function seedAllToPg(db) {
   const pgId = pgEntityId
   const summary = { accounts: 0, journals: 0, periods: 0, users: 0, errors: [] }
 
-  const client = await pool.connect()
+  const p = ensurePool(db.dbConfig)
+  if (!p) return { ok: false, error: 'Gagal membuat connection pool' }
+  const client = await p.connect()
   try {
     await client.query('BEGIN')
 

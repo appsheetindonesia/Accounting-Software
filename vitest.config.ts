@@ -6,7 +6,7 @@ import { defineConfig } from 'vitest/config'
 // Provider v8 — tanpa native dependency tambahan.
 export default defineConfig({
   test: {
-    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    include: ['src/**/*.{test,spec}.{ts,tsx}', 'mock-api/**/*.{test,spec}.{js,ts}'],
     // Setup global: cleanup Testing Library otomatis setelah tiap test
     // (lihat src/test/setup.ts) — pola render/cleanup konsisten di semua
     // test komponen tanpa mengulang afterEach(cleanup) per file.
