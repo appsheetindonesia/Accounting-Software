@@ -2196,6 +2196,79 @@ app.post('/settings/db-config', requireAuth, async (req, res) => {
   ok(res, db.dbConfig)
 })
 
+// GET /admin/audit-trail → log semua aksi user (create, update, post, reverse jurnal)
+// Query: ?startDate=2026-03-01&endDate=2026-03-31&userId=user-001&action=post
+app.get('/admin/audit-trail', requireAuth, async (req, res) => {
+  const { startDate, endDate, userId, action, page = '1', pageSize = '50' } = req.query
+  // Kumpulkan audit trail dari journals in-memory
+  let entries = []
+  const journalAudit = []
+  for (const j of entityJournals(req.entityId)) {
+    if (j.auditTrail) {
+      for (const at of j.auditTrail) {
+        const user = db.users.find((u) => u.id === at.userId)
+        journalAudit.push({
+          id: `${j.id}-${at.action}-${at.timestamp}`,
+          entityType: 'journal',
+          entityId: j.id,
+          entityLabel: j.transactionNumber,
+          action: at.action,
+          userId: at.userId,
+          userName: user?.name ?? at.userId,
+          timestamp: at.timestamp,
+          description: j.description,
+        })
+      }
+    }
+  }
+  entries = [...journalAudit]
+  // Tambah data dari PG audit_logs jika available
+  if (Adapter.isPgMode(db)) {
+    try {
+      let sql = `SELECT al.id, al.entity_id AS "entityId", al.journal_id AS "journalId",
+                        al.user_id AS "userId", al.action, al.changes, al.created_at AS "timestamp"
+                 FROM app.audit_logs al WHERE al.entity_id = $1`
+      const params = [req.entityId]
+      let paramIdx = 2
+      if (startDate) { sql += ` AND al.created_at >= $${paramIdx++}`; params.push(startDate) }
+      if (endDate) { sql += ` AND al.created_at <= $${paramIdx++}`; params.push(endDate + 'T23:59:59Z') }
+      if (userId) { sql += ` AND al.user_id = $${paramIdx++}`; params.push(userId) }
+      if (action) { sql += ` AND al.action = $${paramIdx++}`; params.push(action) }
+      sql += ' ORDER BY al.created_at DESC'
+      const { rows } = await Adapter.queryPg(sql, params, db.dbConfig)
+      for (const r of rows) {
+        const user = db.users.find((u) => u.id === r.userId)
+        entries.push({
+          id: `pg-${r.id}`,
+          entityType: 'journal',
+          entityId: r.journalId ?? r.entityId,
+          entityLabel: r.journalId ?? '',
+          action: r.action,
+          userId: r.userId,
+          userName: user?.name ?? r.userId,
+          timestamp: r.timestamp,
+          description: r.changes ? JSON.stringify(r.changes) : '',
+        })
+      }
+    } catch (e) { console.error('[DB] audit-trail PG query error:', e.message) }
+  }
+  // Apply filters untuk in-memory entries
+  if (startDate) entries = entries.filter((e) => e.timestamp >= startDate)
+  if (endDate) entries = entries.filter((e) => e.timestamp <= endDate + 'T23:59:59')
+  if (userId) entries = entries.filter((e) => e.userId === userId)
+  if (action) entries = entries.filter((e) => e.action === action)
+  // Sort by timestamp desc
+  entries.sort((a, b) => (b.timestamp ?? '').localeCompare(a.timestamp ?? ''))
+  // Paginate
+  const pg = Math.max(1, Number(page) || 1)
+  const ps = Math.min(200, Math.max(1, Number(pageSize) || 50))
+  const total = entries.length
+  const items = entries.slice((pg - 1) * ps, pg * ps)
+  // Users list for filter dropdown
+  const users = db.users.map((u) => ({ id: u.id, name: u.name }))
+  ok(res, { entries: items, users, meta: { page: pg, pageSize: ps, total, totalPages: Math.ceil(total / ps) } })
+})
+
 // Hook pengujian (API §13 INTERNAL_ERROR): route ini sengaja melempar error
 // agar error handler global (500 INTERNAL_ERROR) bisa divalidasi. Konsisten
 // dengan endpoint /admin/* lain yang tanpa auth (alat development).

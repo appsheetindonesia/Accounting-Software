@@ -396,3 +396,34 @@ export interface SeedAllResponse {
 export async function seedAllToDb(): Promise<SeedAllResponse> {
   return request<SeedAllResponse>('/admin/seed-all', { method: 'POST' })
 }
+
+// ---------- Audit Trail ----------
+export interface AuditEntry {
+  id: string
+  entityType: string
+  entityId: string
+  entityLabel: string
+  action: string
+  userId: string
+  userName: string
+  timestamp: string
+  description: string
+}
+
+export interface AuditTrailResponse {
+  entries: AuditEntry[]
+  users: Array<{ id: string; name: string }>
+  meta: { page: number; pageSize: number; total: number; totalPages: number }
+}
+
+export async function getAuditTrail(params?: {
+  startDate?: string; endDate?: string; userId?: string; action?: string; page?: number
+}): Promise<AuditTrailResponse> {
+  const query: Record<string, string> = {}
+  if (params?.startDate) query.startDate = params.startDate
+  if (params?.endDate) query.endDate = params.endDate
+  if (params?.userId) query.userId = params.userId
+  if (params?.action) query.action = params.action
+  if (params?.page) query.page = String(params.page)
+  return request<AuditTrailResponse>('/admin/audit-trail', { query })
+}

@@ -15,6 +15,7 @@ export type PageKey =
   | 'glossary'
   | 'pengaturan'
   | 'db-status'
+  | 'audit-trail'
 
 export interface Account {
   id: string

@@ -17,6 +17,7 @@ import BalanceSheetPage from './components/reports/BalanceSheetPage'
 import CashFlowPage from './components/reports/CashFlowPage'
 import SettingsPage from './components/SettingsPage'
 import DbStatus from './components/DbStatus'
+import AuditTrail from './components/AuditTrail'
 import AccountsPage from './components/AccountsPage'
 import GlossaryPage from './components/GlossaryPage'
 import ComingSoon from './components/ComingSoon'
@@ -85,6 +86,8 @@ function App() {
                 <SettingsPage />
               ) : page === 'db-status' ? (
                 <DbStatus />
+              ) : page === 'audit-trail' ? (
+                <AuditTrail />
               ) : (
                 <ComingSoon />
               )}
