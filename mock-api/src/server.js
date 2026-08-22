@@ -2034,6 +2034,20 @@ app.get('/admin/db-status', requireAuth, async (req, res) => {
   }
 })
 
+// POST /admin/seed-all → push SEMUA data in-memory ke PostgreSQL sekaligus
+app.post('/admin/seed-all', requireAuth, async (req, res) => {
+  const cfg = db.dbConfig
+  if (!cfg || cfg.storageMode !== 'postgresql') {
+    return fail(res, 400, 'NOT_POSTGRESQL', 'Storage mode bukan PostgreSQL')
+  }
+  try {
+    const result = await Adapter.seedAllToPg(db)
+    ok(res, result)
+  } catch (err) {
+    fail(res, 500, 'SEED_ALL_ERROR', `Gagal seed data: ${err.message}`)
+  }
+})
+
 // ---- Konfigurasi database (Pengaturan PostgreSQL) ----------------------------
 // GET  /settings/db-config → { data: { host, port, database, password } }
 // POST /settings/db-config → simpan ke db + file persist

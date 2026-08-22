@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Database, HardDrive, RefreshCw, Server, Table2 } from 'lucide-react'
-import { getDbStatus, type DbStatusResponse } from '../api'
+import { Database, HardDrive, RefreshCw, Server, Table2, Upload } from 'lucide-react'
+import { getDbStatus, seedAllToDb, type DbStatusResponse, type SeedAllResponse } from '../api'
 
 const TABLE_LABELS: Record<string, string> = {
   entities: 'Entitas',
@@ -23,6 +23,8 @@ export default function DbStatus() {
   const [data, setData] = useState<DbStatusResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [seeding, setSeeding] = useState(false)
+  const [seedResult, setSeedResult] = useState<SeedAllResponse | null>(null)
 
   const fetchStatus = async () => {
     setLoading(true)
@@ -45,6 +47,22 @@ export default function DbStatus() {
   const tableCount = data ? Object.values(data.tables).filter((v) => v >= 0).length : 0
   const missingTables = data ? Object.entries(data.tables).filter(([, v]) => v === -1).map(([k]) => k) : []
 
+  const handleSeedAll = async () => {
+    if (!confirm('Seed SEMUA data in-memory (akun, jurnal, periode, users) ke PostgreSQL?\nData yang sudah ada tidak akan diduplikasi.')) return
+    setSeeding(true)
+    setSeedResult(null)
+    try {
+      const result = await seedAllToDb()
+      setSeedResult(result)
+      // Refresh status setelah seed
+      await fetchStatus()
+    } catch (err: any) {
+      setSeedResult({ ok: false, accounts: 0, journals: 0, periods: 0, users: 0, errors: [{ table: 'api', error: err.message }] })
+    } finally {
+      setSeeding(false)
+    }
+  }
+
   return (
     <div className="space-y-5 p-5 lg:p-7">
       <div className="flex items-center justify-between">
@@ -52,15 +70,26 @@ export default function DbStatus() {
           <h1 className="text-xl font-bold text-ink lg:text-2xl">Status Database</h1>
           <p className="mt-0.5 text-sm text-ink-soft">Statistik PostgreSQL — jumlah baris per tabel</p>
         </div>
-        <button
-          type="button"
-          onClick={fetchStatus}
-          disabled={loading}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-ink shadow-card transition hover:bg-canvas active:translate-y-px disabled:opacity-50"
-        >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleSeedAll}
+            disabled={seeding || loading}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-sm font-medium text-green-700 shadow-card transition hover:bg-green-100 active:translate-y-px disabled:opacity-50"
+          >
+            <Upload size={14} className={seeding ? 'animate-pulse' : ''} />
+            {seeding ? 'Seeding...' : 'Seed Semua Data'}
+          </button>
+          <button
+            type="button"
+            onClick={fetchStatus}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-ink shadow-card transition hover:bg-canvas active:translate-y-px disabled:opacity-50"
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -115,6 +144,36 @@ export default function DbStatus() {
             <span className="text-green-600/70">·</span>
             <span className="text-green-600/70">{tableCount} tabel · {totalRows.toLocaleString('id-ID')} baris</span>
           </div>
+
+          {/* Seed Result */}
+          {seedResult && (
+            <div className={`rounded-xl border p-4 text-sm ${
+              seedResult.ok
+                ? 'border-green-300 bg-green-50 text-green-800'
+                : 'border-amber-300 bg-amber-50 text-amber-800'
+            }`}>
+              <p className="font-semibold">
+                {seedResult.ok ? '✅ Seed berhasil!' : '⚠️ Seed sebagian berhasil'}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-3 font-mono text-xs">
+                <span>Accounts: +{seedResult.accounts}</span>
+                <span>Journals: +{seedResult.journals}</span>
+                <span>Periods: +{seedResult.periods}</span>
+                <span>Users: +{seedResult.users}</span>
+              </div>
+              {seedResult.errors.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-xs font-medium text-amber-600">Errors:</p>
+                  {seedResult.errors.slice(0, 5).map((e, i) => (
+                    <p key={i} className="font-mono text-xs text-amber-600">{e.table}: {e.error}</p>
+                  ))}
+                  {seedResult.errors.length > 5 && (
+                    <p className="text-xs text-amber-500">...+{seedResult.errors.length - 5} more</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Missing Tables Warning */}
           {missingTables.length > 0 && (

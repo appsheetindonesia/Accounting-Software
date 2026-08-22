@@ -368,3 +368,17 @@ export interface DbStatusResponse {
 export async function getDbStatus(): Promise<DbStatusResponse> {
   return request<DbStatusResponse>('/admin/db-status')
 }
+
+export interface SeedAllResponse {
+  ok: boolean
+  accounts: number
+  journals: number
+  periods: number
+  users: number
+  errors: Array<{ table: string; error: string; [key: string]: string }>
+  error?: string
+}
+
+export async function seedAllToDb(): Promise<SeedAllResponse> {
+  return request<SeedAllResponse>('/admin/seed-all', { method: 'POST' })
+}

@@ -1486,3 +1486,143 @@ async function findPgAccountId(inMemIdOrCode, dbConfig) {
     return null
   }
 }
+
+/**
+ * Seed SEMUA data in-memory ke PostgreSQL sekaligus.
+ * Berguna saat pertama kali koneksi PG — push accounts, journals, periods, users.
+ * Returns summary object.
+ */
+export async function seedAllToPg(db) {
+  if (!isPgMode(db) || !pgEntityId) {
+    return { ok: false, error: 'PostgreSQL tidak aktif atau entity belum ditemukan' }
+  }
+  const memId = memEntityId
+  const pgId = pgEntityId
+  const summary = { accounts: 0, journals: 0, periods: 0, users: 0, errors: [] }
+
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+
+    // 1. SEED ACCOUNTS (skip jika sudah ada by code)
+    for (const a of db.accounts) {
+      if (a.entityId !== memId) continue
+      try {
+        const { rows: existing } = await client.query(
+          'SELECT id FROM app.accounts WHERE code = $1 LIMIT 1', [a.code]
+        )
+        if (existing.length > 0) continue // sudah ada, skip
+        await client.query(
+          `INSERT INTO app.accounts (entity_id, code, name, type, category, normal_balance, parent_id, description, is_active, base_balance)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [pgId, a.code, a.name, a.type, a.category, a.normalBalance,
+           a.parentId || null, a.description || '', a.isActive !== false, a.baseBalance || 0]
+        )
+        summary.accounts++
+      } catch (err) {
+        summary.errors.push({ table: 'accounts', code: a.code, error: err.message })
+      }
+    }
+    if (summary.accounts > 0) console.log(`[DB] seedAll: ${summary.accounts} accounts inserted`)
+
+    // 2. SEED PERIODS (skip jika sudah ada by name)
+    for (const p of db.periods) {
+      try {
+        const { rows: existing } = await client.query(
+          'SELECT id FROM app.fiscal_periods WHERE name = $1 AND entity_id = $2 LIMIT 1',
+          [p.name, pgId]
+        )
+        if (existing.length > 0) continue
+        await client.query(
+          `INSERT INTO app.fiscal_periods (entity_id, name, month, year, start_date, end_date, is_open, is_active)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [pgId, p.name, p.month, p.year, p.startDate, p.endDate, p.isOpen !== false, p.isActive !== false]
+        )
+        summary.periods++
+      } catch (err) {
+        summary.errors.push({ table: 'fiscal_periods', name: p.name, error: err.message })
+      }
+    }
+    if (summary.periods > 0) console.log(`[DB] seedAll: ${summary.periods} periods inserted`)
+
+    // 3. SEED USERS (skip jika sudah ada by email)
+    for (const u of db.users) {
+      try {
+        const { rows: existing } = await client.query(
+          'SELECT id FROM app.users WHERE email = $1 LIMIT 1', [u.email]
+        )
+        if (existing.length > 0) continue
+        await client.query(
+          `INSERT INTO app.users (email, name, is_active)
+           VALUES ($1, $2, $3)`,
+          [u.email, u.name, u.isActive !== false]
+        )
+        summary.users++
+      } catch (err) {
+        summary.errors.push({ table: 'users', email: u.email, error: err.message })
+      }
+    }
+    if (summary.users > 0) console.log(`[DB] seedAll: ${summary.users} users inserted`)
+
+    // 4. SEED JOURNALS (skip jika sudah ada by transaction_number)
+    // Re-fetch PG account map setelah accounts di-seed
+    const { rows: pgAccts } = await client.query('SELECT id, code FROM app.accounts')
+    const codeToPgId = Object.fromEntries(pgAccts.map((a) => [a.code, a.id]))
+
+    for (const j of db.journals) {
+      if (j.entityId !== memId) continue
+      try {
+        const { rows: existing } = await client.query(
+          'SELECT id FROM app.journals WHERE transaction_number = $1 LIMIT 1',
+          [j.transactionNumber]
+        )
+        if (existing.length > 0) continue
+        // Find period_id
+        const periodId = await findPeriodIdForDate(pgId, j.date, db.dbConfig)
+        // Find PG user ID
+        let pgUserId = null
+        try {
+          const { rows: u } = await client.query('SELECT id FROM app.users LIMIT 1')
+          pgUserId = u[0]?.id || null
+        } catch { /* ignore */ }
+
+        const { rows: [pgJournal] } = await client.query(
+          `INSERT INTO app.journals (entity_id, period_id, transaction_number, journal_date, description, status, created_by, posted_by, posted_at, reversal_of_id, version)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+           RETURNING id`,
+          [pgId, periodId || '00000000-0000-0000-0000-000000000000', j.transactionNumber,
+           j.date, j.description, j.status || 'draft', pgUserId,
+           j.status === 'posted' ? pgUserId : null, j.postedAt || null,
+           j.reversalOfId || null, j.version || 1]
+        )
+        // Insert lines
+        if (j.lines?.length) {
+          for (const ln of j.lines) {
+            const pgAcctId = codeToPgId[ln.accountId] || codeToPgId[ln.accountCode] || ln.accountId
+            const isUuid = typeof pgAcctId === 'string' && /^[0-9a-f]{8}-/.test(pgAcctId)
+            const finalAcctId = isUuid ? pgAcctId : (codeToPgId[ln.accountId] || codeToPgId[ln.accountCode] || null)
+            if (!finalAcctId) continue // skip jika akun tidak ditemukan di PG
+            await client.query(
+              'INSERT INTO app.journal_lines (journal_id, account_id, debit, credit, description) VALUES ($1, $2, $3, $4, $5)',
+              [pgJournal.id, finalAcctId, ln.debit || 0, ln.credit || 0, ln.description || '']
+            )
+          }
+        }
+        summary.journals++
+      } catch (err) {
+        summary.errors.push({ table: 'journals', number: j.transactionNumber, error: err.message })
+      }
+    }
+    if (summary.journals > 0) console.log(`[DB] seedAll: ${summary.journals} journals inserted`)
+
+    await client.query('COMMIT')
+    console.log(`[DB] seedAll complete:`, summary)
+  } catch (err) {
+    await client.query('ROLLBACK')
+    summary.errors.push({ table: 'transaction', error: err.message })
+    console.error('[DB] seedAll rolled back:', err.message)
+  } finally {
+    client.release()
+  }
+  return { ok: summary.errors.length === 0, ...summary }
+}
