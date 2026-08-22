@@ -75,10 +75,22 @@ export async function findUserByEmail(email, db) {
   if (!isPgMode(db)) {
     return db.users.find((u) => u.email.toLowerCase() === email.toLowerCase())
   }
-  const { rows } = await query('SELECT id, email, name, password_hash, is_active FROM app.users WHERE email = $1', [email], db.dbConfig)
+  const { rows } = await query(
+    `SELECT u.id, u.email, u.name, u.password_hash, u.is_active,
+            em.entity_id AS "entityId", em.role
+     FROM app.users u
+     LEFT JOIN app.entity_members em ON em.user_id = u.id
+     WHERE u.email = $1`,
+    [email], db.dbConfig
+  )
   const u = rows[0]
   if (!u) return null
-  return { id: u.id, email: u.email, name: u.name, passwordHash: u.password_hash, isActive: u.is_active }
+  return {
+    id: u.id, email: u.email, name: u.name,
+    passwordHash: u.password_hash, isActive: u.is_active,
+    role: u.role || 'viewer',
+    entityId: u.entityId ? mapPgEntityToMem(u.entityId) : memEntityId,
+  }
 }
 
 export async function updateUserLogin(userId, db) {
@@ -1385,12 +1397,22 @@ export async function syncDataFromPg(db) {
     }
     console.log(`[DB] Journals final: ${db.journals.length}`)
 
-    // 4. Sync users — map entity IDs if needed
+    // 4. Sync users — join entity_members untuk role + entityId
     const { rows: userRows } = await query(
-      'SELECT id, email, name, is_active AS "isActive" FROM app.users',
+      `SELECT u.id, u.email, u.name, u.is_active AS "isActive",
+              em.entity_id AS "entityId", em.role,
+              COALESCE(u.password_hash, 'password123') AS "password"
+       FROM app.users u
+       LEFT JOIN app.entity_members em ON em.user_id = u.id
+       ORDER BY u.name`,
       [], db.dbConfig
     )
-    db.users = userRows
+    // Map PG entity UUID → in-memory entity ID
+    db.users = userRows.map((u) => ({
+      ...u,
+      entityId: u.entityId ? mapPgEntityToMem(u.entityId) : memEntityId,
+      role: u.role || 'viewer',
+    }))
 
     // 5. Sync periods — map PG entity_id to in-memory entity ID
     const { rows: periodRows } = await query(

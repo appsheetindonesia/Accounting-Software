@@ -442,7 +442,8 @@ const requireAuth = (req, res, next) => {
     return fail(res, 401, 'TOKEN_EXPIRED', 'Access token kedaluwarsa. Silakan refresh.')
   req.user = user
   // Multi-tenant: X-Entity-Id, default dari profil user
-  req.entityId = req.headers['x-entity-id'] || user.entityId
+  // Map PG UUID → in-memory entity ID agar filter j.entityId === req.entityId cocok
+  req.entityId = Adapter.mapPgEntityToMem(req.headers['x-entity-id'] || user.entityId)
   next()
 }
 
