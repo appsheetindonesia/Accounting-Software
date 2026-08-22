@@ -323,7 +323,17 @@ export async function runMigration(poolOrConfig) {
       `)
       console.log('[DB] app.settings + fix close_period berhasil')
     } else {
-      // Semua tabel sudah ada — tapi fix close_period jika belum punya variabel r
+      // Semua tabel sudah ada — tambah kolom is_header jika belum ada
+      const { rows: ihCheck } = await poolInstance.query(
+        "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'app' AND table_name = 'accounts' AND column_name = 'is_header') AS exists"
+      )
+      if (!ihCheck[0]?.exists) {
+        console.log('[DB] Menjalankan migration 002 — menambah kolom is_header...')
+        const sql002 = readFileSync(join(__dirname, '..', 'migrations', '002_add_is_header.sql'), 'utf-8')
+        await poolInstance.query(sql002)
+        console.log('[DB] Migration 002 berhasil — kolom is_header ditambahkan')
+      }
+      // Fix close_period jika belum punya variabel r
       console.log('[DB] Semua tabel sudah ada — fix close_period jika perlu...')
       await poolInstance.query(`
         CREATE OR REPLACE FUNCTION app.close_period(p_period_id UUID, p_draft_action TEXT, p_user_id UUID)

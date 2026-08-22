@@ -187,10 +187,10 @@ export async function createAccount(data, db) {
     return account
   }
   const { rows } = await query(
-    `INSERT INTO app.accounts (entity_id, code, name, type, category, normal_balance, parent_id, description)
+    `INSERT INTO app.accounts (entity_id, code, name, type, category, normal_balance, parent_id, description, is_header)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-     RETURNING id, code, name, type, category, normal_balance AS "normalBalance", parent_id AS "parentId", is_active AS "isActive", description, version`,
-    [toPgEntity(data.entityId), data.code, data.name, data.type, data.category, data.normalBalance, data.parentId || null, data.description || ''],
+     RETURNING id, code, name, type, category, normal_balance AS "normalBalance", parent_id AS "parentId", is_active AS "isActive", COALESCE(is_header, false) AS "isHeader", description, version`,
+    [toPgEntity(data.entityId), data.code, data.name, data.type, data.category, data.normalBalance, data.parentId || null, data.description || '', data.isHeader === true],
     db.dbConfig
   )
   return rows[0]
@@ -271,9 +271,9 @@ export async function importAccounts(accountsList, db) {
     for (const a of accountsList) {
       try {
         await client.query(
-          `INSERT INTO app.accounts (entity_id, code, name, type, category, normal_balance, description)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [toPgEntity(a.entityId), a.code, a.name, a.type, a.category, a.normalBalance, a.description || '']
+          `INSERT INTO app.accounts (entity_id, code, name, type, category, normal_balance, description, is_header)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [toPgEntity(a.entityId), a.code, a.name, a.type, a.category, a.normalBalance, a.description || '', a.isHeader === true]
         )
         results.imported++
       } catch (err) {
@@ -1320,19 +1320,20 @@ export async function syncDataFromPg(db) {
               normal_balance AS "normalBalance",
               parent_id AS "parentId",
               is_active AS "isActive",
+              COALESCE(is_header, false) AS "isHeader",
               description,
               entity_id AS "entityId",
               version
        FROM app.accounts ORDER BY code`,
       [], db.dbConfig
     )
-    // Map PG entity UUID → in-memory entity ID + compute isHeader + group
+    // Map PG entity UUID → in-memory entity ID + derive group
     const mappedAccounts = acctRows.map((a) => ({
       ...a,
       entityId: mapPgEntityToMem(a.entityId),
-      // PG schema tidak punya kolom is_header — compute dari parent_id relasi
-      isHeader: acctRows.some((c) => c.parent_id === a.id),
-      // PG schema tidak punya kolom group — derive dari type
+      // PG schema mungkin belum punya kolom is_header — fallback compute
+      isHeader: a.isHeader ?? acctRows.some((c) => c.parent_id === a.id),
+      // Kolom group tidak ada di PG — derive dari type
       group: a.type === 'asset' ? 'current_asset'
         : a.type === 'liability' ? 'current_liability'
         : a.type === 'equity' ? 'equity'
@@ -1572,10 +1573,10 @@ export async function seedAllToPg(db) {
         )
         if (existing.length > 0) continue // sudah ada, skip
         await client.query(
-          `INSERT INTO app.accounts (entity_id, code, name, type, category, normal_balance, parent_id, description, is_active)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          `INSERT INTO app.accounts (entity_id, code, name, type, category, normal_balance, parent_id, description, is_active, is_header)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
           [pgId, a.code, a.name, a.type, a.category, a.normalBalance,
-           a.parentId || null, a.description || '', a.isActive !== false]
+           a.parentId || null, a.description || '', a.isActive !== false, a.isHeader === true]
         )
         summary.accounts++
       } catch (err) {
