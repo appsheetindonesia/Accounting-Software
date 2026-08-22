@@ -726,7 +726,7 @@ app.get('/users', requireAuth, requirePermission('user.manage'), (req, res) => {
   let list = db.users.filter((u) => u.entityId === req.entityId)
   if (req.query.role) list = list.filter((u) => u.role === req.query.role)
   const { items, meta } = paginate(list, req.query.page, req.query.pageSize)
-  ok(res, items.map(({ password, ...u }) => u), meta)
+  ok(res, { users: items.map(({ password, ...u }) => u) }, meta)
 })
 
 app.post('/users', requireAuth, requirePermission('user.manage'), (req, res) => {
