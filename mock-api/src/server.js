@@ -85,35 +85,12 @@ if (envDbConfig) {
   try {
     getPool(db.dbConfig)
     console.log('[DB] PostgreSQL pool created successfully')
-    // Load saved dbConfig + sync data dari PostgreSQL ke in-memory
-    // Gunakan .then() agar tidak butuh top-level await
-    loadDbConfigFromPg(db.dbConfig).then(async (savedConfig) => {
-      if (savedConfig) {
-        db.dbConfig = { ...db.dbConfig, ...savedConfig, tables: savedConfig.tables || db.dbConfig.tables }
-        console.log('[DB] Restored dbConfig from PostgreSQL (survives restart)')
-      }
-      // Sync data dari PG ke in-memory agar entityAccounts/entityJournals/computeBalances jalan
-      await Adapter.syncDataFromPg(db)
-      const initCounts = await Adapter.checkTableCounts(db)
-      Adapter.updateLastCounts(initCounts)
-      console.log(`[DB] Periodic sync started — smart mode (hanya sync saat ada perubahan). Counts: ${JSON.stringify(initCounts)}`)
-      // Smart periodic sync: tiap 60 detik, cek COUNT dulu
-      // Jika tidak ada perubahan → skip (hemat bandwidth + CPU)
-      setInterval(async () => {
-        try {
-          const currentCounts = await Adapter.checkTableCounts(db)
-          if (!Adapter.hasCountsChanged(currentCounts)) {
-            return // skip — tidak ada perubahan
-          }
-          console.log(`[DB] Change detected — syncing from PG. Counts: ${JSON.stringify(currentCounts)}`)
-          await Adapter.syncDataFromPg(db)
-          Adapter.updateLastCounts(currentCounts)
-        } catch (err) {
-          console.warn(`[DB] Periodic sync error: ${err.message}`)
-        }
-      }, 60_000)
+    // Simpan dbConfig ke PG SEGERA agar survive restart
+    // (mencegah app.settings kosong di restart pertama)
+    saveDbConfigToPg(db.dbConfig, db.dbConfig).then(() => {
+      console.log('[DB] Saved dbConfig to PostgreSQL on startup (survives restart)')
     }).catch((err) => {
-      console.warn(`[DB] Could not load dbConfig/sync from PG: ${err.message}`)
+      console.warn(`[DB] Could not save dbConfig on startup: ${err.message}`)
     })
   } catch (err) {
     console.warn(`[DB] WARNING: Could not create PostgreSQL pool: ${err.message}`)
@@ -167,6 +144,42 @@ if (PERSIST) {
     // state berikutnya punya baseline yang konsisten.
     savePersisted(PERSIST_FILE, db)
   }
+}
+
+// ------------------------------------------------------------
+// Setelah persist load selesai, load dbConfig dari PostgreSQL
+// (TIDAK sebelum persist — agar persist tidak menimpa config dari PG).
+// Ini memastikan settingan PG survive restart container.
+// ------------------------------------------------------------
+if (db.dbConfig?.storageMode === 'postgresql') {
+  loadDbConfigFromPg(db.dbConfig).then(async (savedConfig) => {
+    if (savedConfig) {
+      db.dbConfig = { ...db.dbConfig, ...savedConfig, tables: savedConfig.tables || db.dbConfig.tables }
+      console.log('[DB] Restored dbConfig from PostgreSQL (survives restart)')
+    }
+    // Sync data dari PG ke in-memory agar entityAccounts/entityJournals/computeBalances jalan
+    await Adapter.syncDataFromPg(db)
+    const initCounts = await Adapter.checkTableCounts(db)
+    Adapter.updateLastCounts(initCounts)
+    console.log(`[DB] Synced from PostgreSQL. Counts: ${JSON.stringify(initCounts)}`)
+    // Smart periodic sync: tiap 60 detik, cek COUNT dulu
+    // Jika tidak ada perubahan → skip (hemat bandwidth + CPU)
+    setInterval(async () => {
+      try {
+        const currentCounts = await Adapter.checkTableCounts(db)
+        if (!Adapter.hasCountsChanged(currentCounts)) {
+          return // skip — tidak ada perubahan
+        }
+        console.log(`[DB] Change detected — syncing from PG. Counts: ${JSON.stringify(currentCounts)}`)
+        await Adapter.syncDataFromPg(db)
+        Adapter.updateLastCounts(currentCounts)
+      } catch (err) {
+        console.warn(`[DB] Periodic sync error: ${err.message}`)
+      }
+    }, 60_000)
+  }).catch((err) => {
+    console.warn(`[DB] Could not load dbConfig/sync from PG: ${err.message}`)
+  })
 }
 
 // Simpan state setelah MUTASI sukses (status < 400). Dikecualikan:
