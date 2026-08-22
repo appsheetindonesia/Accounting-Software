@@ -163,7 +163,7 @@ export async function getAccounts(entityId, db) {
   }
   const { rows } = await query(
     'SELECT id, code, name, type, category, normal_balance AS "normalBalance", parent_id AS "parentId", is_active AS "isActive", description, version FROM app.accounts WHERE entity_id = $1 ORDER BY code',
-    [entityId], db.dbConfig
+    [toPgEntity(entityId)], db.dbConfig
   )
   return rows
 }
@@ -174,7 +174,7 @@ export async function getAccountById(id, entityId, db) {
   }
   const { rows } = await query(
     'SELECT id, code, name, type, category, normal_balance AS "normalBalance", parent_id AS "parentId", is_active AS "isActive", description, version FROM app.accounts WHERE id = $1 AND entity_id = $2',
-    [id, entityId], db.dbConfig
+    [id, toPgEntity(entityId)], db.dbConfig
   )
   return rows[0]
 }
@@ -190,7 +190,7 @@ export async function createAccount(data, db) {
     `INSERT INTO app.accounts (entity_id, code, name, type, category, normal_balance, parent_id, description)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING id, code, name, type, category, normal_balance AS "normalBalance", parent_id AS "parentId", is_active AS "isActive", description, version`,
-    [data.entityId, data.code, data.name, data.type, data.category, data.normalBalance, data.parentId || null, data.description || ''],
+    [toPgEntity(data.entityId), data.code, data.name, data.type, data.category, data.normalBalance, data.parentId || null, data.description || ''],
     db.dbConfig
   )
   return rows[0]
@@ -213,7 +213,7 @@ export async function updateAccount(id, entityId, data, db) {
     params.push(val)
   }
   sets.push(`version = version + 1`)
-  params.push(id, entityId)
+  params.push(id, toPgEntity(entityId))
   const { rows } = await query(
     `UPDATE app.accounts SET ${sets.join(', ')} WHERE id = $${i++} AND entity_id = $${i}
      RETURNING id, code, name, type, category, normal_balance AS "normalBalance", parent_id AS "parentId", is_active AS "isActive", description, version`,
@@ -231,7 +231,7 @@ export async function deleteAccount(id, entityId, db) {
   }
   const { rowCount } = await query(
     'DELETE FROM app.accounts WHERE id = $1 AND entity_id = $2',
-    [id, entityId], db.dbConfig
+    [id, toPgEntity(entityId)], db.dbConfig
   )
   return rowCount > 0
 }
@@ -245,7 +245,7 @@ export async function toggleAccountActive(id, entityId, isActive, db) {
   }
   const { rows } = await query(
     'UPDATE app.accounts SET is_active = $1, version = version + 1 WHERE id = $2 AND entity_id = $3 RETURNING id, code, name, type, category, normal_balance AS "normalBalance", parent_id AS "parentId", is_active AS "isActive", description, version',
-    [isActive, id, entityId], db.dbConfig
+    [isActive, id, toPgEntity(entityId)], db.dbConfig
   )
   return rows[0]
 }
@@ -273,7 +273,7 @@ export async function importAccounts(accountsList, db) {
         await client.query(
           `INSERT INTO app.accounts (entity_id, code, name, type, category, normal_balance, description)
            VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [a.entityId, a.code, a.name, a.type, a.category, a.normalBalance, a.description || '']
+          [toPgEntity(a.entityId), a.code, a.name, a.type, a.category, a.normalBalance, a.description || '']
         )
         results.imported++
       } catch (err) {
@@ -313,7 +313,7 @@ export async function getJournals(entityId, { periodId, status, keyword, page = 
   }
   // PostgreSQL
   const conditions = ['j.entity_id = $1']
-  const params = [entityId]
+  const params = [toPgEntity(entityId)]
   let i = 2
   if (periodId) { conditions.push(`j.period_id = $${i++}`); params.push(periodId) }
   if (status) { conditions.push(`j.status = $${i++}`); params.push(status) }
@@ -528,7 +528,7 @@ export async function reverseJournal(id, entityId, userId, reason, db) {
        ON CONFLICT (entity_id, period_id, prefix)
        DO UPDATE SET last_number = app.journal_sequences.last_number + 1
        RETURNING last_number`,
-      [entityId, orig.period_id]
+      [toPgEntity(entityId), orig.period_id]
     )
     const periodRes = await client.query('SELECT start_date FROM app.fiscal_periods WHERE id = $1', [orig.period_id])
     const periodDate = periodRes.rows[0]?.start_date
@@ -545,7 +545,7 @@ export async function reverseJournal(id, entityId, userId, reason, db) {
       `INSERT INTO app.journals (entity_id, period_id, transaction_number, journal_date, description, status, created_by, posted_by, posted_at, reversal_of_id)
        VALUES ($1, $2, $3, CURRENT_DATE, $4, 'posted', $5, $5, now(), $6)
        RETURNING id, transaction_number AS number, status`,
-      [entityId, orig.period_id, revNumber, `Pembalikan: ${orig.description}`, userId, id]
+      [toPgEntity(entityId), orig.period_id, revNumber, `Pembalikan: ${orig.description}`, userId, id]
     )
 
     // Copy lines (debit ↔ credit)
@@ -627,7 +627,7 @@ export async function getPeriods(entityId, db) {
   }
   const { rows } = await query(
     'SELECT id, name, month, year, start_date AS "startDate", end_date AS "endDate", is_open AS "isOpen", is_active AS "isActive" FROM app.fiscal_periods WHERE entity_id = $1 ORDER BY start_date',
-    [entityId], db.dbConfig
+    [toPgEntity(entityId)], db.dbConfig
   )
   return rows
 }
@@ -638,7 +638,7 @@ export async function getCurrentPeriod(entityId, db) {
   }
   const { rows } = await query(
     'SELECT id, name, month, year, start_date AS "startDate", end_date AS "endDate", is_open AS "isOpen" FROM app.fiscal_periods WHERE entity_id = $1 AND is_active = true',
-    [entityId], db.dbConfig
+    [toPgEntity(entityId)], db.dbConfig
   )
   return rows[0]
 }
@@ -650,10 +650,10 @@ export async function activatePeriod(id, entityId, db) {
     }
     return db.periods.find((p) => p.id === id)
   }
-  await query('UPDATE app.fiscal_periods SET is_active = false WHERE entity_id = $1', [entityId], db.dbConfig)
+  await query('UPDATE app.fiscal_periods SET is_active = false WHERE entity_id = $1', [toPgEntity(entityId)], db.dbConfig)
   const { rows } = await query(
     'UPDATE app.fiscal_periods SET is_active = true, updated_at = now() WHERE id = $1 AND entity_id = $2 RETURNING id, name, is_active AS "isActive"',
-    [id, entityId], db.dbConfig
+    [id, toPgEntity(entityId)], db.dbConfig
   )
   return rows[0]
 }
@@ -667,7 +667,7 @@ export async function closePeriod(id, entityId, draftAction, userId, db) {
   }
   const { rows } = await query(
     "UPDATE app.fiscal_periods SET is_open = false, updated_at = now() WHERE id = $1 AND entity_id = $2 AND is_open = true RETURNING id, name, is_open AS \"isOpen\"",
-    [id, entityId], db.dbConfig
+    [id, toPgEntity(entityId)], db.dbConfig
   )
   return rows[0]
 }
@@ -699,7 +699,7 @@ export async function getTrialBalance(entityId, periodId, db) {
      FROM app.v_trial_balance
      WHERE entity_id = $1 AND period_id = $2
      GROUP BY account_id, code, name, type, normal_balance`,
-    [entityId, periodId], db.dbConfig
+    [toPgEntity(entityId), periodId], db.dbConfig
   )
   return rows
 }
@@ -729,7 +729,7 @@ export async function getIncomeStatement(entityId, periodId, compareToPeriodId, 
      FROM app.v_trial_balance
      WHERE entity_id = $1 AND period_id = $2 AND type IN ('revenue', 'expense')
      GROUP BY account_id, code, name, type`,
-    [entityId, periodId], db.dbConfig
+    [toPgEntity(entityId), periodId], db.dbConfig
   )
   const revenue = rows.filter((r) => r.type === 'revenue').map((r) => ({ ...r, amount: Number(r.amount) }))
   const expenses = rows.filter((r) => r.type === 'expense').map((r) => ({ ...r, amount: Number(r.amount) }))
@@ -764,7 +764,7 @@ export async function getBalanceSheet(entityId, asOf, db) {
      JOIN app.accounts a ON a.id = tb.account_id
      WHERE tb.entity_id = $1 AND a.type IN ('asset', 'liability', 'equity')
      GROUP BY account_id, code, name, type, category`,
-    [entityId], db.dbConfig
+    [toPgEntity(entityId)], db.dbConfig
   )
   const assets = rows.filter((r) => r.type === 'asset').map((r) => ({ ...r, balance: Number(r.balance) }))
   const liabilities = rows.filter((r) => r.type === 'liability').map((r) => ({ ...r, balance: Number(r.balance) }))
@@ -793,7 +793,7 @@ export async function getCashFlow(entityId, periodId, db) {
      JOIN app.cash_flow_mapping cf ON cf.entity_id = j.entity_id AND cf.category = a.category
      WHERE j.entity_id = $1 AND j.period_id = $2 AND j.status = 'posted'
      GROUP BY cf.category, cf.activity`,
-    [entityId, periodId], db.dbConfig
+    [toPgEntity(entityId), periodId], db.dbConfig
   )
   const operating = rows.filter((r) => r.activity === 'operating')
   const investing = rows.filter((r) => r.activity === 'investing')
@@ -822,7 +822,7 @@ export async function getLedger(entityId, accountId, { startDate, endDate } = {}
     })
   }
   const conditions = ['j.entity_id = $1', 'jl.account_id = $2', "j.status = 'posted'"]
-  const params = [entityId, accountId]
+  const params = [toPgEntity(entityId), accountId]
   let i = 3
   if (startDate) { conditions.push(`j.journal_date >= $${i++}`); params.push(startDate) }
   if (endDate) { conditions.push(`j.journal_date <= $${i++}`); params.push(endDate) }
@@ -855,7 +855,7 @@ export async function getDashboardSummary(entityId, periodId, db) {
      FROM app.journal_lines jl
      JOIN app.journals j ON j.id = jl.journal_id
      WHERE j.entity_id = $1 AND j.period_id = $2 AND j.status = 'posted'`,
-    [entityId, periodId], db.dbConfig
+    [toPgEntity(entityId), periodId], db.dbConfig
   )
   return { totalDebit: Number(rows[0].total_debit) || 0, totalCredit: Number(rows[0].total_credit) || 0, journalCount: rows[0].journal_count }
 }
@@ -875,7 +875,7 @@ export async function getRecentJournals(entityId, limit = 5, db) {
      WHERE j.entity_id = $1
      ORDER BY j.journal_date DESC, j.created_at DESC
      LIMIT $2`,
-    [entityId, limit], db.dbConfig
+    [toPgEntity(entityId), limit], db.dbConfig
   )
   return rows
 }
@@ -906,7 +906,7 @@ export async function search(entityId, q, db) {
      UNION ALL
      (SELECT 'account', id, code, name FROM app.accounts WHERE entity_id = $1 AND (code ILIKE $2 OR name ILIKE $2))
      LIMIT 20`,
-    [entityId, `%${q}%`], db.dbConfig
+    [toPgEntity(entityId), `%${q}%`], db.dbConfig
   )
   return rows
 }
@@ -925,7 +925,7 @@ export async function exportAccounts(entityId, db) {
     `SELECT code AS "Kode", name AS "Nama", type AS "Tipe", category AS "Kategori",
             normal_balance AS "Saldo Normal", CASE WHEN is_active THEN 'Aktif' ELSE 'Non-aktif' END AS "Status"
      FROM app.accounts WHERE entity_id = $1 ORDER BY code`,
-    [entityId], db.dbConfig
+    [toPgEntity(entityId)], db.dbConfig
   )
   return rows
 }
@@ -1038,7 +1038,7 @@ async function findPeriodIdForDate(entityId, journalDate, dbConfig) {
     `SELECT id FROM app.fiscal_periods
      WHERE entity_id = $1 AND start_date <= $2 AND end_date >= $2
      ORDER BY start_date DESC LIMIT 1`,
-    [entityId, journalDate], dbConfig
+    [toPgEntity(entityId), journalDate], dbConfig
   )
   return rows[0]?.id || null
 }
@@ -1052,10 +1052,21 @@ async function findPeriodIdForDate(entityId, journalDate, dbConfig) {
  */
 export async function persistJournalToPg(journal, db) {
   if (!isPgMode(db)) return null
-  // Cari period_id dari tanggal jurnal
-  const periodId = await findPeriodIdForDate(journal.entityId, journal.date, db.dbConfig)
+  // Map in-memory entity ID → PG UUID
+  const pgEntId = mapMemEntityToPg(journal.entityId)
+  // Cari period_id dari tanggal jurnal (pakai entity UUID asli di PG)
+  const periodId = await findPeriodIdForDate(pgEntId, journal.date, db.dbConfig)
   if (!periodId) {
-    console.warn(`[DB-Adapter] No fiscal period found for date ${journal.date}, entity ${journal.entityId}`)
+    console.warn(`[DB-Adapter] No fiscal period found for date ${journal.date}, entity ${pgEntId}`)
+  }
+  // Map createdBy user ID → PG user UUID
+  let pgCreatedBy = null
+  if (journal.createdBy) {
+    // The in-memory user ID format is 'user-001'. Find matching PG user.
+    try {
+      const { rows: users } = await query('SELECT id FROM app.users LIMIT 1', [], db.dbConfig)
+      pgCreatedBy = users[0]?.id || null
+    } catch { /* ignore */ }
   }
   // Insert journal
   const { rows: [pgJournal] } = await query(
@@ -1063,23 +1074,25 @@ export async function persistJournalToPg(journal, db) {
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING id`,
     [
-      journal.entityId,
-      periodId || '00000000-0000-0000-0000-000000000000', // placeholder if no period
+      pgEntId,
+      periodId || '00000000-0000-0000-0000-000000000000',
       journal.transactionNumber,
       journal.date,
       journal.description,
       journal.status || 'draft',
-      journal.createdBy,
+      pgCreatedBy,
       journal.version || 1,
     ],
     db.dbConfig
   )
-  // Insert lines
+  // Insert lines — map account IDs from in-memory to PG
   if (journal.lines?.length) {
     for (const line of journal.lines) {
+      // Find PG account ID (accounts in db.accounts have mapped entity ID)
+      const pgAccountId = await findPgAccountId(line.accountId, db.dbConfig)
       await query(
         'INSERT INTO app.journal_lines (journal_id, account_id, debit, credit, description) VALUES ($1, $2, $3, $4, $5)',
-        [pgJournal.id, line.accountId, line.debit || 0, line.credit || 0, line.description || ''],
+        [pgJournal.id, pgAccountId || line.accountId, line.debit || 0, line.credit || 0, line.description || ''],
         db.dbConfig
       )
     }
@@ -1093,20 +1106,22 @@ export async function persistJournalToPg(journal, db) {
  */
 export async function updateJournalInPg(pgId, journalData, db) {
   if (!isPgMode(db)) return null
-  const periodId = await findPeriodIdForDate(journalData.entityId, journalData.date, db.dbConfig)
+  const pgEntId = mapMemEntityToPg(journalData.entityId)
+  const periodId = await findPeriodIdForDate(pgEntId, journalData.date, db.dbConfig)
   await query(
     `UPDATE app.journals SET description = $1, journal_date = $2, status = $3, period_id = $4, version = version + 1
      WHERE id = $5`,
     [journalData.description, journalData.date, journalData.status || 'draft', periodId, pgId],
     db.dbConfig
   )
-  // Replace lines
+  // Replace lines — map account IDs
   await query('DELETE FROM app.journal_lines WHERE journal_id = $1', [pgId], db.dbConfig)
   if (journalData.lines?.length) {
     for (const line of journalData.lines) {
+      const pgAccountId = await findPgAccountId(line.accountId, db.dbConfig)
       await query(
         'INSERT INTO app.journal_lines (journal_id, account_id, debit, credit, description) VALUES ($1, $2, $3, $4, $5)',
-        [pgId, line.accountId, line.debit || 0, line.credit || 0, line.description || ''],
+        [pgId, pgAccountId || line.accountId, line.debit || 0, line.credit || 0, line.description || ''],
         db.dbConfig
       )
     }
@@ -1155,7 +1170,8 @@ export async function patchJournalStatusInPg(pgId, updates, db) {
  */
 export async function persistReversalToPg(originalPgId, reversalJournal, db) {
   if (!isPgMode(db)) return null
-  const periodId = await findPeriodIdForDate(reversalJournal.entityId, reversalJournal.date, db.dbConfig)
+  const pgEntId = mapMemEntityToPg(reversalJournal.entityId)
+  const periodId = await findPeriodIdForDate(pgEntId, reversalJournal.date, db.dbConfig)
   // Mark original as reversed
   await query(
     "UPDATE app.journals SET status = 'reversed', version = version + 1 WHERE id = $1",
@@ -1192,6 +1208,35 @@ export async function persistReversalToPg(originalPgId, reversalJournal, db) {
  * Jalankan query langsung ke PostgreSQL dengan config tertentu.
  * Berguna untuk endpoint admin yang butuh query ad-hoc.
  */
+
+// ---- Entity ID Mapping ----
+// PG uses UUID entity IDs (from migration seed), in-memory uses 'ent-001'.
+// This mapping bridges the two formats so all code works correctly.
+let pgEntityId = null    // UUID from PG: 'a0eebc99-...'
+let memEntityId = 'ent-001' // in-memory entity ID
+
+/** Get the PG UUID for the primary entity. */
+export function getPgEntityId() { return pgEntityId }
+
+/** Get the in-memory entity ID for the primary entity. */
+export function getMemEntityId() { return memEntityId }
+
+/** Map a PG entity UUID to in-memory entity ID. */
+export function mapPgEntityToMem(pgId) {
+  if (pgId === pgEntityId) return memEntityId
+  return pgId // unknown entity — pass through
+}
+
+/** Map an in-memory entity ID to PG entity UUID. */
+export function mapMemEntityToPg(memId) {
+  if (memId === memEntityId && pgEntityId) return pgEntityId
+  return memId // unknown entity — pass through
+}
+
+/** Helper: convert in-memory entity ID to PG UUID for SQL WHERE clauses. */
+function toPgEntity(entityId) {
+  return mapMemEntityToPg(entityId)
+}
 
 // ---- Smart periodic sync: track row counts ----
 let lastTableCounts = null
@@ -1251,7 +1296,22 @@ export function updateLastCounts(counts) {
 export async function syncDataFromPg(db) {
   if (!isPgMode(db)) return null
   try {
-    // Sync accounts
+    // 1. Discover PG entity UUID and store mapping
+    const { rows: entityRows } = await query(
+      'SELECT id, name FROM app.entities ORDER BY name LIMIT 1',
+      [], db.dbConfig
+    )
+    if (entityRows.length > 0) {
+      pgEntityId = entityRows[0].id
+      console.log(`[DB] Entity mapping: PG ${pgEntityId} → in-memory ${memEntityId}`)
+    }
+    // Update entities list — map PG UUID to in-memory ID for consistency
+    db.entities = entityRows.map((e) => ({
+      ...e,
+      id: mapPgEntityToMem(e.id),
+    }))
+
+    // 2. Sync accounts — map PG entity_id to in-memory entity ID
     const { rows: acctRows } = await query(
       `SELECT id, code, name, type, category,
               normal_balance AS "normalBalance",
@@ -1265,53 +1325,62 @@ export async function syncDataFromPg(db) {
        FROM app.accounts ORDER BY code`,
       [], db.dbConfig
     )
-    db.accounts = acctRows
+    // Map PG entity UUID → in-memory entity ID
+    const mappedAccounts = acctRows.map((a) => ({
+      ...a,
+      entityId: mapPgEntityToMem(a.entityId),
+    }))
+    // Only overwrite if PG has data — don't wipe in-memory seed
+    if (mappedAccounts.length > 0) {
+      db.accounts = mappedAccounts
+    }
+    console.log(`[DB] Accounts synced: ${db.accounts.length} (${acctRows.length} from PG)`)
 
-    // Sync journals + lines
+    // 3. Sync journals + lines — DON'T wipe if PG is empty
     const { rows: journalRows } = await query(
       `SELECT id, entity_id AS "entityId",
               transaction_number AS "transactionNumber",
-              date, description, status,
-              reversal_of AS "reversalOf",
+              journal_date AS "date", description, status,
               reversal_of_id AS "reversalOfId",
               period_id AS "periodId",
               created_at AS "createdAt",
               created_by AS "createdBy",
               posted_at AS "postedAt",
-              posted_by AS "postedBy",
-              base_balance AS "baseBalance"
-       FROM app.journals WHERE entity_id IS NOT NULL ORDER BY date`,
+              posted_by AS "postedBy"
+       FROM app.journals WHERE entity_id IS NOT NULL ORDER BY journal_date`,
       [], db.dbConfig
     )
     for (const j of journalRows) {
       const { rows: lines } = await query(
         `SELECT id, journal_id AS "journalId",
                 account_id AS "accountId",
-                debit, credit, description,
-                sequence AS "sequence"
+                debit, credit, description
          FROM app.journal_lines WHERE journal_id = $1`,
         [j.id], db.dbConfig
       )
       j.lines = lines
       j.attachments = []
+      j.entityId = mapPgEntityToMem(j.entityId)
     }
-    db.journals = journalRows
+    if (journalRows.length > 0) {
+      // PG has journals — use PG data (mapped)
+      db.journals = journalRows
+      console.log(`[DB] Journals synced from PG: ${journalRows.length}`)
+    } else if (db.journals.length > 0) {
+      // PG is empty but in-memory has journals — seed them to PG
+      console.log(`[DB] PG journals empty, seeding ${db.journals.length} in-memory journals to PG...`)
+      await seedJournalsToPg(db)
+    }
+    console.log(`[DB] Journals final: ${db.journals.length}`)
 
-    // Sync users
+    // 4. Sync users — map entity IDs if needed
     const { rows: userRows } = await query(
       'SELECT id, email, name, is_active AS "isActive" FROM app.users',
       [], db.dbConfig
     )
     db.users = userRows
 
-    // Sync entities
-    const { rows: entityRows } = await query(
-      'SELECT id, name FROM app.entities',
-      [], db.dbConfig
-    )
-    db.entities = entityRows
-
-    // Sync periods
+    // 5. Sync periods — map PG entity_id to in-memory entity ID
     const { rows: periodRows } = await query(
       `SELECT id, entity_id AS "entityId", name, month, year,
               start_date AS "startDate", end_date AS "endDate",
@@ -1319,12 +1388,101 @@ export async function syncDataFromPg(db) {
        FROM app.fiscal_periods`,
       [], db.dbConfig
     )
-    db.periods = periodRows
+    db.periods = periodRows.map((p) => ({
+      ...p,
+      entityId: mapPgEntityToMem(p.entityId),
+    }))
 
     console.log(`[DB] Synced from PostgreSQL: ${db.accounts.length} akun, ${db.journals.length} jurnal, ${db.users.length} user, ${db.entities.length} entitas`)
     return { accounts: db.accounts.length, journals: db.journals.length }
   } catch (err) {
     console.error('[DB] syncDataFromPg error:', err.message)
+    return null
+  }
+}
+
+/**
+ * Seed in-memory journals ke PostgreSQL.
+ * Dipanggil saat PG journals = 0 tapi in-memory punya data.
+ */
+export async function seedJournalsToPg(db) {
+  if (!isPgMode(db) || !pgEntityId) return
+  const memId = memEntityId
+  let seeded = 0
+  for (const j of db.journals) {
+    if (j.entityId !== memId) continue
+    // Skip jika sudah ada di PG (cek by transaction_number)
+    try {
+      const { rows: existing } = await query(
+        'SELECT id FROM app.journals WHERE transaction_number = $1',
+        [j.transactionNumber], db.dbConfig
+      )
+      if (existing.length > 0) continue
+    } catch { /* tabel mungkin belum ada */ continue }
+
+    // Cari period_id — use PG entity UUID, not in-memory ID
+    const periodId = await findPeriodIdForDate(pgEntityId, j.date, db.dbConfig)
+    // Cari PG user ID dari createdBy
+    let pgUserId = null
+    if (j.createdBy) {
+      try {
+        const { rows: u } = await query('SELECT id FROM app.users LIMIT 1', [], db.dbConfig)
+        pgUserId = u[0]?.id || null
+      } catch { /* ignore */ }
+    }
+    try {
+      const { rows: [pgJournal] } = await query(
+        `INSERT INTO app.journals (entity_id, period_id, transaction_number, journal_date, description, status, created_by, posted_by, posted_at, reversal_of_id, version)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         RETURNING id`,
+        [
+          pgEntityId,
+          periodId || '00000000-0000-0000-0000-000000000000',
+          j.transactionNumber,
+          j.date,
+          j.description,
+          j.status || 'draft',
+          pgUserId,
+          j.status === 'posted' ? pgUserId : null,
+          j.postedAt || null,
+          j.reversalOfId || null,
+          j.version || 1,
+        ],
+        db.dbConfig
+      )
+      // Insert lines
+      if (j.lines?.length) {
+        for (const ln of j.lines) {
+          // Map accountId from in-memory format to PG account ID
+          const acct = db.accounts.find((a) => a.entityId === memId && (a.id === ln.accountId || a.code === ln.accountId))
+          const pgAcctId = acct?.id || ln.accountId
+          // Check if pgAcctId is a UUID (PG) or in-memory format
+          const isPgAcct = typeof pgAcctId === 'string' && /^[0-9a-f]{8}-/.test(pgAcctId)
+          await query(
+            'INSERT INTO app.journal_lines (journal_id, account_id, debit, credit, description) VALUES ($1, $2, $3, $4, $5)',
+            [pgJournal.id, isPgAcct ? pgAcctId : (await findPgAccountId(pgAcctId, db.dbConfig)) || pgAcctId, ln.debit || 0, ln.credit || 0, ln.description || ''],
+            db.dbConfig
+          )
+        }
+      }
+      seeded++
+    } catch (err) {
+      console.warn(`[DB] Failed to seed journal ${j.transactionNumber}: ${err.message}`)
+    }
+  }
+  if (seeded > 0) console.log(`[DB] Seeded ${seeded} journals from in-memory to PostgreSQL`)
+}
+
+/** Find PG account ID by in-memory ID or code. */
+async function findPgAccountId(inMemIdOrCode, dbConfig) {
+  try {
+    // Try by code first (e.g. '1-1100')
+    const { rows } = await query(
+      'SELECT id FROM app.accounts WHERE code = $1 OR id = $1 LIMIT 1',
+      [inMemIdOrCode], dbConfig
+    )
+    return rows[0]?.id || null
+  } catch {
     return null
   }
 }
