@@ -934,17 +934,69 @@ app.post('/accounts/template', requireAuth, requirePermission('account.write'), 
   ok(res, { created, skipped, accounts: createdAccounts }, null, 201)
 })
 
-app.post('/accounts/import', requireAuth, requirePermission('account.write'), (req, res) => {
-  // Mock import: tanpa file asli — selalu sukses dengan hasil statis
-  ok(res, { imported: 38, failed: 2, errors: [{ row: 12, code: '1-9999', message: 'Kode duplikat' }] })
+app.post('/accounts/import', requireAuth, requirePermission('account.write'), async (req, res) => {
+  const { csv } = req.body ?? {}
+  if (!csv || typeof csv !== 'string') return fail(res, 422, 'VALIDATION_ERROR', 'Field csv wajib berisi data CSV')
+  const lines = csv.split('\n').map((l) => l.trim()).filter(Boolean)
+  if (lines.length < 2) return fail(res, 422, 'VALIDATION_ERROR', 'CSV minimal header + 1 baris data')
+  // Parse header
+  const headerLine = lines[0].toLowerCase()
+  const hasHeader = headerLine.includes('code') || headerLine.includes('kode')
+  const dataLines = hasHeader ? lines.slice(1) : lines
+  const accounts = []
+  const errors = []
+  for (let i = 0; i < dataLines.length; i++) {
+    const rowNum = i + (hasHeader ? 2 : 1)
+    const parts = dataLines[i].split(',').map((p) => p.trim().replace(/^"|"$/g, ''))
+    const [code, name, type, group, category, normalBalance, parentId, isHeader, description] = parts
+    if (!code || !name) { errors.push({ row: rowNum, code: code || '?', message: 'Kode dan nama wajib diisi' }); continue }
+    if (!/^\d+-\d+$/.test(code)) { errors.push({ row: rowNum, code, message: 'Format kode harus gol-nomor (mis. 1-1100)' }); continue }
+    const validTypes = ['asset', 'liability', 'equity', 'revenue', 'expense']
+    const acctType = validTypes.includes(type) ? type : 'asset'
+    const acctNB = normalBalance === 'credit' ? 'credit' : 'debit'
+    accounts.push({
+      code, name, type: acctType,
+      group: group || acctType,
+      category: category || 'Umum',
+      normalBalance: acctNB,
+      parentId: parentId || null,
+      isHeader: isHeader === 'true',
+      description: description || '',
+      entityId: req.entityId,
+    })
+  }
+  let imported = 0
+  if (accounts.length > 0) {
+    try {
+      const result = await Adapter.importAccounts(accounts, db)
+      imported = result.imported
+      if (result.errors) {
+        for (const e of result.errors) errors.push({ row: 0, code: e.code || '?', message: e.error })
+      }
+    } catch (err) {
+      return fail(res, 500, 'IMPORT_FAILED', `Import gagal: ${err.message}`)
+    }
+  }
+  // Refresh in-memory dari PG jika PG mode aktif
+  if (Adapter.isPgMode(db)) {
+    try { await Adapter.syncDataFromPg(db) } catch {}
+  }
+  ok(res, { imported, failed: errors.length, errors })
 })
 
 app.get('/accounts/export', requireAuth, (req, res) => {
   res.setHeader('Content-Type', 'text/csv; charset=utf-8')
   res.setHeader('Content-Disposition', 'attachment; filename="chart-of-accounts.csv"')
   const balances = computeBalances(req.entityId)
-  const rows = entityAccounts(req.entityId).map((a) => `${a.code},${a.name},${a.type},${a.normalBalance},${balances.get(a.id) ?? 0}`)
-  res.send(['code,name,type,normalBalance,balance', ...rows].join('\n'))
+  const esc = (v) => {
+    const s = String(v ?? '')
+    return s.includes(',') || s.includes('"') || s.includes('\n') ? '"' + s.replace(/"/g, '""') + '"' : s
+  }
+  const header = 'code,name,type,group,category,normalBalance,parentId,isHeader,description,balance'
+  const rows = entityAccounts(req.entityId).map((a) =>
+    [a.code, a.name, a.type, a.group ?? a.type, a.category ?? '', a.normalBalance, a.parentId ?? '', a.isHeader ? 'true' : 'false', a.description ?? '', balances.get(a.id) ?? 0].map(esc).join(',')
+  )
+  res.send([header, ...rows].join('\n'))
 })
 
 // ------------------------------------------------------------

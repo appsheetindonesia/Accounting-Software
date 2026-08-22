@@ -186,6 +186,12 @@ export const api = {
   activateAccount(id: string) {
     return request<{ id: string; isActive: boolean }>(`/accounts/${id}/activate`, { method: 'PATCH' })
   },
+  exportAccounts() {
+    return request<string>('/accounts/export')
+  },
+  importAccounts(csv: string) {
+    return request<{ imported: number; failed: number; errors: { row: number; code: string; message: string }[] }>('/accounts/import', { method: 'POST', body: { csv } })
+  },
 
   // 5. Jurnal
   getJournals() {

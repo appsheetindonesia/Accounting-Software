@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   BookOpen,
+  Download,
   Edit3,
   Eye,
   EyeOff,
@@ -8,6 +9,7 @@ import {
   Plus,
   Search,
   Trash2,
+  Upload,
 } from 'lucide-react'
 import { api } from '../api/index'
 import { useStore } from '../store/useStore'
@@ -55,7 +57,12 @@ export default function AccountsPage() {
   const [form, setForm] = useState<FormData>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [importOpen, setImportOpen] = useState(false)
+  const [importCsv, setImportCsv] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<{ imported: number; failed: number; errors: { row: number; code: string; message: string }[] } | null>(null)
   const formRef = useRef<HTMLFormElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
     try {
@@ -171,6 +178,52 @@ export default function AccountsPage() {
   const fmt = (n: number) =>
     new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n)
 
+  const handleExport = async () => {
+    try {
+      const csv = await api.exportAccounts()
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'chart-of-accounts.csv'
+      a.click()
+      URL.revokeObjectURL(url)
+      showToast(`Export ${accounts.length} akun berhasil`, 'success')
+    } catch {
+      showToast('Gagal export akun', 'error')
+    }
+  }
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string
+      setImportCsv(text)
+      setImportResult(null)
+    }
+    reader.readAsText(file)
+    e.target.value = ''
+  }
+
+  const handleImport = async () => {
+    if (!importCsv.trim()) { showToast('Pilih file CSV terlebih dahulu', 'error'); return }
+    setImporting(true)
+    try {
+      const result = await api.importAccounts(importCsv)
+      setImportResult(result)
+      if (result.imported > 0) showToast(`${result.imported} akun berhasil diimport`, 'success')
+      if (result.failed > 0) showToast(`${result.failed} baris gagal`, 'error')
+      load()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Gagal import akun'
+      showToast(msg, 'error')
+    } finally {
+      setImporting(false)
+    }
+  }
+
   return (
     <div className="space-y-4 p-5 lg:p-7">
       {/* Header */}
@@ -182,13 +235,31 @@ export default function AccountsPage() {
           </p>
         </div>
         {canWrite && (
-          <button
-            type="button"
-            onClick={openAdd}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white shadow-card transition hover:bg-primary-hover active:translate-y-px"
-          >
-            <Plus size={15} /> Tambah Akun
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleExport}
+              className="inline-flex items-center gap-2 rounded-lg border border-line bg-canvas px-3 py-2 text-sm font-medium text-ink transition hover:bg-surface"
+              title="Export CSV"
+            >
+              <Download size={14} /> Export
+            </button>
+            <button
+              type="button"
+              onClick={() => setImportOpen(true)}
+              className="inline-flex items-center gap-2 rounded-lg border border-line bg-canvas px-3 py-2 text-sm font-medium text-ink transition hover:bg-surface"
+              title="Import CSV"
+            >
+              <Upload size={14} /> Import
+            </button>
+            <button
+              type="button"
+              onClick={openAdd}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white shadow-card transition hover:bg-primary-hover active:translate-y-px"
+            >
+              <Plus size={15} /> Tambah Akun
+            </button>
+          </div>
         )}
       </div>
 
@@ -451,6 +522,70 @@ export default function AccountsPage() {
                 className="rounded-lg bg-bad px-4 py-2 text-sm font-semibold text-white transition hover:bg-bad/90"
               >
                 Hapus
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dialog Import CSV */}
+      {importOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-xl border border-line bg-surface shadow-modal">
+            <div className="flex items-center justify-between border-b border-line px-5 py-3">
+              <h2 className="text-sm font-bold text-ink">Import COA dari CSV</h2>
+              <button type="button" onClick={() => { setImportOpen(false); setImportResult(null); setImportCsv('') }} className="rounded p-1 text-ink-faint hover:text-ink">✕</button>
+            </div>
+            <div className="space-y-4 p-5">
+              <p className="text-xs text-ink-soft">
+                Format CSV: <code className="rounded bg-canvas px-1 py-0.5 text-[11px]">code,name,type,category,normalBalance,parentId,isHeader,description</code><br/>
+                Tipe: asset, liability, equity, revenue, expense. Header opsional — baris pertama bisa data langsung.
+              </p>
+              <div>
+                <input ref={fileInputRef} type="file" accept=".csv,.txt" onChange={handleFileUpload} className="hidden" />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex items-center gap-2 rounded-lg border border-dashed border-line px-4 py-3 text-sm text-ink-soft transition hover:border-primary hover:text-primary w-full justify-center"
+                >
+                  <Upload size={16} /> {importCsv ? 'File terpilih ✓' : 'Pilih file CSV'}
+                </button>
+              </div>
+              {importCsv && (
+                <textarea
+                  value={importCsv}
+                  onChange={(e) => { setImportCsv(e.target.value); setImportResult(null) }}
+                  rows={8}
+                  className="w-full rounded-lg border border-line bg-canvas px-3 py-2 font-mono text-xs text-ink focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30"
+                  placeholder="1-1100,Kas Besar,asset,Kas & Bank,debit,,,Kas tunai operasional"
+                />
+              )}
+              {importResult && (
+                <div className="rounded-lg border border-line bg-canvas p-3">
+                  <p className="text-sm font-semibold text-ink">
+                    ✅ {importResult.imported} akun berhasil import
+                    {importResult.failed > 0 && <> · ❌ {importResult.failed} gagal</>}
+                  </p>
+                  {importResult.errors.length > 0 && (
+                    <ul className="mt-2 space-y-1 text-xs text-bad">
+                      {importResult.errors.slice(0, 5).map((e, i) => (
+                        <li key={i}>Baris {e.row}: {e.code} — {e.message}</li>
+                      ))}
+                      {importResult.errors.length > 5 && <li>...+{importResult.errors.length - 5} error lainnya</li>}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-3 border-t border-line px-5 py-3">
+              <button type="button" onClick={() => { setImportOpen(false); setImportResult(null); setImportCsv('') }} className="rounded-lg border border-line bg-canvas px-4 py-2 text-sm font-medium text-ink">Batal</button>
+              <button
+                type="button"
+                onClick={handleImport}
+                disabled={importing || !importCsv.trim()}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-hover disabled:opacity-50"
+              >
+                {importing ? 'Mengimport...' : 'Import Sekarang'}
               </button>
             </div>
           </div>
