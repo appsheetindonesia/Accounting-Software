@@ -1025,8 +1025,8 @@ export function getInMemoryState(db) {
 // JOURNAL PERSIST BRIDGE — server.js format → PostgreSQL
 // Server.js membangun journal dengan ID "JNL-YYYY-MM-NNNN" (string),
 // tapi PG pakai UUID. Fungsi di bawah menerima format server.js,
-*  lalu INSERT ke PG dengan UUID baru + return PG id agar server.js
-*  bisa update in-memory id supaya konsisten.
+// lalu INSERT ke PG dengan UUID baru + return PG id agar server.js
+// bisa update in-memory id supaya konsisten.
 // ================================================================
 
 /**
