@@ -1320,9 +1320,7 @@ export async function syncDataFromPg(db) {
               normal_balance AS "normalBalance",
               parent_id AS "parentId",
               is_active AS "isActive",
-              is_header AS "isHeader",
               description,
-              base_balance AS "baseBalance",
               entity_id AS "entityId",
               version
        FROM app.accounts ORDER BY code`,
@@ -1564,10 +1562,10 @@ export async function seedAllToPg(db) {
         )
         if (existing.length > 0) continue // sudah ada, skip
         await client.query(
-          `INSERT INTO app.accounts (entity_id, code, name, type, category, normal_balance, parent_id, description, is_active, base_balance)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          `INSERT INTO app.accounts (entity_id, code, name, type, category, normal_balance, parent_id, description, is_active)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
           [pgId, a.code, a.name, a.type, a.category, a.normalBalance,
-           a.parentId || null, a.description || '', a.isActive !== false, a.baseBalance || 0]
+           a.parentId || null, a.description || '', a.isActive !== false]
         )
         summary.accounts++
       } catch (err) {
